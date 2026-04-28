@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ev-hub-investment-tool-demo
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: "python local_site_location_server.py"
+    envVars:
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: DEMO_SESSION_SECRET
+        generateValue: true
+      - key: DISABLE_BROWSER_OPEN
+        value: "1"

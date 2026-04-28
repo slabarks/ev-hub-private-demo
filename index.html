@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EV Charging Hub Investment Tool</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  <link rel="stylesheet" href="./assets/styles.css?v=35.4-manual-map-point" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <img class="brand-logo" src="./assets/epower-logo.png" alt="ePower" />
+      <div class="hero-copy">
+        <h1>EV Charging Hub Investment Tool</h1>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button type="button" data-tab="site" class="active" onclick="window.__evHubGoTab && window.__evHubGoTab('site')">1. Site Screening</button>
+    <button type="button" data-tab="demand" onclick="window.__evHubGoTab && window.__evHubGoTab('demand')">2. Demand Forecast</button>
+    <button type="button" data-tab="setup" onclick="window.__evHubGoTab && window.__evHubGoTab('setup')">3. Product Configuration</button>
+    <button type="button" data-tab="investment" onclick="window.__evHubGoTab && window.__evHubGoTab('investment')">4. Investment Case</button>
+    <button type="button" data-tab="annuals" onclick="window.__evHubGoTab && window.__evHubGoTab('annuals')">5. Annual Financials</button>
+    <button type="button" data-tab="scenario" onclick="window.__evHubGoTab && window.__evHubGoTab('scenario')">6. Scenario Ranking</button>
+    <button type="button" data-tab="advanced" onclick="window.__evHubGoTab && window.__evHubGoTab('advanced')">7. Advanced Model Settings</button>
+    <button type="button" data-tab="report" onclick="window.__evHubGoTab && window.__evHubGoTab('report')">8. Investor Report</button>
+    <button type="button" id="guideButton" class="guide-tab-button">ⓘ Guide</button>
+  </nav>
+
+  <section class="workflow-stepper" id="workflowStepper" aria-label="Workflow progress">
+    <div class="workflow-status"><strong id="workflowStatusText">Step 1 of 8: Site Screening</strong><div class="workflow-progress"><span></span></div></div>
+    <button type="button" data-step-tab="site"><span>1</span><strong>Screen site</strong></button>
+    <button type="button" data-step-tab="demand"><span>2</span><strong>Forecast demand</strong></button>
+    <button type="button" data-step-tab="setup"><span>3</span><strong>Configure product</strong></button>
+    <button type="button" data-step-tab="investment"><span>4</span><strong>Review investment</strong></button>
+    <button type="button" data-step-tab="annuals"><span>5</span><strong>Check annuals</strong></button>
+    <button type="button" data-step-tab="scenario"><span>6</span><strong>Rank scenarios</strong></button>
+    <button type="button" data-step-tab="advanced"><span>7</span><strong>Advanced settings</strong></button>
+    <button type="button" data-step-tab="report"><span>8</span><strong>Export report</strong></button>
+  </section>
+
+  <main id="app" class="app"></main>
+
+  <script type="module" src="./js/app.js?v=35.4-manual-map-point"></script>
+</body>
+</html>

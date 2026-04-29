@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", "10314"))
 USER_AGENT = "EVHubSiteLocationPrototype/0.1 (local test; contact: local@example.com)"
 DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
-DEMO_SESSION_SECRET = os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret")
+DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
 

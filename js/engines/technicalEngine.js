@@ -1,6 +1,8 @@
 import { platformItem, dispenserNameForPlatform } from "../data/platformLibrary.js";
 import { batteryItem } from "../data/batteryLibrary.js";
 import { GRID_SUBSTATION, approximateLvConnectionCost, substationMultiplier } from "../data/gridSubstation.js";
+import { deriveCivilElectricalCost } from "../data/civilElectricalCostLibrary.js";
+import { estimateEsbConnectionCostExVat } from "../data/esbConnectionCostLibrary.js";
 import { asNum } from "../utils.js";
 
 export function validateConfiguration(config) {
@@ -88,7 +90,8 @@ export function deriveConfiguration(config, inputs) {
     ? 0
     : battery.hardwareCost * (battery.item.includes("Autel") ? inputs.autelBatteryWarrantyAnnualRate : battery.item.includes("Polarium") ? inputs.polariumBatteryWarrantyAnnualRate : 0);
 
-  const initialInvestmentCapex = initialCapex(config, inputs);
+  const capexDetail = initialCapexDetail(config, inputs);
+  const initialInvestmentCapex = capexDetail.total;
 
   return {
     charger,
@@ -109,13 +112,14 @@ export function deriveConfiguration(config, inputs) {
     annualChargerWarrantyCost,
     annualBatteryWarrantyCost,
     initialInvestmentCapex,
+    capexDetail,
     substationRequired: config.selectedMicKva > inputs.gridThresholdModeling,
     batteryReplacementUnitCapex: battery.hardwareCost || 0,
     chargerReplacementCapex: chargerReplacementCapex(config)
   };
 }
 
-export function initialCapex(config, inputs) {
+export function initialCapexDetail(config, inputs) {
   const charger = platformItem(config.chargerModel);
   const cabinet = platformItem(config.cabinetType);
   const battery = batteryItem(config.batterySize);
@@ -128,16 +132,10 @@ export function initialCapex(config, inputs) {
   const standaloneHw = config.platform === "Autel Standalone" ? (charger ? charger.unitCost : 0) * chargerCount : 0;
   const batteryHw = battery.hardwareCost || 0;
   const batteryInstall = battery.installComm || 0;
+  const install = deriveCivilElectricalCost(config, inputs, { charger, cabinet, battery, dispenser, chargerCount, dispenserCount });
 
-  const install = config.platform === "Kempower Distributed"
-    ? GRID_SUBSTATION.kempowerCivilsInstallBenchmark
-    : config.platform === "Autel Standalone"
-      ? GRID_SUBSTATION.siteCivilsBase + chargerCount * GRID_SUBSTATION.standaloneChargerInstallAllowance
-      : GRID_SUBSTATION.siteCivilsBase + GRID_SUBSTATION.distributedCabinetInstallAllowance + dispenserCount * GRID_SUBSTATION.distributedDispenserInstallAllowance;
-
-  const gridConnection = config.selectedMicKva <= GRID_SUBSTATION.gridThresholdKva
-    ? approximateLvConnectionCost(config.selectedMicKva)
-    : GRID_SUBSTATION.higherCapacityMvConnectionCostBenchmark;
+  const esbEstimate = estimateEsbConnectionCostExVat(config.selectedMicKva, inputs.modelStartYear || inputs.codYear, inputs.esbConnectionCostEscalationRate);
+  const gridConnection = esbEstimate.costExVat;
 
   const mult = substationMultiplier(config.selectedMicKva);
   const substation = config.selectedMicKva > GRID_SUBSTATION.gridThresholdKva
@@ -150,7 +148,26 @@ export function initialCapex(config, inputs) {
     ? (charger ? charger.commissioning || 0 : 0) * chargerCount
     : (cabinet ? cabinet.commissioning || 0 : 0);
 
-  return cabinetHw + dispenserHw + standaloneHw + batteryHw + batteryInstall + install + gridConnection + substation + inputs.esbConnectionApplicationFee + batteryLogistics + batteryInstallCommissioning + commissioning;
+  const total = cabinetHw + dispenserHw + standaloneHw + batteryHw + batteryInstall + install + gridConnection + substation + batteryLogistics + batteryInstallCommissioning + commissioning;
+  return {
+    total,
+    cabinetHw,
+    dispenserHw,
+    standaloneHw,
+    batteryHw,
+    batteryInstall,
+    civilElectricalInstall: install,
+    gridConnection,
+    esbConnectionCostEstimate: esbEstimate,
+    substation,
+    batteryLogistics,
+    batteryInstallCommissioning,
+    commissioning
+  };
+}
+
+export function initialCapex(config, inputs) {
+  return initialCapexDetail(config, inputs).total;
 }
 
 export function chargerReplacementCapex(config) {

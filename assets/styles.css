@@ -1171,3 +1171,126 @@ button[disabled] { opacity: .68; cursor: progress; }
 .manual-point-popup strong { font-size: 14px; }
 .manual-point-popup span { color: #5f6f69; font-size: 12px; }
 .manual-point-popup button { border: 0; border-radius: 999px; padding: 8px 12px; background: var(--accent); color: #fff; font-weight: 800; cursor: pointer; }
+
+/* v35.7 final refinements: lease flag, AADT helper, compact responsive density */
+.info-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  margin-left: 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid rgba(20,138,87,.28);
+  font-size: 11px;
+  font-weight: 850;
+  vertical-align: text-bottom;
+}
+.aadt-help {
+  background: linear-gradient(135deg, #eef7fb, #f8fbf9);
+  border-color: #cfe0ef;
+  color: #244762;
+}
+.lease-risk-card {
+  border-width: 1px;
+  background: linear-gradient(135deg, #f8fbf9, #ffffff);
+}
+.lease-risk-card.good { border-color: #cfe7d8; }
+.lease-risk-card.warn { border-color: #efd38e; background: linear-gradient(135deg, #fff8e6, #ffffff); }
+.lease-risk-card.bad { border-color: #f0b8b3; background: linear-gradient(135deg, #fff3f1, #ffffff); }
+.lease-risk-head { display:flex; align-items:center; gap: 10px; flex-wrap:wrap; margin-bottom: 8px; }
+.lease-risk-head h3 { margin: 0; }
+.lease-risk-card p { margin: 0 0 14px; }
+.lease-risk-grid { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+
+@media (max-width: 1320px), (max-height: 850px) {
+  .app-header { min-height: 132px; }
+  .header-inner { min-height: 132px; padding: 20px 24px 24px; }
+  .brand-logo { width: clamp(124px, 12vw, 170px); }
+  .app-header h1 { font-size: clamp(25px, 2.7vw, 38px); }
+  .app-header h1::after { height: 4px; margin-top: 10px; }
+  .tabs { padding: 9px 18px 11px; gap: 6px; }
+  .tabs button { padding: 8px 11px; font-size: 13px; }
+  .workflow-stepper { padding: 8px 20px 10px !important; margin-bottom: 18px !important; gap: 6px; }
+  .workflow-stepper button { min-height: 38px; padding: 7px 8px; border-radius: 15px; }
+  .workflow-stepper button strong { font-size: 11px; }
+  .workflow-stepper button > span { width: 21px; height: 21px; }
+  .app { padding: 20px 20px 56px !important; }
+  .page-title { margin-bottom: 13px; }
+  .page-title h2 { font-size: clamp(22px, 2vw, 28px); }
+  .page-title p { font-size: 14px; }
+  .panel { padding: 16px; }
+  .grid-4 { gap: 10px; }
+  .kpi { padding: 12px; }
+  .kpi .value { font-size: 19px; }
+  .kpi .sub { font-size: 11px; }
+  .demand-snapshot { padding: 18px; }
+  .demand-snapshot-title { margin-bottom: 15px; }
+  .demand-snapshot-grid { gap: 12px; }
+  .demand-snapshot-card { padding: 15px; }
+  .demand-card-head { grid-template-columns: 64px 1fr; min-height: 72px; }
+  .demand-icon, .demand-icon-image { width: 60px; height: 60px; }
+  .demand-card-head h3 { font-size: 16px; }
+  .demand-card-head p { font-size: 12px; }
+  .demand-compare strong { font-size: 22px; }
+  .product-validator-section { padding: 18px; }
+  .product-validator-card { min-height: 190px; padding: 14px; }
+  .product-validator-card > strong { font-size: 25px; }
+  .recommend-card { padding: 16px; }
+  .scenario-card, .scenario-fix-card { padding: 14px; }
+}
+
+@media (max-width: 1180px) {
+  .grid-4, .demand-snapshot-grid, .product-validator-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .site-search-grid, .grid-2, .config-bottom-grid { grid-template-columns: 1fr; }
+  .lease-risk-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .map-overview { position: static; width: auto; margin: 12px 16px; }
+  #map, .map-fallback { height: 470px; }
+}
+
+@media (max-width: 760px) {
+  .app-header { min-height: 96px; }
+  .header-inner { min-height: 96px; padding: 16px; }
+  .hero-copy { display: none; }
+  .brand-logo { width: 130px; }
+  .tabs { justify-content: flex-start; }
+  .workflow-status { grid-template-columns: 1fr; }
+  .grid-4, .grid-3, .input-grid, .input-grid.three, .demand-snapshot-grid, .product-validator-grid, .validator-summary, .lease-risk-grid { grid-template-columns: 1fr; }
+  .search-row { grid-template-columns: 1fr; }
+  .panel { padding: 14px; border-radius: 18px; }
+  .kpi .value { font-size: 18px; }
+  #map, .map-fallback { height: 390px; }
+  .map-heading { flex-direction: column; align-items: flex-start; }
+  .guide-panel { width: min(100vw - 16px, 780px); }
+}
+
+
+/* v35.9 final refinements: ESB library support, config units, AADT popover, investment emphasis */
+.unit-input-wrap { position: relative; display: flex; align-items: center; }
+.unit-input-wrap input { padding-right: 104px; }
+.input-unit { position:absolute; right: 11px; color: var(--muted); font-size: 12px; font-weight: 800; pointer-events:none; white-space: nowrap; }
+.info-wrap { position: relative; display: inline-flex; align-items: center; }
+.info-dot { cursor: pointer; border: 1px solid rgba(20,138,87,.28); padding: 0; }
+.info-popover { display: none; position: absolute; left: 24px; top: -8px; z-index: 90; width: min(340px, 72vw); padding: 12px 14px; border-radius: 14px; background: #ffffff; border: 1px solid #cfe7d8; box-shadow: 0 18px 48px rgba(18,36,30,.16); color: #26403a; font-size: 13px; line-height: 1.45; font-weight: 600; }
+.info-wrap:hover .info-popover, .info-wrap:focus-within .info-popover { display: block; }
+.interactive-config-panel { border-color: #b9dfc8; background: linear-gradient(135deg, #f1faf5, #ffffff 62%, #fbfaf7); box-shadow: 0 18px 42px rgba(20,138,87,.08); }
+.interactive-config-head { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid #d7eadf; }
+.interactive-config-head span { display:inline-flex; padding: 5px 10px; border-radius:999px; background: var(--accent); color:white; font-size: 11px; font-weight: 850; letter-spacing: .06em; }
+.interactive-config-head h3 { margin: 10px 0 5px; font-size: 23px; letter-spacing: -.035em; }
+.interactive-config-head p { margin:0; color: var(--muted); max-width: 920px; }
+.kpi-window.tone-amber { background: linear-gradient(135deg, #eef9f2, #ffffff); border-color: #b9dfc8; box-shadow: 0 20px 46px rgba(20,138,87,.09); }
+.kpi-window.tone-blue { background: linear-gradient(135deg, #edf7f2, #ffffff); border-color: #c3ded2; box-shadow: 0 20px 46px rgba(38,64,58,.07); }
+.kpi-window.tone-green { background: linear-gradient(135deg, #fff8e7, #ffffff); border-color: #ead9a3; box-shadow: 0 20px 46px rgba(199,146,31,.08); }
+.kpi-window.tone-purple { background: linear-gradient(135deg, #eef5f1, #ffffff); border-color: #cbded4; box-shadow: 0 20px 46px rgba(38,64,58,.08); }
+.kpi-window h3 { font-size: 18px; }
+@media (max-width: 760px) { .unit-input-wrap input { padding-right: 86px; } .input-unit { font-size: 11px; } .info-popover { left: auto; right: -8px; top: 24px; } }
+
+
+/* v35.10 staged battery lifecycle + hover-only AADT info */
+.info-dot { pointer-events: auto; }
+.info-popover { pointer-events: none; }
+.technical-detail-table th,
+.technical-detail-table td { white-space: normal; }
+.technical-detail-table th:nth-child(1), .technical-detail-table td:nth-child(1) { width: 72px; }

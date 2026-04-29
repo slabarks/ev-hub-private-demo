@@ -22,7 +22,8 @@ export const DEFAULT_INPUTS = {
   transactionProcessingFeePctRevenue: 0.008,
   flatTransactionFeePerSession: 0.25,
   managedServiceFeePerChargerAsset: 250,
-  esbConnectionApplicationFee: 20000,
+  esbConnectionApplicationFee: 0,
+  esbConnectionCostEscalationRate: 0.03,
   leaseTerm: 15,
 
   trafficSourceYear: 2016,
@@ -91,8 +92,8 @@ export const DEFAULT_SELECTED_CONFIG = {
 export const EXCEL_REFERENCE = {
   defaultDemandYear1AnnualEnergy: 64816.418811535535,
   defaultDemandYear20PeakDemandKw: 389.6914100207252,
-  defaultInitialInvestmentCapex: 349965.36,
-  defaultYear20CumulativeCashFlow: 1216372.0595090045,
+  defaultInitialInvestmentCapex: 323103.5225,
+  defaultYear20CumulativeCashFlow: 1427229.2347003447,
   defaultFirstBatteryReplacementYear: 2038,
   defaultFirstChargerReplacementYear: 2035
 };
@@ -104,5 +105,6 @@ export const ASSUMPTION_DICTIONARY = [
   ["siteRelevanceFactor", "Site relevance factor", "%", "Inputs!B28", "Share of corridor traffic relevant to the specific site."],
   ["annualBevShareGrowthRate", "Annual BEV share growth rate", "%", "Inputs!B30", "Annual compound growth in BEV traffic share."],
   ["batteryReplacementThresholdSoh", "Battery replacement threshold (SOH)", "%", "Inputs!B56", "Replacement is based on state of health, not SOC."],
-  ["selectedMicKva", "Selected MIC", "kVA", "Summary!B12", "Must be one of the Excel MIC values only."]
+  ["selectedMicKva", "Selected MIC", "kVA", "Summary!B12", "Must be one of the Excel MIC values only."],
+  ["esbConnectionCostEscalationRate", "ESB connection cost escalation", "%", "Model", "Escalates historical ex-VAT ESB quotation medians from the quote base year to the model start year."]
 ];

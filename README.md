@@ -1,3 +1,15 @@
+# EV Hub Investment Tool — v35.8 validator, lease and capex scaling fix
+
+This build keeps the deploy-ready password-protected app and includes:
+
+- Dynamic dispenser/satellite limits for Autel and Kempower distributed cabinets.
+- Auto-clamping of invalid dispenser counts to the selected cabinet maximum.
+- Visible lease-term risk flag in Investment Case.
+- Hidden scaled civils/electrical capex logic retained and validated across configurations.
+- Existing address search, map recenter, manual map point, AADT fallback and password deployment improvements retained.
+
+Run locally with `python3 local_site_location_server.py`.
+
 # EV Charging Hub Investment Tool — v34.2 Design Verified
 
 This clean build includes the agreed design refinements, cache-busted CSS/JS, the redesigned workflow guide, refreshed icons, and Scenario Ranking layout polish.
@@ -152,3 +164,20 @@ Set these environment variables on the host:
 When `DEMO_PASSWORD` is not set, the app runs openly for local development.
 
 See `DEPLOY_TO_RENDER.md` for step-by-step deployment and deletion instructions.
+
+
+## v35.7 final refinements
+- Hidden scaled civils/electrical capex logic derived from Kempower reference costs.
+- Lease term risk flag added to the Investment Case.
+- AADT explanatory helper text added.
+- Responsive compact layout for smaller laptop screens.
+- Render deployment remains password-ready.
+
+
+## v35.9 final model polish
+- Added hidden ex-VAT ESB connection cost estimator by model MIC, derived from historical quotation bands.
+- Improved battery augmentation to use year-by-year SOH-adjusted battery energy and incremental battery units.
+- Expanded Annual Financials technical detail by default.
+- Fixed AADT info popover behaviour.
+- Highlighted Product Configuration as an interactive configuration area and added unit suffixes to editable numeric fields.
+- Emphasised Investment Case summary windows using the existing design palette.

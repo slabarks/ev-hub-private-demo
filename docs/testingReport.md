@@ -26,3 +26,10 @@ The v35 production build includes the optimiser no-candidate fix, Scenario Ranki
 
 ## Critical fix verified
 The optimiser no longer crashes when an extreme demand case exceeds the equipment library. It now returns structured infeasible scenario rows with failure reasons and suggested fixes.
+
+## v35.7 final refinements
+- Added hidden scaled civils/electrical cost engine derived from the user-provided Kempower single-cabinet + 2 dual dispenser no-battery reference cost (€43,420.20).
+- Added lease term risk flag in Investment Case.
+- Added AADT helper explanations in Site Screening, Demand Forecast and Investor Report.
+- Added compact responsive layout rules for 14-inch laptop and smaller screens.
+- Added requirements.txt for easier Render deployment.

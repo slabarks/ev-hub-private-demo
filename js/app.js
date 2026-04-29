@@ -73,10 +73,21 @@ function nextApprovedMic(required) {
   return MIC_VALUES.find(v => v >= required) || MIC_VALUES[MIC_VALUES.length - 1];
 }
 function dualUnitLabel() { return state.config.platform === "Autel Standalone" ? "charger" : "dual dispenser / satellite"; }
+function selectedCabinetMaxDualDisp(config = state.config) {
+  if (!String(config.platform || "").includes("Distributed")) return null;
+  const cabinet = PLATFORM_LIBRARY.find(x => x.item === config.cabinetType && x.type === "Cabinet" && x.platform === config.platform);
+  return cabinet && Number.isFinite(Number(cabinet.maxDualDisp)) ? Number(cabinet.maxDualDisp) : null;
+}
+function dispenserLimitHelp(config = state.config) {
+  const max = selectedCabinetMaxDualDisp(config);
+  if (max == null) return "Not used for standalone chargers.";
+  return `${config.cabinetType} supports up to ${max} dual dispenser${max === 1 ? "" : "s"} / satellite${max === 1 ? "" : "s"}. Values above this are automatically reduced to the cabinet limit.`;
+}
 function inputField(key, label, opts = {}) {
   const value = state.inputs[key];
   const type = opts.type || "number";
-  return `<div class="field"><label for="${key}">${label}</label><input id="${key}" data-input="${key}" type="${type}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/><small>${opts.help || ""}</small></div>`;
+  const unit = opts.unit ? `<span class="input-unit">${h(opts.unit)}</span>` : "";
+  return `<div class="field"><label for="${key}">${label}</label><div class="unit-input-wrap"><input id="${key}" data-input="${key}" type="${type}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
 }
 function selectField(key, label, options, opts = {}) {
   return `<div class="field"><label for="${key}">${label}</label><select id="${key}" data-input="${key}">${options.map(o => `<option value="${h(o)}" ${String(state.inputs[key]) === String(o) ? "selected" : ""}>${h(o)}</option>`).join("")}</select><small>${opts.help || ""}</small></div>`;
@@ -86,7 +97,8 @@ function selectFieldConfig(key, label, options, opts = {}) {
 }
 function inputFieldConfig(key, label, opts = {}) {
   const value = state.config[key];
-  return `<div class="field"><label for="${key}">${label}</label><input id="${key}" data-config="${key}" type="${opts.type || "number"}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/><small>${opts.help || ""}</small></div>`;
+  const unit = opts.unit ? `<span class="input-unit">${h(opts.unit)}</span>` : "";
+  return `<div class="field"><label for="${key}">${label}</label><div class="unit-input-wrap"><input id="${key}" data-config="${key}" type="${opts.type || "number"}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
 }
 function kpi(label, value, sub = "") {
   return `<div class="kpi"><div class="label">${h(label)}</div><div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
@@ -97,6 +109,40 @@ function kpiWindow(title, tone, items) {
 function sectionTitle(title, subtitle) {
   return `<div class="page-title"><div><h2>${title}</h2><p>${subtitle}</p></div></div>`;
 }
+function aadtHelpText() {
+  return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
+}
+
+function leaseRiskCard(f) {
+  const leaseTerm = Number(state.inputs.leaseTerm || 0);
+  const horizon = Number(state.inputs.investmentHorizon || f.horizon || 0);
+  const startYear = Number(state.inputs.modelStartYear || state.inputs.codYear || new Date().getFullYear());
+  const leaseExpiryYear = leaseTerm > 0 ? startYear + leaseTerm - 1 : null;
+  const breakEvenYear = f.breakEvenYear ? Number(f.breakEvenYear) : null;
+  let status = "good";
+  let title = "Lease covers model horizon";
+  let message = "Lease term covers the selected investment horizon.";
+
+  if (!leaseTerm || leaseTerm <= 0) {
+    status = "warn";
+    title = "Lease term not set";
+    message = "Set the lease term so the model can compare secured operating rights against the investment horizon.";
+  } else if (!breakEvenYear || (leaseExpiryYear && breakEvenYear > leaseExpiryYear)) {
+    status = "bad";
+    title = !breakEvenYear ? "No payback within secured lease term" : "Break-even after lease expiry";
+    message = !breakEvenYear
+      ? "No break-even is achieved within the selected investment horizon. Treat returns as high risk until lease, demand or capex assumptions are reviewed."
+      : "Break-even occurs after the secured lease term. Returns after lease expiry should be treated as unsecured.";
+  } else if (leaseTerm < horizon) {
+    status = "warn";
+    title = "Model extends beyond lease term";
+    message = "The selected investment horizon extends beyond the secured lease term. Later-year returns should be treated as unsecured unless extension rights are confirmed.";
+  }
+
+  const badge = status === "good" ? "good" : status === "bad" ? "bad" : "warn";
+  return `<section class="panel lease-risk-card ${status}"><div class="lease-risk-head"><span class="badge ${badge}">${status === "good" ? "Lease OK" : status === "bad" ? "Lease risk" : "Lease warning"}</span><h3>${h(title)}</h3></div><p>${h(message)}</p><div class="lease-risk-grid">${kpi("Lease term", leaseTerm ? `${leaseTerm} years` : "Not set")}${kpi("Investment horizon", `${horizon} years`)}${kpi("Lease expiry", leaseExpiryYear || "n/a")}${kpi("Break-even", f.breakEvenYear || "No break-even")}</div></section>`;
+}
+
 function table(headers, rows, cls = "") {
   const body = rows.length ? rows.map(row => `<tr>${row.map(x => `<td>${x}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}">No rows to display.</td></tr>`;
   return `<div class="table-wrap"><table class="${cls}"><thead><tr>${headers.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
@@ -157,7 +203,7 @@ const TAB_LABELS = {
 const ORDERABLE_SECTIONS = {
   demand: ["kpis", "assumptions", "bevTraffic", "sessions", "kwh", "mic", "table"],
   setup: ["overviewValidator", "productConfig", "commercial", "landlord"],
-  investment: ["horizon", "returns", "investmentFunding", "trading", "lifecycle", "cashflow", "capex"],
+  investment: ["horizon", "leaseRisk", "returns", "investmentFunding", "trading", "lifecycle", "cashflow", "capex"],
   annuals: ["summary", "performance", "costs", "table", "technical"]
 };
 function getSectionOrder(tab) {
@@ -345,14 +391,14 @@ function renderSiteDashboard() {
           </div>
         </div>
         <div class="input-grid">
-          <div class="field"><label>AADT used</label><input id="manualAadt" type="number" step="1" value="${state.inputs.rawCorridorTrafficAadt}" /><small>${h(aadtSourceText(ctx))}</small></div>
+          <div class="field"><label>AADT used <span class="info-wrap"><button class="info-dot" type="button" data-info-toggle="aadt" aria-label="Explain AADT">i</button><span class="info-popover">${h(aadtHelpText())}</span></span></label><div class="unit-input-wrap"><input id="manualAadt" type="number" step="1" value="${state.inputs.rawCorridorTrafficAadt}" /><span class="input-unit">veh/day</span></div><small>${h(aadtSourceText(ctx))}<br>${h(aadtHelpText())}</small></div>
           <div class="field"><label>Manual override</label><select id="manualAadtOverride"><option value="false" ${!state.filters.manualAadtOverride ? "selected" : ""}>Use provider / base AADT</option><option value="true" ${state.filters.manualAadtOverride ? "selected" : ""}>Use manual AADT</option></select><small>Use this when you have better traffic data.</small></div>
         </div>
       </div>
       <div class="tii-workflow-card">
         <div>
           <strong>AADT source engine</strong>
-          <p>Pressing Search now automatically runs the TII AADT lookup first. The app matches the searched address against the uploaded TII AADT Summary database using multiple address tags, averages relevant matches where appropriate, and only then falls back to curated or manual sources if no reliable match is found.</p>
+          <p>Pressing Search automatically runs the TII AADT lookup. AADT means Annual Average Daily Traffic: the estimated average vehicles passing a location per day over a year. The app matches the searched address against the uploaded TII AADT Summary database and falls back to curated/manual sources only if no reliable match is found.</p>
           ${tiiCandidateCards(ctx)}
         </div>
         <div class="tii-actions">
@@ -420,7 +466,7 @@ function renderDemandDashboard(r) {
       ${demandCard(demandIcon("ccs"), "Required plugs", "peak simultaneous charging points needed", number(first.requiredPlugs || 0, 1), number(final.requiredPlugs || 0, 1))}
       ${demandCard(demandIcon("grid"), "Required MIC", "grid capacity needed without battery", number(first.requiredMicNoBatteryKva || 0, 0), number(final.requiredMicNoBatteryKva || 0, 0), "kVA")}
     </div></section>` },
-    { id: "assumptions", title: "Editable demand assumptions", html: `<div class="panel">
+    { id: "assumptions", title: "Editable demand assumptions", html: `<div class="notice aadt-help"><strong>AADT baseline</strong><br>${h(aadtHelpText())}</div><div class="panel">
       <h3>Editable demand assumptions</h3>
       <div class="input-grid three">
         ${inputField("annualBevShareGrowthRate", "Annual BEV share growth rate", { step: 0.01, help: "Compounds the starting BEV share each model year, capped by the model BEV share cap." })}
@@ -523,31 +569,31 @@ function renderScenarioSetup(r) {
     { id: "commercial", title: "Commercial / funding inputs", html: `<div class="panel">
       <h3>Commercial / Funding inputs</h3>
       <div class="input-grid">
-        <div class="field"><label for="netSellingPriceExVat">Net selling price excluding VAT</label><input id="netSellingPriceExVat" data-input="netSellingPriceExVat" type="number" step="0.01" value="${h(priceDisplay)}" /><small>Displayed to two decimals for clarity; used to calculate charging revenue from delivered energy.</small></div>
-        ${inputField("electricityCost", "Electricity cost", { step: 0.01, help: "Applied to delivered energy to calculate energy purchase cost." })}
-        ${inputField("grantSupport", "Grant support (€)", { step: 1000, help: "One-off funding support that reduces the net initial investment." })}
+        <div class="field"><label for="netSellingPriceExVat">Net selling price excluding VAT</label><div class="unit-input-wrap"><input id="netSellingPriceExVat" data-input="netSellingPriceExVat" type="number" step="0.01" value="${h(priceDisplay)}" /><span class="input-unit">€/kWh</span></div><small>Displayed to two decimals for clarity; used to calculate charging revenue from delivered energy.</small></div>
+        ${inputField("electricityCost", "Electricity cost", { step: 0.01, unit: "€/kWh", help: "Applied to delivered energy to calculate energy purchase cost." })}
+        ${inputField("grantSupport", "Grant support", { step: 1000, unit: "€", help: "One-off funding support that reduces the net initial investment." })}
       </div>
     </div>` },
     { id: "landlord", title: "Landlord inputs", html: `<div class="panel">
       <h3>Landlord inputs</h3>
       <div class="input-grid">
-        ${inputField("groundRentPerEvSpace", "Ground rent per EV space", { step: 50, help: "Fixed annual site rent linked to EV spaces or outputs." })}
-        ${inputField("leaseTerm", "Lease term", { step: 1, help: "Lease context used for the investment review." })}
-        ${inputField("landlordGpShare", "Gross profit share", { step: 0.01, help: "Share of gross profit paid to the landlord when applicable." })}
-        ${inputField("landlordGrossSalesShare", "Gross-sales share", { step: 0.01, help: "Share of gross sales paid to the landlord when applicable." })}
+        ${inputField("groundRentPerEvSpace", "Ground rent per EV space", { step: 50, unit: "€/space/year", help: "Fixed annual site rent linked to EV spaces or outputs." })}
+        ${inputField("leaseTerm", "Lease term", { step: 1, unit: "years", help: "Lease context used for the investment review." })}
+        ${inputField("landlordGpShare", "Gross profit share", { step: 0.01, unit: "%", help: "Share of gross profit paid to the landlord when applicable." })}
+        ${inputField("landlordGrossSalesShare", "Gross-sales share", { step: 0.01, unit: "%", help: "Share of gross sales paid to the landlord when applicable." })}
       </div>
     </div>` },
-    { id: "productConfig", title: "Product configuration", html: `<div class="panel">
-      <h3>Product Configuration</h3>
+    { id: "productConfig", title: "Product configuration", html: `<div class="panel interactive-config-panel">
+      <div class="interactive-config-head"><span>STEP 3 · INTERACTIVE CONFIGURATION</span><h3>Configure your site</h3><p>Select the platform, MIC, battery and hardware. The validator updates automatically and shows exactly what needs to be fixed.</p></div>
       <div class="config-subgroups">
         <section class="config-subgroup">
           <h4>Charging Platform</h4>
           <div class="input-grid">
             ${selectFieldConfig("platform", "Charging platform", ["Autel Standalone", "Autel Distributed", "Kempower Distributed"])}
             ${selectFieldConfig("chargerModel", "Charger model", o.chargerModels)}
-            ${inputFieldConfig("chargerCount", "Number of chargers", { step: 1, min: 1 })}
+            ${inputFieldConfig("chargerCount", "Number of chargers", { step: 1, min: 1, unit: "chargers" })}
             ${selectFieldConfig("cabinetType", "Cabinet type", o.cabinets)}
-            ${inputFieldConfig("dispenserCount", "Dual dispensers / satellites", { step: 1, min: 0 })}
+            ${inputFieldConfig("dispenserCount", "Dual dispensers / satellites", { step: 1, min: 0, max: selectedCabinetMaxDualDisp(), unit: "dual dispensers", help: dispenserLimitHelp() })}
           </div>
         </section>
         <section class="config-subgroup">
@@ -556,16 +602,16 @@ function renderScenarioSetup(r) {
             ${selectFieldConfig("batteryStrategy", "Power strategy", ["Grid only", "Grid + battery"])}
             ${selectFieldConfig("selectedMicKva", "Selected grid MIC (kVA)", MIC_VALUES.map(String), { help: "Approved model values only: 50, 100, 200, 400, 800, 1000, 1500 kVA." })}
             ${selectFieldConfig("batterySize", "Battery size", o.batteries)}
-            ${inputField("batteryReplacementThresholdSoh", "Battery SOH replacement threshold", { step: 0.01, help: "Battery replacement is based on state of health, not state of charge." })}
+            ${inputField("batteryReplacementThresholdSoh", "Battery SOH replacement threshold", { step: 0.01, unit: "% SOH", help: "Battery replacement is based on state of health, not state of charge." })}
           </div>
         </section>
         <section class="config-subgroup">
           <h4>Services</h4>
           <div class="input-grid">
             ${selectFieldConfig("serviceLevel", "Service level", ["Basic", "Advance", "Premium", "Standard (2yr warranty + remote support)"])}
-            ${selectFieldConfig("chargerWarrantyYears", "Extended charger warranty years", Array.from({length: 21}, (_, i) => String(i)))}
-            ${selectFieldConfig("batteryWarrantyYears", "Extended battery warranty years", Array.from({length: 21}, (_, i) => String(i)))}
-            ${selectField("chargerEquipmentReplacementCycleYears", "Charger replacement cycle", [7,8,9,10], { help: "Controls scheduled charger replacement years." })}
+            ${selectFieldConfig("chargerWarrantyYears", "Extended charger warranty (years)", Array.from({length: 21}, (_, i) => String(i)))}
+            ${selectFieldConfig("batteryWarrantyYears", "Extended battery warranty (years)", Array.from({length: 21}, (_, i) => String(i)))}
+            ${selectField("chargerEquipmentReplacementCycleYears", "Charger replacement cycle (years)", [7,8,9,10], { help: "Controls scheduled charger replacement years." })}
           </div>
         </section>
       </div>
@@ -592,8 +638,11 @@ function graphRowsWithCapex(rows) {
 function renderInvestmentDashboard(r) {
   const f = r.financialSummary;
   const rows = r.yearByYear.rows.slice(0, state.inputs.investmentHorizon);
+  const tech = r.yearByYear.technical || {};
+  const invalidInvestmentNotice = tech.feasible ? "" : `<div class="notice bad"><strong>Technical configuration requires action.</strong> Investment outputs are shown for modelling context only and should not be treated as a recommendable case until the Product Configuration validator passes. Issue: ${h((tech.failures || ["Technical feasibility"]).join(", "))}</div>`;
   const sections = [
     { id: "horizon", title: "Investment horizon", html: `<div class="panel investment-horizon-panel"><h3>Model timeline</h3><p>Set the first operating year and the horizon used for ROI, cash flow, replacement events and exports.</p><div class="input-grid"><div class="field"><label>Model start year</label><input data-input="modelStartYear" type="number" min="2020" max="2100" step="1" value="${state.inputs.modelStartYear ?? state.inputs.codYear}" /><small>Defaults to the current calendar year. This replaces the older COD year wording.</small></div><div class="field"><label>Investment horizon: ${state.inputs.investmentHorizon} years</label><input data-input="investmentHorizon" type="range" min="1" max="20" step="1" value="${state.inputs.investmentHorizon}" /><small>Controls all investment totals and charts.</small></div></div></div>` },
+    { id: "leaseRisk", title: "Lease term risk", html: leaseRiskCard(f) },
     { id: "investmentFunding", title: "Investment & funding", html: kpiWindow("Investment & Funding", "tone-blue", [
       kpi("Initial investment", currency(f.grossInitialInvestmentBeforeGrant,0), "before grant"),
       kpi("Grant support", currency(f.grantSupport,0), "one-off support"),
@@ -632,6 +681,7 @@ function renderInvestmentDashboard(r) {
   return `
     ${sectionTitle("Investment Case", "Review investment return, capex, ROI, break-even and cash generation over the selected horizon.")}
     ${resetControl("investment")}
+    ${invalidInvestmentNotice}
     ${renderOrderedSections("investment", sections)}`;
 }
 
@@ -671,17 +721,20 @@ function renderAnnualFinancials(r) {
         currency(y.annualCashFlow,0),
         currency(y.cumulativeCashFlow,0)
       ]))}</div>` },
-    { id: "technical", title: "Technical detail", html: `<details><summary>Technical detail</summary><div style="margin-top:12px">${table(["Year", "Required peak kW", "Selected MIC", "Battery SOH", "Battery usable kWh", "Battery replacement", "Charger replacement", "Battery augmentation", "Replacement / augmentation capex"], rows.map(y => [
+    { id: "technical", title: "Technical detail", html: `<details open><summary>Technical detail</summary><div style="margin-top:12px">${table(["Year", "Required peak kW", "Selected MIC", "Installed battery units", "Battery SOH", "SOH-adjusted kWh", "Power deficit", "Energy deficit", "Battery replacement", "Charger replacement", "Battery deployment", "Replacement / deployment capex"], rows.map(y => [
         y.year,
         number(y.peakDemandRequiredKw,1),
         number(y.selectedMicKva,0),
-        pct(y.batterySohEnd,1),
-        number(y.batteryUsableEnergyKwh,0),
+        number(y.installedBatteryUnits || 0,0),
+        y.installedBatteryUnits ? pct(y.batterySohEnd,1) : '—',
+        number(y.batteryEnergyAvailableKwhSohAdjusted || 0,0),
+        kw(y.batteryPowerDeficitKw || 0,1),
+        kwh(y.batteryEnergyDeficitKwh || 0,0),
         y.batteryReplacementTrigger ? annualEventBadge('batteryReplacement') : '',
         y.chargerReplacementTrigger ? annualEventBadge('chargerReplacement') : '',
         y.augmentationFlag ? annualEventBadge('batteryAugmentation') : '',
         currency(y.batteryReplacementCapex + y.chargerReplacementCapex + y.augmentationCapex,0)
-      ]))}</div></details>` }
+      ]), "technical-detail-table")}</div></details>` }
   ];
   return `
     ${sectionTitle("Annual Financials", "Review annual sessions, energy, revenue, costs and cash flow in a readable year-by-year format.")}
@@ -1000,10 +1053,11 @@ function firstUseBanner() {
 function renderInvestorReport(r) {
   return `
     ${sectionTitle("Investor Report", "Export a clean investor pack and annual financials from the current model selection.")}
+    <div class="notice aadt-help"><strong>Traffic assumption note</strong><br>${h(aadtHelpText())}</div>
     <div class="export-card-grid">
       <section class="export-card primary-export">
         <h3>Investor PDF Pack</h3>
-        <p>Exports tabs 1–6 as a polished PDF-ready report: Site Screening, Demand Forecast, Product Configuration, Investment Case, Annual Financials and Scenario Ranking.</p>
+        <p>Exports tabs 1–6 as a polished PDF-ready report: Site Screening, Demand Forecast, Product Configuration, Investment Case, Annual Financials and Scenario Ranking. AADT is explained in the assumptions section of the report.</p>
         <button class="primary" id="exportInvestorPdf">Export investor PDF</button>
       </section>
       <section class="export-card excel-export">
@@ -1024,6 +1078,7 @@ function renderInvestorReport(r) {
 }
 
 function render() {
+  enforceConfigCompatibility();
   let r;
   const pages = {
     site: () => renderSiteDashboard(),
@@ -1283,7 +1338,6 @@ function wirePage(r) {
   const dismissGuide = el("dismissGuide");
   if (dismissGuide) dismissGuide.addEventListener("click", () => { try { localStorage.setItem("evHub.guide.dismissed", "true"); } catch (_) {} render(); });
 
-
   const exportDemand = el("exportDemand");
   if (exportDemand) exportDemand.addEventListener("click", () => exportDemandCsv(r.demand));
   const exportYear = el("exportYear");
@@ -1306,12 +1360,17 @@ function enforceConfigCompatibility() {
     state.config.dispenserCount = "N/A";
     if (state.config.chargerModel === "N/A") state.config.chargerModel = "Autel DH480 — 320 kW";
     if (state.config.chargerCount === "N/A") state.config.chargerCount = 2;
+    state.config.chargerCount = Math.max(1, Math.round(Number(state.config.chargerCount) || 1));
   } else {
     state.config.chargerModel = "N/A";
     state.config.chargerCount = "N/A";
     const cabinets = cabinetOptions(state.config.platform);
     if (!cabinets.some(x => x.item === state.config.cabinetType)) state.config.cabinetType = cabinets[0]?.item || "N/A";
-    if (state.config.dispenserCount === "N/A") state.config.dispenserCount = 2;
+    const maxDual = selectedCabinetMaxDualDisp(state.config);
+    let disp = state.config.dispenserCount === "N/A" ? 2 : Math.round(Number(state.config.dispenserCount) || 0);
+    disp = Math.max(0, disp);
+    if (maxDual != null) disp = Math.min(disp, maxDual);
+    state.config.dispenserCount = disp;
   }
   if (state.config.batteryStrategy === "Grid only") state.config.batterySize = "No battery";
   if (state.config.batteryStrategy !== "Grid only" && state.config.batterySize === "No battery") {

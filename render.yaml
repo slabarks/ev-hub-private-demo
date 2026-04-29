@@ -8,7 +8,9 @@ services:
     envVars:
       - key: DEMO_PASSWORD
         sync: false
-      - key: DEMO_SESSION_SECRET
+      - key: SESSION_SECRET
         generateValue: true
+      - key: DEMO_REQUIRE_PASSWORD
+        value: "true"
       - key: DISABLE_BROWSER_OPEN
         value: "1"

@@ -5,6 +5,34 @@ import { technicalChecks, validateConfiguration } from "./technicalEngine.js";
 import { batteryOptionsFor } from "../data/batteryLibrary.js";
 import { cabinetOptions, standaloneChargerOptions } from "../data/platformLibrary.js";
 
+const SAFE_NEGATIVE_METRIC = -999999999;
+const SAFE_POSITIVE_METRIC = 999999999;
+
+function finiteNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function safeMetric(value, fallback = 0) {
+  return finiteNumber(value, fallback);
+}
+
+function safeScenarioMetrics(s) {
+  return {
+    ...s,
+    totalCapex: safeMetric(s.totalCapex, 0),
+    totalOpex: safeMetric(s.totalOpex, 0),
+    totalCostToServeDemand: safeMetric(s.totalCostToServeDemand, SAFE_POSITIVE_METRIC),
+    cumulativeCashFlow: safeMetric(s.cumulativeCashFlow, SAFE_NEGATIVE_METRIC),
+    roi: Number.isFinite(Number(s.roi)) ? Number(s.roi) : null,
+    npv: safeMetric(s.npv, SAFE_NEGATIVE_METRIC),
+    irr: Number.isFinite(Number(s.irr)) ? Number(s.irr) : null,
+    servedDemandPercentage: safeMetric(s.servedDemandPercentage, 0),
+    lostDemand: safeMetric(s.lostDemand, 0),
+    lostRevenue: safeMetric(s.lostRevenue, 0)
+  };
+}
+
 function statusFromTechnical(technical) {
   if (!technical.valid) return "invalid combination";
   if (technical.feasible) return "feasible";
@@ -84,7 +112,7 @@ function evaluateConfig(id, family, config, inputs, demand, horizon) {
   const yearByYear = calculateYearByYear(inputs, config, demand);
   const financial = summariseFinancials(inputs, config, demand, yearByYear, horizon);
   const technical = technicalChecks(config, inputs, demand);
-  return {
+  return safeScenarioMetrics({
     id,
     familyName: family.name,
     name: family.name,
@@ -116,14 +144,14 @@ function evaluateConfig(id, family, config, inputs, demand, horizon) {
     batteryEnergyHeadroomDeficit: yearByYear.derived.batteryEnergyKwh - Math.max(...demand.years.map(y => Math.max(0, y.peakWindowKwh - config.selectedMicKva * inputs.powerFactor * 5))),
     overnightRechargeFeasibility: (config.batterySize === "No battery") ? "N/A — no battery" : (config.selectedMicKva * inputs.powerFactor * inputs.overnightRechargeWindowDuration >= yearByYear.derived.batteryEnergyKwh * inputs.batteryDispatchFractionUsable ? "PASS" : "CHECK"),
     failureReason: technical.failures.join("; ")
-  };
+  });
 }
 
 function infeasibleScore(s) {
   const failures = s.technical.failures.length;
   const powerDeficit = Math.max(0, Math.max(0, s.financial?.demandPeakKw || 0) - (s.derived?.totalAvailableSitePowerKw || 0));
   const outputDeficit = Math.max(0, (s.financial?.demandPeakKw || 0) - (s.derived?.installedChargerPowerKw || 0));
-  return failures * 1000000 + outputDeficit * 1000 + powerDeficit * 100 + s.totalCostToServeDemand / 1000000;
+  return failures * 1000000 + outputDeficit * 1000 + powerDeficit * 100 + finiteNumber(s.totalCostToServeDemand, SAFE_POSITIVE_METRIC) / 1000000;
 }
 
 function noCandidateScenario(family, idx, inputs, demand, horizon) {
@@ -168,14 +196,14 @@ function noCandidateScenario(family, idx, inputs, demand, horizon) {
     scenarioStatus: "equipment library exceeded",
     totalCapex: 0,
     totalOpex: 0,
-    totalCostToServeDemand: Number.POSITIVE_INFINITY,
-    cumulativeCashFlow: Number.NEGATIVE_INFINITY,
-    roi: Number.NEGATIVE_INFINITY,
+    totalCostToServeDemand: SAFE_POSITIVE_METRIC,
+    cumulativeCashFlow: SAFE_NEGATIVE_METRIC,
+    roi: null,
     breakEvenYear: null,
-    npv: Number.NEGATIVE_INFINITY,
-    irr: Number.NaN,
+    npv: SAFE_NEGATIVE_METRIC,
+    irr: null,
     servedDemandPercentage: 0,
-    lostDemand: Number.POSITIVE_INFINITY,
+    lostDemand: 0,
     lostRevenue: 0,
     firstBatteryReplacementYear: null,
     batteryReplacementCount: 0,
@@ -197,9 +225,9 @@ function pickBestForFamily(family, idx, inputs, demand, horizon) {
   const feasible = candidates.filter(c => c.technical.feasible);
   if (feasible.length) {
     feasible.sort((a, b) => {
-      const roiDiff = (b.roi ?? -999) - (a.roi ?? -999);
+      const roiDiff = finiteNumber(b.roi, SAFE_NEGATIVE_METRIC) - finiteNumber(a.roi, SAFE_NEGATIVE_METRIC);
       if (Math.abs(roiDiff) > 1e-9) return roiDiff;
-      const costDiff = a.totalCostToServeDemand - b.totalCostToServeDemand;
+      const costDiff = finiteNumber(a.totalCostToServeDemand, SAFE_POSITIVE_METRIC) - finiteNumber(b.totalCostToServeDemand, SAFE_POSITIVE_METRIC);
       if (Math.abs(costDiff) > 1e-6) return costDiff;
       return a.config.selectedMicKva - b.config.selectedMicKva;
     });

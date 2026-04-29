@@ -1,4 +1,4 @@
-import { deriveConfiguration, technicalChecks } from "./technicalEngine.js";
+import { deriveConfiguration, technicalChecks, validateConfiguration } from "./technicalEngine.js";
 import { batteryItem } from "../data/batteryLibrary.js";
 import { sum, npv, irr } from "../utils.js";
 
@@ -43,6 +43,8 @@ function weightedAverageSoh(cohorts) {
 
 export function calculateYearByYear(inputs, config, demand) {
   const derived = deriveConfiguration(config, inputs);
+  const configurationValidity = validateConfiguration(config);
+  const isValidConfiguration = configurationValidity.valid;
   const envelope = batteryEnvelope(config);
   const noBatteryDerived = envelope.unitsMax > 0
     ? deriveConfiguration({ ...config, batteryStrategy: "Grid only", batterySize: "No battery", batteryWarrantyYears: 0 }, inputs)
@@ -157,7 +159,8 @@ export function calculateYearByYear(inputs, config, demand) {
     const totalOperatingCosts = chargerSlaPpmSupport + managedService + batteryAnnualService + duosStandingCharge + duosCapacityCharge + groundRent + transactionProcessingFee + flatTransactionFee + landlordGpShare + landlordGrossSalesShare + extendedChargerWarranty + extendedBatteryWarranty;
 
     const initialInvestmentCapex = idx === 0 ? nonBatteryInitialCapex - inputs.grantSupport : 0;
-    const chargerReplacementTrigger = (yearNumber % inputs.chargerEquipmentReplacementCycleYears === 0) ? 1 : 0;
+    const validChargerReplacementCapex = isValidConfiguration && Number.isFinite(Number(derived.chargerReplacementCapex)) && derived.chargerReplacementCapex > 0;
+    const chargerReplacementTrigger = (validChargerReplacementCapex && (yearNumber % inputs.chargerEquipmentReplacementCycleYears === 0)) ? 1 : 0;
     const chargerReplacementCapex = chargerReplacementTrigger === 1 ? derived.chargerReplacementCapex : 0;
     const totalCapex = initialInvestmentCapex + batteryReplacementCapex + chargerReplacementCapex + augmentationCapex;
     const operatingProfit = grossProfit - totalOperatingCosts;
@@ -169,7 +172,7 @@ export function calculateYearByYear(inputs, config, demand) {
     const helperBreakEvenYear = cumulativeCashFlow >= 0 ? year : 9999;
 
     const row = {
-      yearNumber, year, batterySohStart, annualSohDegradation, batterySohEnd, batteryReplacementTrigger,
+      yearNumber, year, configurationValid: isValidConfiguration, configurationInvalidReasons: configurationValidity.reasons || [], batterySohStart, annualSohDegradation, batterySohEnd, batteryReplacementTrigger,
       effectiveBatterySoh: batterySohEnd, augmentationFlag, batteryPowerDeficitKw, batteryEnergyDeficitKwh,
       additionalBatteryCabinetsNeeded: totals.units,
       installedBatteryUnits: totals.units,

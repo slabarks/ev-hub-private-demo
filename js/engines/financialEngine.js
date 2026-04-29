@@ -57,6 +57,7 @@ export function calculateYearByYear(inputs, config, demand) {
   let cumulativeCashFlow = 0;
   const peakWindowDurationHrs = Number(inputs.peakWindowEndHour ?? inputs.peakWindowHours ?? 5) || 5;
   const nonBatteryInitialCapex = noBatteryDerived.initialInvestmentCapex;
+  let gridOnlyCapacityPlateauKwh = 0;
 
   demand.years.forEach((d, idx) => {
     const yearNumber = idx + 1;
@@ -125,7 +126,14 @@ export function calculateYearByYear(inputs, config, demand) {
     const batteryEnergyDeficitKwh = Math.max(0, residualPeakWindowKwh - batteryEnergyAvailableKwhSohAdjusted);
 
     const installedChargerPowerKw = derived.installedChargerPowerKw;
-    const batteryEnergyCoverageRatio = residualPeakWindowKwh > 0 ? Math.min(1, batteryEnergyAvailableKwhSohAdjusted / Math.max(1, residualPeakWindowKwh)) : 1;
+    const batteryPeakResidualCoverageRatio = residualPeakWindowKwh > 0 ? Math.min(1, batteryEnergyAvailableKwhSohAdjusted / Math.max(1, residualPeakWindowKwh)) : 1;
+    const peakWindowShare = Math.max(0, Math.min(1, Number(inputs.peakWindowShare || 0)));
+    // Grid-only sites should continue serving all physically deliverable energy from their existing MIC/chargers.
+    // A missing battery must not force delivered energy to zero once peak-window demand exceeds grid-only capacity.
+    // Instead, the site plateaus at its plug/power capacity and the model records unserved/lost demand.
+    const batteryEnergyCoverageRatio = (config.batteryStrategy === "Grid only" || envelope.unitsMax === 0)
+      ? 1
+      : Math.min(1, (1 - peakWindowShare) + peakWindowShare * batteryPeakResidualCoverageRatio);
     const batterySustainDurationAtFullOutputHrs = batteryInverterPowerKw > 0 ? batteryEnergyAvailableKwhSohAdjusted / Math.max(1, batteryInverterPowerKw) : 0;
     const gridPowerAvailableForRechargeKw = gridPowerKw;
     const batteryEnergyToRechargeKwh = Math.min(residualPeakWindowKwh, batteryEnergyAvailableKwhSohAdjusted);
@@ -133,8 +141,22 @@ export function calculateYearByYear(inputs, config, demand) {
     const totalAvailableSitePowerKw = gridPowerKw + batteryInverterPowerKw;
     const requiredMicNoBatteryKva = d.requiredMicNoBatteryKva;
     const batteryPowerSurplusDeficitKw = batteryInverterPowerKw - batteryPowerRequiredKw;
+    const installedOutputs = Math.max(0, Number(derived.installedOutputs || 0));
+    const plugCoverageRatio = Math.min(1, installedOutputs / Math.max(1, Number(d.peakConcurrentSessions || d.requiredPlugs || 0)));
     const powerCoverageRatio = Math.min(1, Math.min(installedChargerPowerKw, totalAvailableSitePowerKw) / Math.max(1, peakDemandRequiredKw));
-    const deliveredEnergyServedKwh = d.annualEnergyDemandedKwh * Math.min(powerCoverageRatio, batteryEnergyCoverageRatio);
+    const rawServedDemandCoverageRatio = Math.max(0, Math.min(1, powerCoverageRatio, plugCoverageRatio, batteryEnergyCoverageRatio));
+    let deliveredEnergyServedKwh = d.annualEnergyDemandedKwh * rawServedDemandCoverageRatio;
+    const gridOnlyPlateauEligible = (config.batteryStrategy === "Grid only" || envelope.unitsMax === 0);
+    const capacityConstrainedThisYear = rawServedDemandCoverageRatio < 0.999 && d.annualEnergyDemandedKwh > 0;
+    if (gridOnlyPlateauEligible) {
+      if (capacityConstrainedThisYear) {
+        gridOnlyCapacityPlateauKwh = Math.max(gridOnlyCapacityPlateauKwh, deliveredEnergyServedKwh);
+        deliveredEnergyServedKwh = Math.min(d.annualEnergyDemandedKwh, gridOnlyCapacityPlateauKwh);
+      } else {
+        gridOnlyCapacityPlateauKwh = Math.max(gridOnlyCapacityPlateauKwh, deliveredEnergyServedKwh);
+      }
+    }
+    const servedDemandCoverageRatio = d.annualEnergyDemandedKwh > 0 ? deliveredEnergyServedKwh / d.annualEnergyDemandedKwh : 1;
     const sessionsServed = deliveredEnergyServedKwh / inputs.averageSessionEnergy;
     const lostEnergyKwh = Math.max(0, d.annualEnergyDemandedKwh - deliveredEnergyServedKwh);
     const lostSessions = Math.max(0, d.annualSessionsDemanded - sessionsServed);
@@ -186,7 +208,8 @@ export function calculateYearByYear(inputs, config, demand) {
       batterySustainDurationAtFullOutputHrs, peakWindowDurationHrs, gridPowerAvailableForRechargeKw,
       batteryEnergyToRechargeKwh, overnightRechargeDeliverableKwh, totalAvailableSitePowerKw,
       peakDemandRequiredKw, batteryPowerRequiredKw, batteryPowerSurplusDeficitKw, requiredMicNoBatteryKva,
-      powerCoverageRatio, deliveredEnergyServedKwh, sessionsServed, lostEnergyKwh, lostSessions,
+      powerCoverageRatio, plugCoverageRatio, batteryEnergyCoverageRatio, servedDemandCoverageRatio,
+      deliveredEnergyServedKwh, sessionsServed, lostEnergyKwh, lostSessions,
       energyRevenue, totalRevenue, electricityCost, grossProfit, chargerSlaPpmSupport, managedService,
       batteryAnnualService, duosStandingCharge, duosCapacityCharge, groundRent, transactionProcessingFee,
       flatTransactionFee, landlordGpShare, landlordGrossSalesShare, extendedChargerWarranty,

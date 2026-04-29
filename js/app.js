@@ -10,8 +10,9 @@ import { MOCK_LOCATION } from "./providers/mockProviders.js";
 import { lineChart, stackedBarChart, financeComboChart } from "./ui/charts.js";
 import { currency, number, pct, kw, kwh, kva } from "./utils.js";
 import { exportDemandCsv, exportYearByYearCsv, exportScenarioCsv, exportAssumptionsJson, exportAuditJson, exportAnnualFinancialsExcel, exportInvestorPdf } from "./engines/exportEngine.js";
+import { PORTFOLIO_CALIBRATION_SITES } from "./data/operatingHubCalibrationLibrary.js";
 
-const VALID_TABS = ["site", "demand", "setup", "investment", "annuals", "scenario", "advanced", "report"];
+const VALID_TABS = ["site", "demand", "setup", "investment", "annuals", "scenario", "portfolio", "advanced", "report"];
 const TAB_ALIASES = { simulation: "setup", yearbyyear: "annuals", export: "report" };
 
 function tabFromHash() {
@@ -28,6 +29,7 @@ let chargerMarkers = [];
 let mapSearchVersion = 0;
 let lastRenderedMapKey = null;
 let mapPointSelectMode = false;
+let pendingPortfolioSiteSearch = null;
 
 function results() {
   const demand = calculateDemand(state.inputs);
@@ -68,6 +70,47 @@ function coordinateAddressLabel(lat, lon) {
 function latestYearFromText(value) {
   const years = String(value ?? "").match(/(?:19|20)\d{2}/g);
   return years && years.length ? Math.max(...years.map(Number)) : null;
+}
+
+function portfolioSiteTraffic(site, baseTraffic = {}) {
+  const portfolioAadt = Number(site?.aadt || 0);
+  return {
+    ...baseTraffic,
+    aadt: Number.isFinite(portfolioAadt) && portfolioAadt > 0 ? portfolioAadt : Number(baseTraffic?.aadt || 0),
+    source: site?.aadtCounter || baseTraffic?.source || "Portfolio calibration matched AADT",
+    confidence: site?.aadtConfidence || baseTraffic?.confidence || "portfolio matched",
+    provider: "Portfolio calibration library",
+    method_note: "AADT, MIC and model-equivalent charger configuration are preserved from the operating hub calibration record. Map coordinates and nearby chargers are refreshed through the normal Site Screening search."
+  };
+}
+
+function portfolioSearchContext(ctx, site) {
+  const base = ctx && typeof ctx === "object" ? ctx : {};
+  const baseSite = base.site || {};
+  const portfolioName = site?.name || baseSite.name || site?.address || "Portfolio site";
+  const originalWarning = base.warning ? `${base.warning} ` : "";
+  return {
+    ...base,
+    ok: true,
+    site: {
+      ...baseSite,
+      name: portfolioName,
+      display_address: site?.address || baseSite.display_address || baseSite.name || portfolioName,
+      source: baseSite.source ? `${baseSite.source} + portfolio calibration load` : "Portfolio calibration load",
+      confidence: baseSite.confidence || "portfolio search"
+    },
+    traffic: portfolioSiteTraffic(site, base.traffic || {}),
+    chargers: Array.isArray(base.chargers) ? base.chargers : [],
+    warning: `${originalWarning}Portfolio site loaded through Site Screening. The map and nearby chargers were refreshed; portfolio MIC, matched AADT and product configuration were preserved.`,
+    debug: { ...(base.debug || {}), portfolio_site_id: site?.id, portfolio_search_load: true }
+  };
+}
+
+function applyPortfolioSiteModelConfig(site) {
+  Object.assign(state.config, site?.modelConfig || {});
+  enforceConfigCompatibility();
+  const portfolioMic = Number(site?.realMicKva || site?.modelConfig?.selectedMicKva);
+  if (Number.isFinite(portfolioMic) && portfolioMic > 0) state.config.selectedMicKva = portfolioMic;
 }
 function nextApprovedMic(required) {
   return MIC_VALUES.find(v => v >= required) || MIC_VALUES[MIC_VALUES.length - 1];
@@ -197,6 +240,7 @@ const TAB_LABELS = {
   investment: "Investment Case",
   annuals: "Annual Financials",
   scenario: "Scenario Ranking",
+  portfolio: "Portfolio Calibration",
   advanced: "Advanced Model Settings",
   report: "Investor Report"
 };
@@ -470,12 +514,12 @@ function renderDemandDashboard(r) {
       <h3>Editable demand assumptions</h3>
       <div class="input-grid three">
         ${inputField("annualBevShareGrowthRate", "Annual BEV share growth rate", { step: 0.01, help: "Compounds the starting BEV share each model year, capped by the model BEV share cap." })}
-        ${inputField("siteCaptureRate", "Site capture rate", { step: 0.01, help: "Share of fast-charge candidates captured by this site before ramp-up." })}
-        ${inputField("siteLimitationFactor", "Site limitation factor", { step: 0.01, help: "Constraint factor applied to captured sessions to reflect site limits or access limitations." })}
-        ${inputField("peakWindowShare", "Peak-window share", { step: 0.01, help: "Share of daily sessions falling in the peak window. Default window is 10:00–15:00." })}
-        ${inputField("peakHourShareWithinPeakWindow", "Peak-hour share within peak window", { step: 0.01, help: "Share of peak-window demand concentrated in the single highest hour." })}
-        ${inputField("averageSessionEnergy", "Average session energy", { step: 1, help: "Average delivered energy per charging session. Default is 30 kWh." })}
-        ${inputField("baseFleetPlanningPower", "Base fleet planning power", { step: 1, help: "Planning power per charging session used to estimate peak kW, required plugs and MIC. Default is 75 kW." })}
+        ${inputField("siteCaptureRate", "Site capture rate", { step: 0.01, help: "What it does: converts relevant fast-charge opportunity into site demand. Basis: calibrated from ePower hubs + matched AADT." })}
+        ${inputField("siteLimitationFactor", "Site limitation factor", { step: 0.01, help: "What it does: applies practical site constraints. Basis: retained planning assumption." })}
+        ${inputField("peakWindowShare", "Peak-window share", { step: 0.01, help: "What it does: allocates demand into busiest hours. Basis: planning assumption; hourly data not available yet." })}
+        ${inputField("peakHourShareWithinPeakWindow", "Peak-hour share within peak window", { step: 0.01, help: "What it does: sizes the single busiest hour. Basis: planning assumption; hourly data not available yet." })}
+        ${inputField("averageSessionEnergy", "Average session energy", { step: 1, help: "What it does: sets kWh per charging session. Basis: calibrated from ePower portfolio kWh ÷ sessions." })}
+        ${inputField("baseFleetPlanningPower", "Base fleet planning power", { step: 1, help: "What it does: estimates session duration and plug occupancy. Basis: calibrated from observed ePower average kW." })}
       </div>
     </div>` },
     { id: "bevTraffic", title: "BEV traffic growth", html: lineChart("bevTrafficChart", rows, "year", [{ key: "bevDailyTraffic", label: "Relevant BEV traffic", color: "var(--chart-blue)" }], { title: "Relevant BEV traffic growth by year", xLabel: "Year", yLabel: "Relevant BEV vehicles/day" }) },
@@ -835,6 +879,778 @@ function renderScenarioRanking(r) {
     <div class="notice scenario-footnote">Ranking is based on technical feasibility first, then ROI among feasible scenarios only. Infeasible scenarios are shown for comparison with recommended fixes.</div>`;
 }
 
+
+const PORTFOLIO_CATEGORY_FACTORS = {
+  motorway_plaza: {
+    label: "Motorway / plaza", relevance: 0.35, capture: 0.22, targetSessionsPer1000Aadt: 0.32, effectiveAadtCap: 45000,
+    benchmarkWeight: "AADT-led planned charging stop",
+    note: "High-visibility planned charging stop; AADT and peak-capacity pressure matter strongly."
+  },
+  retail: {
+    label: "Retail park / shopping centre", relevance: 0.30, capture: 0.20, targetSessionsPer1000Aadt: 1.20, effectiveAadtCap: 20000,
+    benchmarkWeight: "destination plus passing traffic",
+    note: "Retail destination plus passing traffic; benchmark against capture and plug productivity."
+  },
+  urban_service: {
+    label: "Urban service station", relevance: 0.22, capture: 0.16, targetSessionsPer1000Aadt: 0.19, highPlugTargetSessionsPer1000Aadt: 0.36, effectiveAadtCap: 35000,
+    benchmarkWeight: "local corridor / fuel-stop behaviour",
+    note: "Fuel-stop/local corridor behaviour; watch visibility, access and local competition before expansion."
+  },
+  hotel_destination: {
+    label: "Hotel / destination", relevance: 0.12, capture: 0.12, targetSessionsPer1000Aadt: 0.34, effectiveAadtCap: 12000, destinationMonthlyFloorKwh: 3000, destinationFloorMaxAadt: 10000,
+    benchmarkWeight: "destination-led demand",
+    note: "Destination-led demand; AADT can understate tourism, dwell and captive usage."
+  },
+  local_community: {
+    label: "Local / community", relevance: 0.06, capture: 0.08, targetSessionsPer1000Aadt: 0.06, effectiveAadtCap: 120000,
+    benchmarkWeight: "local repeat usage",
+    note: "Local/captive use dominates; expansion should be conservative unless utilisation is visible."
+  },
+  review: {
+    label: "Review", relevance: 0.24, capture: 0.16, targetSessionsPer1000Aadt: 0.80, effectiveAadtCap: 20000,
+    benchmarkWeight: "manual classification required",
+    note: "Manual review category; use only as a holding class until the site is classified."
+  }
+};
+function portfolioCategoryKey(site) {
+  const n = String(site?.name || "").toLowerCase();
+  if (site?.categoryKey && PORTFOLIO_CATEGORY_FACTORS[site.categoryKey]) return site.categoryKey;
+  if (/(mallow plaza|tullamore|athlone|rhu glenn|junction 20)/.test(n)) return "motorway_plaza";
+  if (/(retail|shopping|cope|supervalu|southgate|newbridge|leopardstown|axis)/.test(n)) return "retail";
+  if (/(hotel|brehon|greenhills|charleville|castletroy|newtown)/.test(n)) return "hotel_destination";
+  if (/(corrib|circle k|centra|walsh|dungarvan|fermoy|tralee|roscommon)/.test(n)) return "urban_service";
+  if (/(afc|community|gaa|sports)/.test(n)) return "local_community";
+  return "review";
+}
+function portfolioMaturityLabel(tier) {
+  return tier === "mature" ? "Mature" : tier === "near" ? "Near-mature" : tier === "early" ? "Early" : "Review";
+}
+function portfolioMaturityBadge(tier) {
+  return tier === "mature" ? `<span class="badge good">Mature</span>` : tier === "near" ? `<span class="badge warn">Near-mature</span>` : tier === "early" ? `<span class="badge neutral">Early</span>` : `<span class="badge neutral">Review</span>`;
+}
+function portfolioVarianceBadge(v) {
+  if (!Number.isFinite(v)) return `<span class="badge warn">No actual</span>`;
+  const abs = Math.abs(v);
+  const cls = abs <= 0.10 ? "good" : abs <= 0.20 ? "warn" : "bad";
+  return `<span class="badge ${cls}">${v >= 0 ? "+" : ""}${pct(v,1)}</span>`;
+}
+function portfolioVarianceBand(v) {
+  if (!Number.isFinite(v)) return "no-data";
+  const abs = Math.abs(v);
+  if (abs <= 0.10) return "within10";
+  if (abs <= 0.20) return "within20";
+  return v > 0 ? "over" : "under";
+}
+function portfolioScenario(site, calibrated = false) {
+  const key = portfolioCategoryKey(site);
+  const factor = PORTFOLIO_CATEGORY_FACTORS[key] || PORTFOLIO_CATEGORY_FACTORS.review;
+  return {
+    ...DEFAULT_INPUTS,
+    modelStartYear: 2025,
+    codYear: 2025,
+    trafficSourceYear: 2025,
+    siteAddress: site.address || site.name,
+    rawCorridorTrafficAadt: Number(site.aadt || 0),
+    averageSessionEnergy: DEFAULT_INPUTS.averageSessionEnergy,
+    netSellingPriceExVat: DEFAULT_INPUTS.netSellingPriceExVat,
+    grossSellingPriceInclVat: DEFAULT_INPUTS.grossSellingPriceInclVat,
+    baseFleetPlanningPower: DEFAULT_INPUTS.baseFleetPlanningPower,
+    plugInOverstayOverheadHours: DEFAULT_INPUTS.plugInOverstayOverheadHours,
+    siteRelevanceFactor: calibrated ? factor.relevance : DEFAULT_INPUTS.siteRelevanceFactor,
+    siteCaptureRate: calibrated ? factor.capture : DEFAULT_INPUTS.siteCaptureRate,
+    siteLimitationFactor: DEFAULT_INPUTS.siteLimitationFactor,
+    annualBevShareGrowthRate: DEFAULT_INPUTS.annualBevShareGrowthRate,
+    fastChargePropensity: DEFAULT_INPUTS.fastChargePropensity,
+    peakWindowShare: DEFAULT_INPUTS.peakWindowShare,
+    peakHourShareWithinPeakWindow: DEFAULT_INPUTS.peakHourShareWithinPeakWindow,
+    rampUpYear1: DEFAULT_INPUTS.rampUpYear1,
+    rampUpYear2: DEFAULT_INPUTS.rampUpYear2
+  };
+}
+function portfolioMaturityDemandRamp(site) {
+  const tier = site?.maturity?.tier;
+  if (tier === "early") return 0.60;
+  if (tier === "near") return 0.90;
+  return 1;
+}
+function portfolioCalibrationProfile(site) {
+  const categoryKey = portfolioCategoryKey(site);
+  const category = PORTFOLIO_CATEGORY_FACTORS[categoryKey] || PORTFOLIO_CATEGORY_FACTORS.review;
+  const plugs = Number(site?.modelEquivalentPlugs || 0);
+  const targetSessionsPer1000Aadt = categoryKey === "urban_service" && plugs >= 4
+    ? Number(category.highPlugTargetSessionsPer1000Aadt || category.targetSessionsPer1000Aadt || 0)
+    : Number(category.targetSessionsPer1000Aadt || 0);
+  const rawAadt = Number(site?.aadt || 0);
+  const effectiveAadtCap = Number(category.effectiveAadtCap || rawAadt || 0);
+  const effectiveAadt = effectiveAadtCap > 0 ? Math.min(rawAadt, effectiveAadtCap) : rawAadt;
+  const maturityRamp = portfolioMaturityDemandRamp(site);
+  return { categoryKey, category, targetSessionsPer1000Aadt, rawAadt, effectiveAadt, effectiveAadtCap, maturityRamp };
+}
+function portfolioCalibratedMonthlyEstimate(site, inputs) {
+  const profile = portfolioCalibrationProfile(site);
+  const sessionEnergy = Number(inputs.averageSessionEnergy || DEFAULT_INPUTS.averageSessionEnergy || 30.4);
+  const targetDailySessions = profile.effectiveAadt > 0
+    ? (profile.effectiveAadt / 1000) * profile.targetSessionsPer1000Aadt * profile.maturityRamp
+    : 0;
+  let modelSessions = Math.max(0, targetDailySessions * 30);
+  let modelKwh = Math.max(0, modelSessions * sessionEnergy);
+  const destinationFloorKwh = Number(profile.category.destinationMonthlyFloorKwh || 0);
+  const destinationFloorMaxAadt = Number(profile.category.destinationFloorMaxAadt || Infinity);
+  if (destinationFloorKwh > 0 && profile.rawAadt <= destinationFloorMaxAadt && modelKwh < destinationFloorKwh) {
+    modelKwh = destinationFloorKwh;
+    modelSessions = sessionEnergy > 0 ? modelKwh / sessionEnergy : modelSessions;
+  }
+  return { ...profile, modelKwh, modelSessions, modelRevenue: modelKwh * Number(inputs.netSellingPriceExVat || 0) };
+}
+function portfolioRun(site, calibrated = false) {
+  const inputs = portfolioScenario(site, calibrated);
+  const config = { ...DEFAULT_SELECTED_CONFIG, ...site.modelConfig };
+  const demand = calculateDemand(inputs);
+  const yearByYear = calculateYearByYear(inputs, config, demand);
+  const financialSummary = summariseFinancials(inputs, config, demand, yearByYear, inputs.investmentHorizon);
+  const idx = Math.max(0, Math.min((site.maturity?.comparisonYearIndex || 1) - 1, yearByYear.rows.length - 1));
+  const row = yearByYear.rows[idx] || yearByYear.rows[0] || {};
+  let calibrationProfile = null;
+  let modelKwh = Math.max(0, Number(row.deliveredEnergyServedKwh || 0) / 12);
+  let modelRevenue = Math.max(0, Number(row.totalRevenue || 0) / 12);
+  let modelSessions = Math.max(0, Number(row.sessionsServed || 0) / 12);
+  if (calibrated) {
+    calibrationProfile = portfolioCalibratedMonthlyEstimate(site, inputs);
+    modelKwh = calibrationProfile.modelKwh;
+    modelRevenue = calibrationProfile.modelRevenue;
+    modelSessions = calibrationProfile.modelSessions;
+  }
+  return { inputs, config, demand, yearByYear, financialSummary, compareRow: row, modelKwh, modelRevenue, modelSessions, calibrationProfile };
+}
+function portfolioOperatingMetrics(site) {
+  const actual = site?.actual || {};
+  const actualKwh = Number(actual.rolling30Kwh || 0);
+  const actualSessions = Number(actual.rolling30Sessions || 0);
+  const actualRevenue = Number(actual.rolling30NetRevenue || 0);
+  const aadt = Number(site?.aadt || 0);
+  const plugs = Number(site?.modelEquivalentPlugs || 0);
+  const micKva = Number(site?.realMicKva || 0);
+  const dailyKwh = Number(actual.dailyKwh || (actualKwh > 0 ? actualKwh / 30 : 0));
+  const dailySessions = Number(actual.dailySessions || (actualSessions > 0 ? actualSessions / 30 : 0));
+  const avgKwhSession = actualSessions > 0 ? actualKwh / actualSessions : Number(DEFAULT_INPUTS.averageSessionEnergy || 30.4);
+  return {
+    actualKwh,
+    actualSessions,
+    actualRevenue,
+    dailyKwh,
+    dailySessions,
+    annualisedKwh: dailyKwh * 365,
+    annualisedSessions: dailySessions * 365,
+    avgKwhSession,
+    revenuePerKwh: actualKwh > 0 ? actualRevenue / actualKwh : Number(DEFAULT_INPUTS.netSellingPriceExVat || 0),
+    sessionsPer1000Aadt: aadt > 0 ? dailySessions / (aadt / 1000) : null,
+    kwhPer1000Aadt: aadt > 0 ? dailyKwh / (aadt / 1000) : null,
+    sessionsPerPlugDay: plugs > 0 ? dailySessions / plugs : null,
+    kwhPerPlugDay: plugs > 0 ? dailyKwh / plugs : null,
+    kwhPerKvaDay: micKva > 0 ? dailyKwh / micKva : null,
+    plugs,
+    micKva,
+    aadt
+  };
+}
+function portfolioAnnualOperatingValues(site, metrics = portfolioOperatingMetrics(site)) {
+  const actual = site?.actual || {};
+  const explicitAnnualKwh = Number(actual.annualKwh || 0);
+  const explicitAnnualSessions = Number(actual.annualSessions || 0);
+  const explicitAnnualRevenue = Number(actual.annualNetRevenue || 0);
+  const hasExplicitAnnual = explicitAnnualKwh > 0;
+  const annualKwh = hasExplicitAnnual ? explicitAnnualKwh : Number(metrics.annualisedKwh || 0);
+  const annualSessions = explicitAnnualSessions > 0 ? explicitAnnualSessions : Number(metrics.annualisedSessions || 0);
+  const annualRevenue = explicitAnnualRevenue > 0 ? explicitAnnualRevenue : annualKwh * Number(metrics.revenuePerKwh || DEFAULT_INPUTS.netSellingPriceExVat || 0);
+  const dataDays = Number(site?.maturity?.dataDays || 0);
+  const basis = hasExplicitAnnual
+    ? "Trailing 12-month actual"
+    : dataDays >= 365
+      ? "Annualised from latest operating run-rate; site has 12+ months of history"
+      : "Annualised run-rate from available operating data";
+  return { annualKwh, annualSessions, annualRevenue, hasExplicitAnnual, dataDays, basis };
+}
+
+function portfolioQuantile(values, q) {
+  const vals = values.map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
+  if (!vals.length) return null;
+  const pos = (vals.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  return vals[base + 1] !== undefined ? vals[base] + rest * (vals[base + 1] - vals[base]) : vals[base];
+}
+function portfolioMetricStats(values) {
+  const vals = values.map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
+  if (!vals.length) return { count: 0, p25: null, p50: null, p75: null, min: null, max: null };
+  return {
+    count: vals.length,
+    p25: portfolioQuantile(vals, 0.25),
+    p50: portfolioQuantile(vals, 0.50),
+    p75: portfolioQuantile(vals, 0.75),
+    min: vals[0],
+    max: vals[vals.length - 1]
+  };
+}
+function portfolioCompareMetric(value, stats, tolerance = 0.10) {
+  if (!Number.isFinite(value) || !stats || !Number.isFinite(stats.p25) || !Number.isFinite(stats.p75)) return "review";
+  if (value < stats.p25 * (1 - tolerance)) return "below";
+  if (value > stats.p75 * (1 + tolerance)) return "above";
+  return "within";
+}
+function portfolioBenchmarksByCategory(sites = PORTFOLIO_CALIBRATION_SITES) {
+  const benchmarks = {};
+  Object.keys(PORTFOLIO_CATEGORY_FACTORS).forEach(categoryKey => {
+    const sameCategory = sites.filter(site => portfolioCategoryKey(site) === categoryKey);
+    let sample = sameCategory.filter(site => ["mature", "near"].includes(site.maturity?.tier));
+    let sampleBasis = "mature + near peers";
+    if (sample.length < 2) {
+      sample = sameCategory;
+      sampleBasis = sample.length ? "all available peers" : "portfolio fallback";
+    }
+    if (sample.length < 2) {
+      sample = sites.filter(site => ["mature", "near"].includes(site.maturity?.tier));
+      sampleBasis = "all mature + near sites fallback";
+    }
+    const metrics = sample.map(portfolioOperatingMetrics);
+    benchmarks[categoryKey] = {
+      categoryKey,
+      label: PORTFOLIO_CATEGORY_FACTORS[categoryKey]?.label || "Review",
+      sampleCount: sample.length,
+      sampleBasis,
+      siteNames: sample.map(s => s.name),
+      sessionsPer1000Aadt: portfolioMetricStats(metrics.map(m => m.sessionsPer1000Aadt)),
+      kwhPer1000Aadt: portfolioMetricStats(metrics.map(m => m.kwhPer1000Aadt)),
+      sessionsPerPlugDay: portfolioMetricStats(metrics.map(m => m.sessionsPerPlugDay)),
+      kwhPerPlugDay: portfolioMetricStats(metrics.map(m => m.kwhPerPlugDay)),
+      kwhPerKvaDay: portfolioMetricStats(metrics.map(m => m.kwhPerKvaDay)),
+      avgKwhSession: portfolioMetricStats(metrics.map(m => m.avgKwhSession)),
+      revenuePerKwh: portfolioMetricStats(metrics.map(m => m.revenuePerKwh))
+    };
+  });
+  return benchmarks;
+}
+function portfolioBenchmarkKwhRange(site, benchmark) {
+  const profile = portfolioCalibrationProfile(site);
+  const sessionStats = benchmark?.sessionsPer1000Aadt || {};
+  const avgSession = Number(benchmark?.avgKwhSession?.p50 || DEFAULT_INPUTS.averageSessionEnergy || 30.4);
+  const lowCapture = Number.isFinite(sessionStats.p25) ? sessionStats.p25 : profile.targetSessionsPer1000Aadt * 0.75;
+  const medCapture = Number.isFinite(sessionStats.p50) ? sessionStats.p50 : profile.targetSessionsPer1000Aadt;
+  const highCapture = Number.isFinite(sessionStats.p75) ? sessionStats.p75 : profile.targetSessionsPer1000Aadt * 1.25;
+  const effectiveAadt = Number(profile.effectiveAadt || site.aadt || 0);
+  // Annual benchmark range. The model is year-based, so the portfolio table compares annual kWh, not 30D/monthly kWh.
+  let low = Math.max(0, (effectiveAadt / 1000) * lowCapture * avgSession * 365);
+  const median = Math.max(0, (effectiveAadt / 1000) * medCapture * avgSession * 365);
+  let high = Math.max(0, (effectiveAadt / 1000) * highCapture * avgSession * 365);
+  if (low === high && median > 0) {
+    low = median * 0.85;
+    high = median * 1.15;
+  }
+  return { low, median, high, effectiveAadt, avgSession };
+}
+function portfolioBenchmarkPosition(actualKwh, range) {
+  if (!range || !Number.isFinite(range.low) || !Number.isFinite(range.high) || !Number.isFinite(actualKwh)) return "review";
+  if (actualKwh < range.low * 0.90) return "below";
+  if (actualKwh > range.high * 1.10) return "above";
+  return "within";
+}
+function portfolioFormatRange(low, high, digits = 0, suffix = "") {
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return "—";
+  return `${number(low, digits)}–${number(high, digits)}${suffix}`;
+}
+function portfolioDoNothingPath(site, metrics, derived, inputs) {
+  const startYear = Number(inputs?.modelStartYear || 2025);
+  const installedOutputs = Math.max(0, Number(derived?.installedOutputs || site?.modelEquivalentPlugs || 0));
+  const installedPowerKw = Math.max(0, Number(derived?.installedChargerPowerKw || 0));
+  const micKva = Math.max(0, Number(site?.realMicKva || inputs?.selectedMicKva || 0));
+  const gridPowerKw = micKva * Number(inputs?.powerFactor || DEFAULT_INPUTS.powerFactor || 0.98);
+  const annualTrafficGrowth = Number(inputs?.annualTrafficGrowthRate ?? DEFAULT_INPUTS.annualTrafficGrowthRate ?? 0.01);
+  const annualBevGrowth = Number(inputs?.annualBevShareGrowthRate ?? DEFAULT_INPUTS.annualBevShareGrowthRate ?? 0.18);
+  const bevStart = Math.max(0.0001, Number(inputs?.onRoadBevShareAtCod ?? DEFAULT_INPUTS.onRoadBevShareAtCod ?? 0.04));
+  const bevCap = Math.max(bevStart, Number(inputs?.bevShareCap ?? DEFAULT_INPUTS.bevShareCap ?? 0.25));
+  const baseFleetPower = Number(inputs?.baseFleetPlanningPower || DEFAULT_INPUTS.baseFleetPlanningPower || 60);
+  const sessionEnergy = Number(metrics?.avgKwhSession || inputs?.averageSessionEnergy || DEFAULT_INPUTS.averageSessionEnergy || 30.4);
+  const overhead = Number(inputs?.plugInOverstayOverheadHours || DEFAULT_INPUTS.plugInOverstayOverheadHours || 0.03);
+  const peakShare = Number(inputs?.peakWindowShare || DEFAULT_INPUTS.peakWindowShare || 0.50);
+  const peakHourShare = Number(inputs?.peakHourShareWithinPeakWindow || DEFAULT_INPUTS.peakHourShareWithinPeakWindow || 0.25);
+  const designFloor = Number(inputs?.designPeakFloorSessions || DEFAULT_INPUTS.designPeakFloorSessions || 1);
+  const netPrice = Number(inputs?.netSellingPriceExVat || DEFAULT_INPUTS.netSellingPriceExVat || 0.66);
+  const yearRows = [];
+  let techUplift = 1;
+  let durationUplift = 1;
+  let firstPlugYear = null;
+  let firstMicYear = null;
+  let firstChargerYear = null;
+  let firstConstraintYear = null;
+  let lostKwh20yr = 0;
+  for (let t = 0; t < 20; t += 1) {
+    if (t === 0) {
+      techUplift = 1;
+      durationUplift = 1;
+    } else {
+      const techRate = t <= 10 ? Number(inputs?.techUpliftEarlyPhaseRate ?? DEFAULT_INPUTS.techUpliftEarlyPhaseRate ?? 0.025) : Number(inputs?.techUpliftMiddlePhaseRate ?? DEFAULT_INPUTS.techUpliftMiddlePhaseRate ?? 0.01);
+      const techCap = Number(inputs?.techUpliftCap ?? DEFAULT_INPUTS.techUpliftCap ?? 1.25);
+      const durationResponse = Number(inputs?.durationResponseFactor ?? DEFAULT_INPUTS.durationResponseFactor ?? 0.4);
+      techUplift = Math.min(techCap, techUplift * (1 + techRate));
+      durationUplift = Math.min(techCap, durationUplift * (1 + techRate * durationResponse));
+    }
+    const bevFuture = Math.min(bevCap, bevStart * Math.pow(1 + annualBevGrowth, t));
+    const growthFactor = Math.pow(1 + annualTrafficGrowth, t) * (bevFuture / bevStart);
+    const dailySessions = Math.max(0, Number(metrics?.dailySessions || 0) * growthFactor);
+    const annualKwhDemand = dailySessions * 365 * sessionEnergy;
+    const fleetPowerKw = baseFleetPower * techUplift;
+    const sessionDurationHrs = sessionEnergy / Math.max(1, fleetPowerKw / durationUplift) + overhead;
+    const peakConcurrentSessions = Math.max(designFloor, dailySessions * peakShare * peakHourShare * sessionDurationHrs);
+    const peakDemandKw = peakConcurrentSessions * fleetPowerKw;
+    const requiredMicKva = peakDemandKw / Math.max(0.01, Number(inputs?.powerFactor || DEFAULT_INPUTS.powerFactor || 0.98));
+    const plugPlanningTrigger = installedOutputs > 0 && peakConcurrentSessions > installedOutputs * 0.80;
+    const micPlanningTrigger = gridPowerKw > 0 && peakDemandKw > gridPowerKw * 0.90;
+    const chargerPlanningTrigger = installedPowerKw > 0 && peakDemandKw > installedPowerKw * 0.90;
+    if (!firstPlugYear && plugPlanningTrigger) firstPlugYear = startYear + t;
+    if (!firstMicYear && micPlanningTrigger) firstMicYear = startYear + t;
+    if (!firstChargerYear && chargerPlanningTrigger) firstChargerYear = startYear + t;
+    const plugRatio = installedOutputs > 0 ? Math.min(1, installedOutputs / Math.max(1, peakConcurrentSessions)) : 0;
+    const micRatio = gridPowerKw > 0 ? Math.min(1, gridPowerKw / Math.max(1, peakDemandKw)) : 0;
+    const chargerRatio = installedPowerKw > 0 ? Math.min(1, installedPowerKw / Math.max(1, peakDemandKw)) : 0;
+    const capacityRatio = Math.min(1, plugRatio, micRatio, chargerRatio);
+    const lostKwh = Math.max(0, annualKwhDemand * (1 - capacityRatio));
+    if (!firstConstraintYear && (capacityRatio < 0.98 || plugPlanningTrigger || micPlanningTrigger || chargerPlanningTrigger)) firstConstraintYear = startYear + t;
+    lostKwh20yr += lostKwh;
+    yearRows.push({
+      year: startYear + t,
+      dailySessions,
+      annualKwhDemand,
+      peakConcurrentSessions,
+      requiredPlugs: Math.ceil(peakConcurrentSessions),
+      peakDemandKw,
+      requiredMicKva,
+      capacityRatio,
+      lostKwh,
+      plugPlanningTrigger,
+      micPlanningTrigger,
+      chargerPlanningTrigger
+    });
+  }
+  const firstPlanningYear = [firstPlugYear, firstMicYear, firstChargerYear].filter(Boolean).sort((a,b)=>a-b)[0] || null;
+  const firstActionYear = [firstConstraintYear, firstPlanningYear].filter(Boolean).sort((a,b)=>a-b)[0] || null;
+  const risk = firstActionYear && firstActionYear <= startYear + 3 ? "high" : firstActionYear && firstActionYear <= startYear + 8 ? "medium" : "low";
+  const triggerDrivers = [
+    firstPlugYear === firstActionYear ? "plug utilisation" : "",
+    firstMicYear === firstActionYear ? "MIC/grid power" : "",
+    firstChargerYear === firstActionYear ? "charger output" : ""
+  ].filter(Boolean);
+  return {
+    startYear,
+    installedOutputs,
+    installedPowerKw,
+    micKva,
+    firstPlugYear,
+    firstMicYear,
+    firstChargerYear,
+    firstConstraintYear,
+    firstActionYear,
+    triggerDrivers,
+    risk,
+    lostKwh20yr,
+    lostRevenue20yr: lostKwh20yr * netPrice,
+    year20: yearRows[19] || {},
+    rows: yearRows
+  };
+}
+function portfolioPerformanceBadge(band) {
+  const map = {
+    capacity_pressure: ["bad", "Capacity pressure"],
+    under_capture: ["warn", "Under-capturing"],
+    outperforming: ["good", "Outperforming"],
+    normal: ["good", "In benchmark"],
+    maturity_ramp: ["neutral", "Ramp-up"],
+    review: ["warn", "Review"]
+  };
+  const item = map[band] || map.review;
+  return `<span class="badge ${item[0]}">${item[1]}</span>`;
+}
+function portfolioRiskBadge(risk) {
+  if (risk === "high") return `<span class="badge bad">High</span>`;
+  if (risk === "medium") return `<span class="badge warn">Medium</span>`;
+  return `<span class="badge good">Low</span>`;
+}
+function portfolioBenchmarkStatusLabel(status) {
+  return status === "below" ? "Below peer range" : status === "above" ? "Above peer range" : status === "within" ? "Within peer range" : "Review";
+}
+function portfolioTriggerLabel(path) {
+  return path?.firstActionYear ? `${path.firstActionYear}${path.triggerDrivers?.length ? ` · ${path.triggerDrivers.join(" + ")}` : ""}` : "No trigger in 20yr";
+}
+function portfolioSiteAssessment(site, metrics, benchmark, benchmarkRange, doNothing) {
+  const captureStatus = portfolioCompareMetric(metrics.sessionsPer1000Aadt, benchmark?.sessionsPer1000Aadt, 0.10);
+  const plugStatus = portfolioCompareMetric(metrics.kwhPerPlugDay, benchmark?.kwhPerPlugDay, 0.10);
+  const micStatus = portfolioCompareMetric(metrics.kwhPerKvaDay, benchmark?.kwhPerKvaDay, 0.10);
+  const benchmarkPosition = portfolioBenchmarkPosition(metrics.annualisedKwh, benchmarkRange);
+  const isEarly = site.maturity?.tier === "early";
+  const aadtNeedsReview = ["medium-low", "review"].includes(portfolioToken(site.aadtConfidence));
+  const nearTermCapacity = doNothing.firstActionYear && doNothing.firstActionYear <= doNothing.startYear + 5;
+  let band = "normal";
+  let diagnosis = "Performance is broadly in line with the peer benchmark for this site category.";
+  let action = "Monitor; no immediate capex. Re-test expansion when utilisation trigger appears.";
+  let priority = 4;
+  if (aadtNeedsReview || site.categoryKey === "review") {
+    band = "review";
+    diagnosis = "AADT/category confidence is not strong enough for an automatic capex recommendation.";
+    action = "Manually review AADT relevance, category and local competitors before changing plugs or MIC.";
+    priority = 5;
+  }
+  if (isEarly) {
+    band = "maturity_ramp";
+    diagnosis = "Site is still ramping, so current actuals should be treated as directional rather than mature benchmark evidence.";
+    action = "Monitor ramp-up and customer availability for 6–12 months before major expansion unless queueing is already visible.";
+    priority = 4;
+  }
+  if ((captureStatus === "below" || benchmarkPosition === "below") && plugStatus !== "above" && micStatus !== "above" && !nearTermCapacity) {
+    band = "under_capture";
+    diagnosis = "Demand capture is below comparable sites, while infrastructure productivity is not yet the main constraint.";
+    action = "Improve capture first: signage, app visibility, parking/access, pricing and local partnerships. Defer MIC/plugs until utilisation improves.";
+    priority = 2;
+  }
+  if ((captureStatus === "above" || benchmarkPosition === "above") && !nearTermCapacity && plugStatus !== "below") {
+    band = "outperforming";
+    diagnosis = "The site is outperforming its peer benchmark; future growth should be planned before congestion appears.";
+    action = "Prepare a staged expansion case and monitor trigger year; add plugs/MIC only when the utilisation path supports it.";
+    priority = 2;
+  }
+  if (nearTermCapacity || plugStatus === "above" || micStatus === "above") {
+    band = "capacity_pressure";
+    const driver = doNothing.triggerDrivers?.join(" + ") || (plugStatus === "above" ? "plug utilisation" : micStatus === "above" ? "MIC/grid power" : "capacity");
+    diagnosis = `Infrastructure pressure is visible or forecast soon (${driver}). Do-nothing may create lost demand or poor customer experience.`;
+    action = "Model staged expansion: add plugs where utilisation is high; test MIC uplift versus battery where grid power becomes the bottleneck.";
+    priority = 1;
+  }
+  return { band, diagnosis, action, priority, captureStatus, plugStatus, micStatus, benchmarkPosition };
+}
+function portfolioSiteResults(site, benchmarks = portfolioBenchmarksByCategory()) {
+  const base = portfolioRun(site, false);
+  const calibrated = portfolioRun(site, true);
+  const actualKwh = Number(site.actual?.rolling30Kwh || 0);
+  const actualRevenue = Number(site.actual?.rolling30NetRevenue || 0);
+  const actualSessions = Number(site.actual?.rolling30Sessions || 0);
+  const variance = (model, actual) => actual > 0 ? (model - actual) / actual : null;
+  const categoryKey = portfolioCategoryKey(site);
+  const category = PORTFOLIO_CATEGORY_FACTORS[categoryKey] || PORTFOLIO_CATEGORY_FACTORS.review;
+  const metrics = portfolioOperatingMetrics(site);
+  const annualActual = portfolioAnnualOperatingValues(site, metrics);
+  const benchmark = benchmarks[categoryKey] || benchmarks.review;
+  const benchmarkRange = portfolioBenchmarkKwhRange(site, benchmark);
+  const doNothing = portfolioDoNothingPath(site, metrics, calibrated.yearByYear?.derived, calibrated.inputs);
+  const assessment = portfolioSiteAssessment(site, metrics, benchmark, benchmarkRange, doNothing);
+  const observedSessionsPer1000Aadt = Number(site.actual?.sessionsPer1000Aadt || metrics.sessionsPer1000Aadt || 0);
+  const annualScale = 365 / 30;
+  const baseAnnualKwh = Number(base.compareRow?.deliveredEnergyServedKwh || base.modelKwh * 12 || 0);
+  const baseAnnualRevenue = Number(base.compareRow?.totalRevenue || base.modelRevenue * 12 || 0);
+  const baseAnnualSessions = Number(base.compareRow?.sessionsServed || base.modelSessions * 12 || 0);
+  const calibratedAnnualKwh = Number(calibrated.modelKwh || 0) * annualScale;
+  const calibratedAnnualRevenue = Number(calibrated.modelRevenue || 0) * annualScale;
+  const calibratedAnnualSessions = Number(calibrated.modelSessions || 0) * annualScale;
+  return {
+    site, categoryKey, category,
+    inputs: base.inputs, config: base.config, demand: base.demand, yearByYear: base.yearByYear,
+    financialSummary: base.financialSummary, compareRow: base.compareRow,
+    actualKwh, actualRevenue, actualSessions,
+    actualAnnualKwh: annualActual.annualKwh,
+    actualAnnualRevenue: annualActual.annualRevenue,
+    actualAnnualSessions: annualActual.annualSessions,
+    actualAnnualBasis: annualActual.basis,
+    metrics,
+    benchmark,
+    benchmarkRange,
+    doNothing,
+    assessment,
+    modelKwh: base.modelKwh, modelRevenue: base.modelRevenue, modelSessions: base.modelSessions,
+    calibratedKwh: calibrated.modelKwh, calibratedRevenue: calibrated.modelRevenue, calibratedSessions: calibrated.modelSessions,
+    baseAnnualKwh, baseAnnualRevenue, baseAnnualSessions,
+    modelledAnnualKwh: calibratedAnnualKwh,
+    modelledAnnualRevenue: calibratedAnnualRevenue,
+    modelledAnnualSessions: calibratedAnnualSessions,
+    calibratedProfile: calibrated.calibrationProfile,
+    targetSessionsPer1000Aadt: calibrated.calibrationProfile?.targetSessionsPer1000Aadt ?? null,
+    effectiveAadt: calibrated.calibrationProfile?.effectiveAadt ?? Number(site.aadt || 0),
+    kwhVariance: variance(base.modelKwh, actualKwh), revenueVariance: variance(base.modelRevenue, actualRevenue), sessionsVariance: variance(base.modelSessions, actualSessions),
+    calibratedKwhVariance: variance(calibrated.modelKwh, actualKwh), calibratedRevenueVariance: variance(calibrated.modelRevenue, actualRevenue), calibratedSessionsVariance: variance(calibrated.modelSessions, actualSessions),
+    annualKwhVariance: variance(calibratedAnnualKwh, annualActual.annualKwh),
+    baseAnnualKwhVariance: variance(baseAnnualKwh, annualActual.annualKwh),
+    observedSessionsPer1000Aadt,
+    modelToActualFactor: baseAnnualKwh > 0 ? annualActual.annualKwh / baseAnnualKwh : null,
+    varianceBand: portfolioVarianceBand(variance(calibratedAnnualKwh, annualActual.annualKwh))
+  };
+}
+
+function medianAbsVariance(rows, field) {
+  const vals = rows.map(r => Math.abs(Number(r[field]))).filter(Number.isFinite).sort((a,b)=>a-b);
+  return vals.length ? vals[Math.floor(vals.length / 2)] : null;
+}
+function portfolioAccuracySummary(results, field = "calibratedKwhVariance", matureOnly = true) {
+  const mature = results.filter(r => r.site.maturity?.tier === "mature" && Number.isFinite(r[field]));
+  const all = results.filter(r => Number.isFinite(r[field]));
+  const base = matureOnly ? mature : all;
+  const median = medianAbsVariance(base, field);
+  const within10 = base.length ? base.filter(r => Math.abs(r[field]) <= 0.10).length / base.length : null;
+  const within20 = base.length ? base.filter(r => Math.abs(r[field]) <= 0.20).length / base.length : null;
+  return { baseCount: base.length, matureCount: mature.length, allCount: all.length, median, within10, within20 };
+}
+function calibrationInsight(r) {
+  return r?.assessment?.diagnosis || "Actual operating data is benchmarked against comparable operating hubs to guide capture and capacity decisions.";
+}
+function portfolioFilterValue(key, fallback = "all") {
+  return localStorage.getItem(`evHub.portfolio.${key}`) || fallback;
+}
+function portfolioFilterValues(key) {
+  const raw = portfolioFilterValue(key);
+  if (!raw || raw === "all") return [];
+  return raw.split(",").map(v => v.trim()).filter(Boolean);
+}
+function portfolioFilterMatches(key, value) {
+  const selected = portfolioFilterValues(key);
+  return !selected.length || selected.includes(String(value));
+}
+function portfolioFilterSummary(key, options, allLabel) {
+  const selected = portfolioFilterValues(key);
+  if (!selected.length) return allLabel || "All";
+  const labels = selected.map(v => options.find(o => String(o.value) === String(v))?.label || v);
+  return labels.length <= 2 ? labels.join(", ") : `${labels.length} selected`;
+}
+function portfolioToken(value) {
+  return String(value || "").trim().toLowerCase();
+}
+function portfolioSortableNumber(value, missing = Number.POSITIVE_INFINITY) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : missing;
+}
+function portfolioApplyFilters(results) {
+  return results.filter(r => {
+    if (!portfolioFilterMatches("maturity", r.site.maturity?.tier || "review")) return false;
+    if (!portfolioFilterMatches("category", r.categoryKey)) return false;
+    if (!portfolioFilterMatches("performanceBand", r.assessment?.band || "review")) return false;
+    if (!portfolioFilterMatches("confidence", portfolioToken(r.site.aadtConfidence))) return false;
+    const mic = Number(r.site.realMicKva || 0);
+    const micGroup = mic > 0 && mic <= 199 ? "low" : mic >= 200 && mic <= 400 ? "mid" : mic >= 700 ? "high" : "other";
+    if (!portfolioFilterMatches("micBand", micGroup)) return false;
+    return true;
+  });
+}
+
+function portfolioSortResults(results) {
+  const sortKey = portfolioFilterValue("sortKey", "site");
+  const dir = portfolioFilterValue("sortDir", "asc") === "desc" ? -1 : 1;
+  const getters = {
+    site: r => r.site.name,
+    maturity: r => portfolioMaturityLabel(r.site.maturity?.tier),
+    category: r => r.category.label,
+    performance: r => r.assessment?.band || "review",
+    investmentPriority: r => Number(r.assessment?.priority || 9) * 10000 + portfolioSortableNumber(r.doNothing?.firstActionYear, 9999),
+    mic: r => Number(r.site.realMicKva || 0),
+    aadt: r => Number(r.site.aadt || 0),
+    actualAnnualKwh: r => portfolioSortableNumber(r.actualAnnualKwh),
+    modelledAnnualKwh: r => portfolioSortableNumber(r.modelledAnnualKwh),
+    annualVariance: r => portfolioSortableNumber(r.annualKwhVariance),
+    absAnnualVariance: r => Math.abs(portfolioSortableNumber(r.annualKwhVariance)),
+    firstTriggerYear: r => {
+      if (Number.isFinite(Number(r.doNothing?.firstActionYear))) return Number(r.doNothing.firstActionYear);
+      const startYear = Number(r.doNothing?.startYear || 2025);
+      if (["capacity_pressure", "under_capture"].includes(r.assessment?.band)) return startYear;
+      if (r.assessment?.band === "maturity_ramp") return startYear + 1;
+      if (r.assessment?.band === "review") return 9998;
+      return 9999;
+    },
+    sessionsPer1000Aadt: r => portfolioSortableNumber(r.metrics?.sessionsPer1000Aadt),
+    kwhPerPlugDay: r => portfolioSortableNumber(r.metrics?.kwhPerPlugDay),
+    kwhPerKvaDay: r => portfolioSortableNumber(r.metrics?.kwhPerKvaDay),
+    baseKwh: r => portfolioSortableNumber(r.modelKwh),
+    calibratedKwh: r => portfolioSortableNumber(r.calibratedKwh),
+    baseVariance: r => portfolioSortableNumber(r.kwhVariance),
+    calibratedVariance: r => portfolioSortableNumber(r.calibratedKwhVariance)
+  };
+  const get = getters[sortKey] || getters.investmentPriority;
+  return [...results].sort((a,b) => {
+    const av = get(a), bv = get(b);
+    if (typeof av === "string" || typeof bv === "string") return String(av).localeCompare(String(bv)) * dir;
+    const aMissing = !Number.isFinite(av);
+    const bMissing = !Number.isFinite(bv);
+    if (aMissing && bMissing) return 0;
+    if (aMissing) return 1;
+    if (bMissing) return -1;
+    return (av - bv) * dir;
+  });
+}
+
+function portfolioMultiFilter(id, key, options, label, allLabel = "All") {
+  const selected = portfolioFilterValues(key);
+  const summary = portfolioFilterSummary(key, options, allLabel);
+  const clearChecked = selected.length === 0 ? "checked" : "";
+  return `<details class="portfolio-multi-filter" name="portfolio-filter" data-filter-menu="${h(key)}"><summary><span>${h(label)}</span><strong>${h(summary)}</strong></summary><div class="portfolio-multi-filter-menu"><label><input type="checkbox" data-portfolio-filter="${h(key)}" value="all" ${clearChecked}> <span>${h(allLabel)}</span></label>${options.map(o => `<label><input type="checkbox" data-portfolio-filter="${h(key)}" value="${h(o.value)}" ${selected.includes(String(o.value)) ? "checked" : ""}> <span>${h(o.label)}</span></label>`).join("")}</div></details>`;
+}
+function portfolioActionSummary(r) {
+  const band = r?.assessment?.band || "review";
+  const trigger = r?.doNothing?.firstActionYear;
+  if (band === "capacity_pressure") return { year: trigger ? String(trigger) : "Now", action: "Model expansion" };
+  if (band === "under_capture") return { year: "Now", action: "Improve capture" };
+  if (band === "outperforming") return { year: trigger ? String(trigger) : "Monitor", action: "Prepare expansion" };
+  if (band === "maturity_ramp") return { year: "6–12m", action: "Monitor ramp" };
+  if (band === "normal") return { year: trigger ? String(trigger) : "Monitor", action: "Monitor" };
+  return { year: "Review", action: "Manual review" };
+}
+function portfolioStatusText(band) {
+  const map = {
+    capacity_pressure: "Capacity pressure",
+    under_capture: "Under-capturing",
+    outperforming: "Outperforming",
+    normal: "In benchmark",
+    maturity_ramp: "Ramp-up",
+    review: "Review"
+  };
+  return map[band] || map.review;
+}
+function portfolioStatusButton(r) {
+  const band = r?.assessment?.band || "review";
+  const action = portfolioActionSummary(r);
+  const trigger = portfolioTriggerLabel(r?.doNothing);
+  const drivers = r?.doNothing?.triggerDrivers?.length ? r.doNothing.triggerDrivers.join(" + ") : "No near-term capacity driver";
+  const benchmarkPosition = portfolioBenchmarkStatusLabel(r?.assessment?.benchmarkPosition);
+  const recommendation = r?.assessment?.action || action.action || "Review this site manually.";
+  const diagnosis = r?.assessment?.diagnosis || "Actual operating data is benchmarked against comparable operating hubs.";
+  return `<button type="button" class="portfolio-status-trigger" aria-label="Open recommendation for ${h(r?.site?.name || "site")}" data-portfolio-status-trigger="1" data-site="${h(r?.site?.name || "Site")}" data-status="${h(portfolioStatusText(band))}" data-year="${h(action.year)}" data-action="${h(action.action)}" data-recommendation="${h(recommendation)}" data-diagnosis="${h(diagnosis)}" data-trigger="${h(trigger)}" data-drivers="${h(drivers)}" data-benchmark-position="${h(benchmarkPosition)}">${portfolioPerformanceBadge(band)}</button>`;
+}
+function closePortfolioStatusPopover() {
+  const existing = document.getElementById("portfolioStatusPopover");
+  if (existing) existing.remove();
+  document.querySelectorAll("[data-portfolio-status-trigger][aria-expanded='true']").forEach(btn => btn.setAttribute("aria-expanded", "false"));
+}
+function closePortfolioFilterMenus(except = null) {
+  document.querySelectorAll(".portfolio-multi-filter[open]").forEach(details => {
+    if (details !== except) details.open = false;
+  });
+}
+function showPortfolioStatusPopover(button) {
+  if (!button) return;
+  const current = document.getElementById("portfolioStatusPopover");
+  const sameButton = current?.dataset?.sourceId && current.dataset.sourceId === button.dataset.popoverSourceId;
+  closePortfolioStatusPopover();
+  if (sameButton) return;
+  if (!button.dataset.popoverSourceId) button.dataset.popoverSourceId = `status-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const pop = document.createElement("div");
+  pop.id = "portfolioStatusPopover";
+  pop.className = "portfolio-status-popover";
+  pop.dataset.sourceId = button.dataset.popoverSourceId;
+  pop.innerHTML = `
+    <div class="portfolio-status-popover-head">
+      <div><span class="eyebrow">Recommended action</span><strong>${h(button.dataset.status || "Status")}</strong></div>
+      <button type="button" class="portfolio-status-popover-close" aria-label="Close recommendation">×</button>
+    </div>
+    <div class="portfolio-status-popover-body">
+      <p><strong>${h(button.dataset.site || "Selected site")}</strong></p>
+      <div class="portfolio-status-popover-kpis"><span><small>Action year</small><b>${h(button.dataset.year || "Monitor")}</b></span><span><small>Action</small><b>${h(button.dataset.action || "Review")}</b></span></div>
+      <p><strong>Recommendation:</strong> ${h(button.dataset.recommendation || "Review the site manually.")}</p>
+      <p><strong>Why:</strong> ${h(button.dataset.diagnosis || "Benchmark diagnostics unavailable.")}</p>
+      <p class="muted small"><strong>Trigger:</strong> ${h(button.dataset.trigger || "No trigger in 20yr")} · <strong>Driver:</strong> ${h(button.dataset.drivers || "No near-term driver")} · ${h(button.dataset.benchmarkPosition || "Review")}</p>
+    </div>`;
+  document.body.appendChild(pop);
+  button.setAttribute("aria-expanded", "true");
+  const closeBtn = pop.querySelector(".portfolio-status-popover-close");
+  if (closeBtn) closeBtn.addEventListener("click", ev => { ev.stopPropagation(); closePortfolioStatusPopover(); });
+  const rect = button.getBoundingClientRect();
+  const margin = 12;
+  const width = Math.min(360, Math.max(280, window.innerWidth - margin * 2));
+  pop.style.width = `${width}px`;
+  let left = rect.left + rect.width / 2 - width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+  let top = rect.bottom + 8;
+  requestAnimationFrame(() => {
+    const popRect = pop.getBoundingClientRect();
+    if (top + popRect.height > window.innerHeight - margin) top = Math.max(margin, rect.top - popRect.height - 8);
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+  });
+}
+
+function portfolioSortHeader(key, label) {
+  const currentKey = portfolioFilterValue("sortKey", "site");
+  const dir = portfolioFilterValue("sortDir", "asc");
+  const arrow = currentKey === key ? (dir === "asc" ? " ↑" : " ↓") : "";
+  return `<button type="button" class="sort-header" data-portfolio-sort="${h(key)}">${h(label)}${arrow}</button>`;
+}
+function portfolioBenchmarkCard(title, value, sub) {
+  return `<div class="benchmark-mini-card"><strong>${title}</strong><span>${value}</span><small>${sub || ""}</small></div>`;
+}
+function renderPortfolioCalibration() {
+  const selectedId = localStorage.getItem("evHub.portfolio.selectedSite") || PORTFOLIO_CALIBRATION_SITES[0]?.id;
+  const selected = PORTFOLIO_CALIBRATION_SITES.find(s => s.id === selectedId) || PORTFOLIO_CALIBRATION_SITES[0];
+  const benchmarks = portfolioBenchmarksByCategory(PORTFOLIO_CALIBRATION_SITES);
+  const results = PORTFOLIO_CALIBRATION_SITES.map(site => portfolioSiteResults(site, benchmarks));
+  const selectedResult = portfolioSiteResults(selected, benchmarks);
+  const selectedProfile = selectedResult.calibratedProfile || portfolioCalibrationProfile(selected);
+  const filtered = portfolioApplyFilters(results);
+  const sorted = portfolioSortResults(filtered);
+  const mature = results.filter(r => r.site.maturity?.tier === "mature");
+  const near = results.filter(r => r.site.maturity?.tier === "near");
+  const capacityCount = filtered.filter(r => r.assessment?.band === "capacity_pressure").length;
+  const underCaptureCount = filtered.filter(r => r.assessment?.band === "under_capture").length;
+  const normalCount = filtered.filter(r => r.assessment?.band === "normal").length;
+  const earliestTrigger = filtered.map(r => r.doNothing?.firstActionYear).filter(Boolean).sort((a,b)=>a-b)[0];
+  const medianAbsAnnualVariance = medianAbsVariance(filtered, "annualKwhVariance");
+  const siteOptions = PORTFOLIO_CALIBRATION_SITES.map(s => `<option value="${h(s.id)}" ${s.id === selected.id ? "selected" : ""}>${h(s.name)}</option>`).join("");
+  const row = r => [
+    `<div class="portfolio-site-cell"><strong>${h(r.site.name)}</strong></div>`,
+    portfolioMaturityBadge(r.site.maturity?.tier),
+    h(r.category.label),
+    number(r.site.realMicKva,0) + " kVA",
+    number(r.site.aadt,0),
+    kwh(r.actualAnnualKwh,0),
+    kwh(r.modelledAnnualKwh,0),
+    portfolioVarianceBadge(r.annualKwhVariance),
+    portfolioStatusButton(r)
+  ];
+  const headers = [
+    portfolioSortHeader("site", "Site"),
+    portfolioSortHeader("maturity", "Maturity"),
+    portfolioSortHeader("category", "Category"),
+    portfolioSortHeader("mic", "MIC"),
+    portfolioSortHeader("aadt", "AADT"),
+    portfolioSortHeader("actualAnnualKwh", "Actual kWh/yr"),
+    portfolioSortHeader("modelledAnnualKwh", "Model kWh/yr"),
+    portfolioSortHeader("annualVariance", "Variance"),
+    portfolioSortHeader("performance", "Status")
+  ];
+  const maturityOptions = [{value:"mature",label:"Mature"},{value:"near",label:"Near-mature"},{value:"early",label:"Early"},{value:"review",label:"Review"}];
+  const categoryOptions = Object.entries(PORTFOLIO_CATEGORY_FACTORS).map(([value, cfg]) => ({ value, label: cfg.label }));
+  const statusOptions = [{value:"capacity_pressure",label:"Capacity pressure"},{value:"under_capture",label:"Under-capturing"},{value:"outperforming",label:"Outperforming"},{value:"normal",label:"In benchmark"},{value:"maturity_ramp",label:"Ramp-up"},{value:"review",label:"Review"}];
+  const confidenceOptions = [{value:"high",label:"High"},{value:"medium-high",label:"Medium-high"},{value:"medium",label:"Medium"},{value:"medium-low",label:"Medium-low"},{value:"review",label:"Review"}];
+  const micBandOptions = [{value:"low",label:"≤199 kVA"},{value:"mid",label:"200–400 kVA"},{value:"high",label:"700+ kVA"},{value:"other",label:"Other MIC"}];
+  const selectedFilterCard = (title, value, sub) => kpi(title, value || "—", sub || "current filters");
+  const sortKey = portfolioFilterValue("sortKey", "site");
+  const sortDir = portfolioFilterValue("sortDir", "asc") === "desc" ? "high to low" : "low to high";
+  const sortNames = {
+    site: "site", maturity: "maturity", category: "category", performance: "status", investmentPriority: "investment priority", mic: "MIC", aadt: "AADT",
+    actualAnnualKwh: "actual annual kWh", modelledAnnualKwh: "modelled annual kWh", annualVariance: "annual variance", absAnnualVariance: "absolute annual variance",
+    firstTriggerYear: "first trigger year", sessionsPer1000Aadt: "actual sessions per 1k AADT", kwhPerPlugDay: "kWh per plug per day", kwhPerKvaDay: "kWh per kVA per day"
+  };
+  const selectedBenchmark = selectedResult.benchmark;
+  const peerMedianCapture = selectedBenchmark?.sessionsPer1000Aadt?.p50;
+  const peerMedianPlug = selectedBenchmark?.kwhPerPlugDay?.p50;
+  const peerMedianMic = selectedBenchmark?.kwhPerKvaDay?.p50;
+  const selectedMethodCards = [
+    portfolioBenchmarkCard("Capture benchmark", `${number(selectedResult.metrics.sessionsPer1000Aadt,2)} vs ${number(peerMedianCapture,2)}`, "actual vs peer median sess/1k AADT"),
+    portfolioBenchmarkCard("Plug productivity", `${number(selectedResult.metrics.kwhPerPlugDay,1)} vs ${number(peerMedianPlug,1)}`, "actual vs peer median kWh/plug/day"),
+    portfolioBenchmarkCard("MIC productivity", `${number(selectedResult.metrics.kwhPerKvaDay,2)} vs ${number(peerMedianMic,2)}`, "actual vs peer median kWh/kVA/day"),
+    portfolioBenchmarkCard("Benchmark basis", `${number(selectedBenchmark.sampleCount,0)} peers`, selectedBenchmark.sampleBasis)
+  ].join("");
+  const selectedAction = portfolioActionSummary(selectedResult);
+  return `
+    ${sectionTitle("Portfolio Calibration", "Compare annualised real performance against the model using MIC, AADT, maturity and site category.")}
+    <section class="portfolio-hero panel"><div><span class="eyebrow">Operating intelligence layer</span><h3>Annual actual vs modelled performance</h3><p>The main table is kept deliberately concise: site, maturity, category, MIC, AADT, annual kWh, variance and status. Click any status pill for the action year and recommendation.</p></div><div class="portfolio-summary-grid mature-only-summary">${kpi("Clean sites", number(results.length,0), "Irish operating hubs")}${kpi("Benchmark basis", `${number(mature.length + near.length,0)} sites`, "mature + near where possible")}${kpi("Capacity pressure", number(results.filter(r => r.assessment?.band === "capacity_pressure").length,0), "expansion candidates")}${kpi("Under-capturing", number(results.filter(r => r.assessment?.band === "under_capture").length,0), "improve site before capex")}</div></section>
+    <section class="panel portfolio-method-note compact"><h3>How to read this page</h3><p class="muted">AADT shows passing traffic opportunity. MIC shows available grid capacity. Annual kWh and variance show whether the modelled expectation is above or below real operating performance. Click the Status pill to see the recommended action, timing and reason. Sites with less than 12 months of history are shown as annualised run-rate, not a full-year actual.</p></section>
+    <section class="panel portfolio-selector-panel"><div class="field"><label for="portfolioSiteSelect">Select operating hub</label><select id="portfolioSiteSelect">${siteOptions}</select><small>Sites are mapped to model-equivalent charger configurations; mixed sites, Banner, Fota and Banbridge are excluded.</small></div><button type="button" class="primary" id="applyPortfolioSite">Load site into model + map</button></section>
+    <section class="panel selected-backtest-card"><div class="selected-backtest-head"><div><span class="eyebrow">Selected hub</span><h3>${h(selected.name)}</h3><p>${h(selected.address || "Address unavailable")}</p></div>${portfolioMaturityBadge(selected.maturity?.tier)}</div><div class="portfolio-summary-grid selected-hub-overview">${kpi("Actual kWh/yr", kwh(selectedResult.actualAnnualKwh,0), selectedResult.actualAnnualBasis)}${kpi("Model kWh/yr", kwh(selectedResult.modelledAnnualKwh,0), "site-type calibrated model")}${kpi("Variance", portfolioVarianceBadge(selectedResult.annualKwhVariance), "model vs actual")}${kpi("kWh/plug/day", number(selectedResult.metrics.kwhPerPlugDay,1), "actual productivity")}${kpi("AADT", number(selected.aadt,0), "vehicles/day")}${kpi("MIC", kva(selected.realMicKva,0), "actual connection")}${kpi("Status", portfolioPerformanceBadge(selectedResult.assessment.band), portfolioBenchmarkStatusLabel(selectedResult.assessment.benchmarkPosition))}</div><div class="notice ${selectedResult.assessment.band === "capacity_pressure" ? "warn" : selectedResult.assessment.band === "under_capture" ? "warn" : "good"}"><strong>${h(selectedAction.year)} · ${h(selectedAction.action)}:</strong> ${h(selectedResult.assessment.action)}</div><div class="portfolio-accordion-stack"><details class="portfolio-diagnostic-details"><summary>Traffic and benchmark detail</summary><div class="portfolio-benchmark-grid">${selectedMethodCards}</div><div class="portfolio-config-grid compact"><div><strong>Matched AADT</strong><span>${number(selected.aadt,0)} veh/day · ${h(selected.aadtCounter || "AADT counter")}</span></div><div><strong>Effective benchmark AADT</strong><span>${number(selectedProfile.effectiveAadt,0)} veh/day after site-type cap</span></div><div><strong>Actual sessions / 1k AADT</strong><span>${number(selectedResult.metrics.sessionsPer1000Aadt,2)}</span></div><div><strong>Peer kWh/plug/day median</strong><span>${number(peerMedianPlug,1)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>MIC / grid capacity detail</summary><div class="portfolio-config-grid compact"><div><strong>Current MIC</strong><span>${kva(selected.realMicKva,0)}</span></div><div><strong>Recommended MIC by Year 20</strong><span>${kva(selectedResult.doNothing.year20?.requiredMicKva,0)}</span></div><div><strong>Year 20 MIC gap</strong><span>${kva(Math.max(0, Number(selectedResult.doNothing.year20?.requiredMicKva || 0) - Number(selected.realMicKva || 0)),0)}</span></div><div><strong>First MIC trigger</strong><span>${selectedResult.doNothing.firstMicYear ? h(String(selectedResult.doNothing.firstMicYear)) : "No MIC trigger in 20yr"}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Configuration and 20-year do-nothing path</summary><div class="portfolio-config-grid compact"><div><strong>Model-equivalent configuration</strong><span>${h(selected.modelEquivalentSummary)}</span></div><div><strong>20-year do-nothing trigger</strong><span>${h(portfolioTriggerLabel(selectedResult.doNothing))}</span></div><div><strong>Trigger drivers</strong><span>${h(selectedResult.doNothing.triggerDrivers?.join(" + ") || "No near-term driver")}</span></div><div><strong>20-yr lost revenue risk</strong><span>${currency(selectedResult.doNothing.lostRevenue20yr,0)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Model QA diagnostics</summary><div class="portfolio-summary-grid">${kpi("Actual 30D kWh", kwh(selectedResult.actualKwh,0), "latest rolling operating data")}${kpi("Modelled 30D kWh", kwh(selectedResult.calibratedKwh,0), "site-type target")}${kpi("30D variance", portfolioVarianceBadge(selectedResult.calibratedKwhVariance), "QA comparison")}${kpi("Base annual variance", portfolioVarianceBadge(selectedResult.baseAnnualKwhVariance), "uncalibrated QA")}</div><p class="muted small">Technical diagnostics are retained for audit and investment review. The main comparison is annualised because the financial model is year-based.</p></details></div></section>
+    <section class="panel portfolio-filter-panel"><h3>Filters and sorting</h3><div class="portfolio-filter-grid">${portfolioMultiFilter("portfolioMaturity", "maturity", maturityOptions, "Maturity", "All maturity")}${portfolioMultiFilter("portfolioCategory", "category", categoryOptions, "Site category", "All categories")}${portfolioMultiFilter("portfolioPerformance", "performanceBand", statusOptions, "Status", "All statuses")}${portfolioMultiFilter("portfolioConfidence", "confidence", confidenceOptions, "AADT confidence", "All AADT confidence")}${portfolioMultiFilter("portfolioMicBand", "micBand", micBandOptions, "MIC band", "All MIC")}</div><p class="muted small">Open a filter and tick one or more options. Click a header to sort. Current sort: ${h(sortNames[sortKey] || "investment priority")} · ${h(sortDir)}.</p></section>
+    <section class="panel"><h3>Current filtered view</h3><div class="portfolio-summary-grid">${selectedFilterCard("Sites shown", number(filtered.length,0), `${number(results.length,0)} total clean sites`)}${selectedFilterCard("Capacity pressure", number(capacityCount,0), "add plugs/MIC/battery candidates")}${selectedFilterCard("Under-capturing", number(underCaptureCount,0), "fix capture before capex")}${selectedFilterCard("In benchmark", number(normalCount,0), "monitor")}${selectedFilterCard("Earliest trigger", earliestTrigger ? String(earliestTrigger) : "No trigger", "do-nothing path")}${selectedFilterCard("Median abs variance", Number.isFinite(medianAbsAnnualVariance) ? pct(medianAbsAnnualVariance,1) : "—", "annual model vs actual")}</div></section>
+    <section class="panel"><h3>Portfolio comparison table</h3>${table(headers, sorted.map(row), "portfolio-table portfolio-comparison-table portfolio-annual-table")}</section>
+  `;
+}
+
 const DEVELOPER_GROUPS = [
   {
     title: "Traffic & demand defaults",
@@ -847,9 +1663,7 @@ const DEVELOPER_GROUPS = [
       "rampUpYear1",
       "rampUpYear2",
       "plugInOverstayOverheadHours",
-      "designPeakFloorSessions",
-      "annualFailureRateStarting",
-      "downtimeImpactFactor"
+      "designPeakFloorSessions"
     ]
   },
   {
@@ -859,35 +1673,21 @@ const DEVELOPER_GROUPS = [
       "techUpliftMiddlePhaseRate",
       "techUpliftCap",
       "durationResponseFactor",
-      "peakIntensityFactorCap",
-      "powerFactor",
-      "operatingHoursPerDay"
-    ]
-  },
-  {
-    title: "Grid & connection assumptions",
-    keys: [
-      "gridThresholdModeling",
-      "esbConnectionApplicationFee"
+      "powerFactor"
     ]
   },
   {
     title: "Battery technical assumptions",
     keys: [
-      "batteryReserve",
       "batteryDispatchFractionUsable",
       "batteryBaseDegradationRate",
       "batteryCyclingDegradationFactor",
-      "batteryAugmentationTriggerDeficitKw",
-      "overnightRechargeWindowStart",
-      "overnightRechargeWindowEnd",
       "overnightRechargeWindowDuration"
     ]
   },
   {
     title: "Commercial, service & warranty assumptions",
     keys: [
-      "grossSellingPriceInclVat",
       "annualTariffEscalation",
       "annualElectricityCostEscalation",
       "discountRate",
@@ -898,12 +1698,6 @@ const DEVELOPER_GROUPS = [
       "kempowerChargerWarrantyAnnualRate",
       "autelBatteryWarrantyAnnualRate",
       "polariumBatteryWarrantyAnnualRate"
-    ]
-  },
-  {
-    title: "Lifecycle assumptions",
-    keys: [
-      "modelHorizon"
     ]
   }
 ];
@@ -1006,15 +1800,13 @@ function developerField(key) {
 function renderAdvancedSettings() {
   return `
     ${sectionTitle("Advanced Model Settings", "Advanced controls for hidden model inputs that affect the calculations but are not shown in the main investor workflow.")}
-    <div class="reset-card" style="border-color:#efd38e;background:linear-gradient(135deg,#fff3d6,#fbfaf7)"><div><strong>Reset all advanced settings to default values</strong><p>Restores the advanced model assumptions to the base default values. Changes here affect demand, feasibility, capex, opex, ROI, cash flow and scenario ranking.</p></div><button class="reset" data-reset="advanced">Reset all</button></div>
+    <div class="reset-card" style="border-color:#efd38e;background:linear-gradient(135deg,#fff3d6,#fbfaf7)"><div><strong>Reset all advanced settings to default values</strong><p>Restores the visible advanced assumptions to the base default values. Changes here affect demand, feasibility, capex, opex, ROI, cash flow and scenario ranking where the relevant factor is used.</p></div><button class="reset" data-reset="advanced">Reset all</button></div>
     <div class="advanced-groups">
       ${DEVELOPER_GROUPS.map(group => {
         const keys = group.keys.filter(k => advancedInputKeys().includes(k));
         if (!keys.length) return "";
         return `<section class="panel"><h3>${h(group.title)}</h3><p class="advanced-section-note">Only advanced assumptions not already editable in the main workflow are shown here.</p><div class="input-grid three">${keys.map(developerField).join("")}</div></section>`;
       }).join("")}
-      <section class="panel"><h3>Approved MIC library</h3><p>The selected MIC must use the model-approved list only. Custom MIC values are not allowed.</p><div class="badges">${MIC_VALUES.map(v => `<span class="badge good">${v} kVA</span>`).join("")}</div></section>
-      <section class="panel"><h3>Scenario comparison rule</h3><p>ROI ranking is shown for investor comparison. It does not override the model recommendation rule: recommend the lowest total CAPEX + OPEX technically feasible option over the selected horizon.</p></section>
     </div>`;
 }
 
@@ -1026,6 +1818,7 @@ function guidePanelHtml() {
     ["investment", "Review investment case", "Set model start year, horizon and funding assumptions, then review ROI, break-even and cash flow.", "Open Investment Case", "money"],
     ["annuals", "Check annuals", "Review year-by-year revenue, costs, replacements and battery augmentation.", "Open Annuals", "calendar"],
     ["scenario", "Compare scenarios", "Use feasibility-first ranking to compare valid investment options.", "Open Scenarios", "scales"],
+    ["portfolio", "Back-test real hubs", "Compare modelled output against real operating hubs using matched AADT, MIC and model-equivalent chargers.", "Open Calibration", "scales"],
     ["advanced", "Fine-tune assumptions", "Review advanced model settings without duplicating normal tab inputs.", "Open Assumptions", "sliders"],
     ["report", "Export investor report", "Generate the final report for sharing with investors or internal review.", "Open Report", "report"]
   ];
@@ -1087,6 +1880,7 @@ function render() {
     investment: () => renderInvestmentDashboard(r),
     annuals: () => renderAnnualFinancials(r),
     scenario: () => renderScenarioRanking(r),
+    portfolio: () => renderPortfolioCalibration(),
     advanced: () => renderAdvancedSettings(r),
     report: () => renderInvestorReport(r)
   };
@@ -1148,13 +1942,80 @@ function wirePage(r) {
     });
   });
 
+
+  const portfolioSelect = el("portfolioSiteSelect");
+  if (portfolioSelect) portfolioSelect.addEventListener("change", e => { localStorage.setItem("evHub.portfolio.selectedSite", e.target.value); render(); });
+  document.querySelectorAll("[data-portfolio-filter]").forEach(node => {
+    node.addEventListener("change", e => {
+      const key = e.target.dataset.portfolioFilter;
+      if (!key) return;
+      const value = e.target.value;
+      if (value === "all" && e.target.checked) {
+        localStorage.setItem(`evHub.portfolio.${key}`, "all");
+        render();
+        return;
+      }
+      const checked = Array.from(document.querySelectorAll(`[data-portfolio-filter="${key}"]`))
+        .filter(input => input.value !== "all" && input.checked)
+        .map(input => input.value);
+      localStorage.setItem(`evHub.portfolio.${key}`, checked.length ? checked.join(",") : "all");
+      render();
+    });
+  });
+  document.querySelectorAll(".portfolio-multi-filter").forEach(details => {
+    details.addEventListener("toggle", () => {
+      if (details.open) {
+        closePortfolioStatusPopover();
+        closePortfolioFilterMenus(details);
+      }
+    });
+  });
+  document.querySelectorAll("[data-portfolio-sort]").forEach(node => {
+    node.addEventListener("click", e => {
+      const key = e.currentTarget.dataset.portfolioSort;
+      const currentKey = localStorage.getItem("evHub.portfolio.sortKey") || "site";
+      const currentDir = localStorage.getItem("evHub.portfolio.sortDir") || "asc";
+      localStorage.setItem("evHub.portfolio.sortKey", key);
+      localStorage.setItem("evHub.portfolio.sortDir", currentKey === key && currentDir === "asc" ? "desc" : "asc");
+      render();
+    });
+  });
+  document.querySelectorAll("[data-portfolio-status-trigger]").forEach(node => {
+    node.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      showPortfolioStatusPopover(e.currentTarget);
+    });
+  });
+  const applyPortfolioSite = el("applyPortfolioSite");
+  if (applyPortfolioSite) applyPortfolioSite.addEventListener("click", () => {
+    const selectedId = localStorage.getItem("evHub.portfolio.selectedSite") || PORTFOLIO_CALIBRATION_SITES[0]?.id;
+    const site = PORTFOLIO_CALIBRATION_SITES.find(s => s.id === selectedId) || PORTFOLIO_CALIBRATION_SITES[0];
+    if (!site) return;
+    applyPortfolioSiteModelConfig(site);
+    setInput("siteAddress", site.address || site.name);
+    setInput("rawCorridorTrafficAadt", Number(site.aadt || 0));
+    state.filters.manualAadtOverride = true;
+    pendingPortfolioSiteSearch = { siteId: site.id };
+    setSiteContext({
+      ok: true,
+      site: { name: site.name, lat: 53.35, lon: -7.70, source: "Portfolio calibration pending map search", confidence: "pending site screening search" },
+      traffic: portfolioSiteTraffic(site, {}),
+      chargers: [],
+      warning: "Opening this operating hub in Site Screening and running the normal map / nearby charger search. Portfolio MIC, AADT and charger configuration are preserved."
+    });
+    goTab("site");
+  });
+
   const searchBtn = el("searchBtn");
   const addressInput = el("addressSearch");
   const searchStatus = el("addressSearchStatus");
   let siteSearchInFlight = false;
-  const runSiteSearch = async () => {
+  const runSiteSearch = async (options = {}) => {
     if (siteSearchInFlight) return;
-    const address = addressInput?.value?.trim() || "";
+    const portfolioSite = options.portfolioSite || null;
+    const requestedAddress = options.address || addressInput?.value?.trim() || state.inputs.siteAddress || "";
+    const address = String(requestedAddress || "").trim();
     if (!address) {
       if (searchStatus) {
         searchStatus.textContent = "Enter an address or Eircode to start the site search.";
@@ -1162,35 +2023,51 @@ function wirePage(r) {
       }
       return;
     }
+    if (portfolioSite) {
+      applyPortfolioSiteModelConfig(portfolioSite);
+      state.filters.manualAadtOverride = true;
+      state.inputs.rawCorridorTrafficAadt = Number(portfolioSite.aadt || state.inputs.rawCorridorTrafficAadt || 0);
+    }
     siteSearchInFlight = true;
     mapSearchVersion += 1;
-    resetMapState("new address search started");
+    resetMapState(portfolioSite ? "portfolio site map search started" : "new address search started");
     if (searchBtn) {
-      searchBtn.textContent = "Searching + calculating AADT…";
+      searchBtn.textContent = portfolioSite ? "Loading portfolio site map…" : "Searching + calculating AADT…";
       searchBtn.disabled = true;
     }
     if (searchStatus) {
-      searchStatus.textContent = "Searching address, AADT and nearby chargers. This will time out safely if providers do not respond.";
+      searchStatus.textContent = portfolioSite
+        ? `Loading ${portfolioSite.name} through the normal Site Screening search: address, map, AADT context and nearby chargers.`
+        : "Searching address, AADT and nearby chargers. This will time out safely if providers do not respond.";
       searchStatus.className = "address-search-status searching";
     }
     try {
       const ctx = await searchLocation(address, state.filters.radiusKm, { timeoutMs: 18000 });
-      setSiteContext(ctx);
+      const nextCtx = portfolioSite ? portfolioSearchContext(ctx, portfolioSite) : ctx;
+      setSiteContext(nextCtx);
       state.inputs.siteAddress = address;
-      if (!state.filters.manualAadtOverride && ctx?.traffic?.aadt) {
+      if (portfolioSite) {
+        state.inputs.rawCorridorTrafficAadt = Number(portfolioSite.aadt || nextCtx?.traffic?.aadt || state.inputs.rawCorridorTrafficAadt || 0);
+        state.filters.manualAadtOverride = true;
+      } else if (!state.filters.manualAadtOverride && ctx?.traffic?.aadt) {
         state.inputs.rawCorridorTrafficAadt = Number(ctx.traffic.aadt);
         const sourceYear = latestYearFromText(ctx.traffic.aadt_year || ctx.traffic.source || ctx.traffic.reference || "");
         if (sourceYear) state.inputs.trafficSourceYear = sourceYear;
       }
     } catch (err) {
-      setSiteContext({
+      const fallbackCtx = {
         ok: true,
         site: { name: address, lat: 53.35, lon: -7.70, source: "UI fallback after unexpected search error", confidence: "fallback" },
         traffic: { aadt: 12000, source: "Fallback AADT estimate only — unexpected UI error", confidence: "low / fallback", provider: "UI fallback" },
         chargers: [],
         warning: `Address search failed safely and the button was reset. Detail: ${err?.message || err}`
-      });
+      };
+      setSiteContext(portfolioSite ? portfolioSearchContext(fallbackCtx, portfolioSite) : fallbackCtx);
       state.inputs.siteAddress = address;
+      if (portfolioSite) {
+        state.inputs.rawCorridorTrafficAadt = Number(portfolioSite.aadt || state.inputs.rawCorridorTrafficAadt || 0);
+        state.filters.manualAadtOverride = true;
+      }
     } finally {
       siteSearchInFlight = false;
       if (searchBtn) {
@@ -1200,7 +2077,13 @@ function wirePage(r) {
       render();
     }
   };
-  if (searchBtn) searchBtn.addEventListener("click", runSiteSearch);
+  if (searchBtn) searchBtn.addEventListener("click", () => runSiteSearch());
+  if (pendingPortfolioSiteSearch && activeTab === "site") {
+    const pending = pendingPortfolioSiteSearch;
+    pendingPortfolioSiteSearch = null;
+    const site = PORTFOLIO_CALIBRATION_SITES.find(s => s.id === pending.siteId);
+    if (site) setTimeout(() => runSiteSearch({ portfolioSite: site, address: site.address || site.name }), 0);
+  }
   if (addressInput) addressInput.addEventListener("keydown", e => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -1532,7 +2415,24 @@ document.getElementById("tabs").addEventListener("click", e => {
 
 window.addEventListener("hashchange", () => {
   activeTab = tabFromHash();
+  closePortfolioStatusPopover();
   render();
 });
+
+document.addEventListener("click", e => {
+  const pop = document.getElementById("portfolioStatusPopover");
+  if (pop && !e.target.closest("#portfolioStatusPopover") && !e.target.closest("[data-portfolio-status-trigger]")) closePortfolioStatusPopover();
+  if (!e.target.closest(".portfolio-multi-filter")) closePortfolioFilterMenus();
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    closePortfolioStatusPopover();
+    closePortfolioFilterMenus();
+  }
+});
+
+window.addEventListener("resize", () => { closePortfolioStatusPopover(); closePortfolioFilterMenus(); });
+window.addEventListener("scroll", () => { closePortfolioStatusPopover(); closePortfolioFilterMenus(); }, true);
 
 render();

@@ -34,6 +34,30 @@ assert.equal(summary10.chargerReplacementCount, 1, "10-year horizon has one char
 const invalid = validateConfiguration({ ...config, batteryStrategy: "Grid only", batterySize: "Autel 1x125kW/261kWh" });
 assert.equal(invalid.valid, false, "Invalid battery strategy/battery combination should be rejected");
 
+
+const constrainedGridOnlyConfig = {
+  platform: "Autel Distributed",
+  batteryStrategy: "Grid only",
+  chargerModel: "N/A",
+  chargerCount: "N/A",
+  cabinetType: "Autel Double Cabinet 480-960",
+  dispenserCount: 2,
+  batterySize: "No battery",
+  serviceLevel: "Premium",
+  selectedMicKva: 200,
+  chargerWarrantyYears: 0,
+  batteryWarrantyYears: 0
+};
+const constrainedInputs = { ...inputs, modelStartYear: 2026, codYear: 2026, trafficSourceYear: 2026, rawCorridorTrafficAadt: 39800 };
+const constrainedDemand = calculateDemand(constrainedInputs);
+const constrainedYy = calculateYearByYear(constrainedInputs, constrainedGridOnlyConfig, constrainedDemand);
+const constrainedRows = constrainedYy.rows.filter(r => r.demandedEnergyKwh > 0);
+assert.ok(constrainedRows.every(r => r.deliveredEnergyServedKwh > 0), "Grid-only constrained sites should plateau, not collapse to zero delivered energy");
+assert.ok(constrainedRows.some(r => r.lostEnergyKwh > 0), "Constrained grid-only sites should record unserved/lost demand after capacity is reached");
+const firstConstrainedRow = constrainedRows.find(r => r.lostEnergyKwh > 0);
+assert.ok(constrainedRows.filter(r => r.year >= firstConstrainedRow.year).every(r => r.deliveredEnergyServedKwh >= firstConstrainedRow.deliveredEnergyServedKwh - 1), "Grid-only delivered energy should plateau after the first capacity constraint year");
+assert.ok(constrainedRows.every(r => Number.isFinite(r.servedDemandCoverageRatio) && r.servedDemandCoverageRatio >= 0 && r.servedDemandCoverageRatio <= 1), "Served demand coverage ratio should remain finite and bounded");
+
 const scenarios = compareExcelScenarios(inputs, demand, 20);
 assert.equal(scenarios.totalCombinationsGenerated, 6, "Excel scenario compare has six live configurations");
 assert.ok(scenarios.scenarios.length === 6, "Scenario matrix must contain six scenarios");

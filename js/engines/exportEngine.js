@@ -1,6 +1,10 @@
 import { toCsv, downloadText, currency, number, pct, kwh, kva } from "../utils.js";
 import { lineChart, stackedBarChart, financeComboChart } from "../ui/charts.js";
 import { MOCK_LOCATION } from "../providers/mockProviders.js";
+import { DEFAULT_INPUTS, DEFAULT_SELECTED_CONFIG } from "../data/defaultAssumptions.js";
+import { PORTFOLIO_CALIBRATION_SITES } from "../data/operatingHubCalibrationLibrary.js";
+import { calculateDemand } from "./demandEngine.js";
+import { calculateYearByYear } from "./financialEngine.js";
 
 function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
@@ -152,6 +156,312 @@ function annualFinancialChartRows(rows) {
   }));
 }
 
+function annualTechnicalRows(rows) {
+  return rows.map(r => [
+    r.year,
+    number(r.peakDemandRequiredKw || 0, 1) + " kW",
+    number(r.selectedMicKva || 0, 0) + " kVA",
+    number(r.installedBatteryUnits || 0, 0),
+    r.installedBatteryUnits ? pct(r.batterySohEnd || 0, 1) : "—",
+    number(r.batteryEnergyAvailableKwhSohAdjusted || 0, 0) + " kWh",
+    number(r.batteryPowerDeficitKw || 0, 1) + " kW",
+    number(r.batteryEnergyDeficitKwh || 0, 0) + " kWh",
+    r.batteryReplacementTrigger ? "Battery replacement" : "",
+    r.chargerReplacementTrigger ? "Charger replacement" : "",
+    r.augmentationFlag ? "Battery deployment / augmentation" : "",
+    currency((r.batteryReplacementCapex || 0) + (r.chargerReplacementCapex || 0) + (r.augmentationCapex || 0), 0)
+  ]);
+}
+
+const ANNUAL_TECH_HEADERS = ["Year", "Required peak", "Selected MIC", "Installed battery units", "Battery SOH", "SOH-adjusted usable kWh", "Power deficit", "Energy deficit", "Battery replacement", "Charger replacement", "Battery deployment", "Replacement / deployment capex"];
+
+function downloadBlob(filename, blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function xlsxEsc(v) {
+  return String(v ?? "").replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+}
+
+function xlsxColName(n) {
+  let s = "";
+  n += 1;
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function xlsxCell(value, r, c) {
+  const ref = `${xlsxColName(c)}${r}`;
+  if (typeof value === "number" && Number.isFinite(value)) return `<c r="${ref}"><v>${value}</v></c>`;
+  if (value instanceof Date) return `<c r="${ref}"><v>${value.toISOString()}</v></c>`;
+  return `<c r="${ref}" t="inlineStr"><is><t>${xlsxEsc(value)}</t></is></c>`;
+}
+
+function xlsxWorksheet(rows) {
+  const cleanRows = rows.map(row => Array.isArray(row) ? row : [row]);
+  const maxCols = Math.max(1, ...cleanRows.map(r => r.length));
+  const widths = Array.from({ length: maxCols }, (_, col) => {
+    const maxLen = Math.max(8, ...cleanRows.slice(0, 120).map(row => String(row[col] ?? "").length));
+    return Math.min(42, Math.max(10, maxLen + 2));
+  });
+  const cols = `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("")}</cols>`;
+  const sheetData = cleanRows.map((row, idx) => {
+    const r = idx + 1;
+    return `<row r="${r}">${row.map((v, c) => xlsxCell(v, r, c)).join("")}</row>`;
+  }).join("");
+  const freeze = `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${freeze}${cols}<sheetData>${sheetData}</sheetData></worksheet>`;
+}
+
+function xlsxSafeSheetName(name, used) {
+  let base = String(name || "Sheet").replace(/[\\/?*\[\]:]/g, " ").trim().slice(0, 31) || "Sheet";
+  let candidate = base;
+  let i = 2;
+  while (used.has(candidate)) {
+    const suffix = ` ${i++}`;
+    candidate = base.slice(0, 31 - suffix.length) + suffix;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+function dosDateTime(date = new Date()) {
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const d = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { time, date: d };
+}
+
+let CRC_TABLE = null;
+function crc32(bytes) {
+  if (!CRC_TABLE) {
+    CRC_TABLE = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      CRC_TABLE[n] = c >>> 0;
+    }
+  }
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function u16(v) { const b = new Uint8Array(2); new DataView(b.buffer).setUint16(0, v, true); return b; }
+function u32(v) { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, v >>> 0, true); return b; }
+function concatBytes(parts) {
+  const total = parts.reduce((a, b) => a + b.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  parts.forEach(p => { out.set(p, offset); offset += p.length; });
+  return out;
+}
+
+function zipStore(files) {
+  const enc = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  const { time, date } = dosDateTime();
+  let offset = 0;
+  files.forEach(file => {
+    const name = enc.encode(file.name);
+    const data = typeof file.data === "string" ? enc.encode(file.data) : file.data;
+    const crc = crc32(data);
+    const local = concatBytes([
+      u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(time), u16(date), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), name, data
+    ]);
+    const central = concatBytes([
+      u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(time), u16(date), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), name
+    ]);
+    localParts.push(local);
+    centralParts.push(central);
+    offset += local.length;
+  });
+  const centralStart = offset;
+  const central = concatBytes(centralParts);
+  const end = concatBytes([u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(central.length), u32(centralStart), u16(0)]);
+  return concatBytes([...localParts, central, end]);
+}
+
+function xlsxWorkbookFiles(sheets) {
+  const used = new Set();
+  const namedSheets = sheets.map((sheet, idx) => ({ ...sheet, id: idx + 1, safeName: xlsxSafeSheetName(sheet.name, used) }));
+  const sheetEntries = namedSheets.map(s => `<sheet name="${xlsxEsc(s.safeName)}" sheetId="${s.id}" r:id="rId${s.id}"/>`).join("");
+  const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetEntries}</sheets></workbook>`;
+  const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${namedSheets.map(s => `<Relationship Id="rId${s.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${s.id}.xml"/>`).join("")}<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${namedSheets.map(s => `<Override PartName="/xl/worksheets/sheet${s.id}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`;
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  return [
+    { name: "[Content_Types].xml", data: contentTypes },
+    { name: "_rels/.rels", data: rootRels },
+    { name: "xl/workbook.xml", data: workbook },
+    { name: "xl/_rels/workbook.xml.rels", data: workbookRels },
+    { name: "xl/styles.xml", data: styles },
+    ...namedSheets.map(s => ({ name: `xl/worksheets/sheet${s.id}.xml`, data: xlsxWorksheet(s.rows) }))
+  ];
+}
+
+function downloadXlsx(filename, sheets) {
+  const bytes = zipStore(xlsxWorkbookFiles(sheets));
+  const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  downloadBlob(filename, blob);
+}
+
+const PDF_PORTFOLIO_CATEGORY_FACTORS = {
+  motorway_plaza: { label: "Motorway / plaza", relevance: 0.35, capture: 0.22, targetSessionsPer1000Aadt: 0.32, effectiveAadtCap: 45000 },
+  retail: { label: "Retail park / shopping centre", relevance: 0.30, capture: 0.20, targetSessionsPer1000Aadt: 1.20, effectiveAadtCap: 20000 },
+  urban_service: { label: "Urban service station", relevance: 0.22, capture: 0.16, targetSessionsPer1000Aadt: 0.19, highPlugTargetSessionsPer1000Aadt: 0.36, effectiveAadtCap: 35000 },
+  hotel_destination: { label: "Hotel / destination", relevance: 0.12, capture: 0.12, targetSessionsPer1000Aadt: 0.34, effectiveAadtCap: 12000, destinationMonthlyFloorKwh: 3000, destinationFloorMaxAadt: 10000 },
+  local_community: { label: "Local / community", relevance: 0.06, capture: 0.08, targetSessionsPer1000Aadt: 0.06, effectiveAadtCap: 120000 },
+  review: { label: "Review", relevance: 0.24, capture: 0.16, targetSessionsPer1000Aadt: 0.80, effectiveAadtCap: 20000 }
+};
+
+function pdfPortfolioToken(v) { return String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""); }
+function pdfPortfolioCategoryKey(site) {
+  const n = String(site?.name || "").toLowerCase();
+  if (site?.categoryKey && PDF_PORTFOLIO_CATEGORY_FACTORS[site.categoryKey]) return site.categoryKey;
+  if (/(mallow plaza|tullamore|athlone|rhu glenn|junction 20)/.test(n)) return "motorway_plaza";
+  if (/(retail|shopping|cope|supervalu|southgate|newbridge|leopardstown|axis)/.test(n)) return "retail";
+  if (/(hotel|brehon|greenhills|charleville|castletroy|newtown)/.test(n)) return "hotel_destination";
+  if (/(corrib|circle k|centra|walsh|dungarvan|fermoy|tralee|roscommon)/.test(n)) return "urban_service";
+  if (/(afc|community|gaa|sports)/.test(n)) return "local_community";
+  return "review";
+}
+function pdfPortfolioMaturityLabel(tier) { return tier === "mature" ? "Mature" : tier === "near" ? "Near-mature" : tier === "early" ? "Early" : "Review"; }
+function pdfPortfolioMaturityRamp(site) { return site?.maturity?.tier === "early" ? 0.60 : site?.maturity?.tier === "near" ? 0.90 : 1; }
+function pdfPortfolioProfile(site) {
+  const categoryKey = pdfPortfolioCategoryKey(site);
+  const category = PDF_PORTFOLIO_CATEGORY_FACTORS[categoryKey] || PDF_PORTFOLIO_CATEGORY_FACTORS.review;
+  const plugs = Number(site?.modelEquivalentPlugs || 0);
+  const targetSessionsPer1000Aadt = categoryKey === "urban_service" && plugs >= 4 ? Number(category.highPlugTargetSessionsPer1000Aadt || category.targetSessionsPer1000Aadt || 0) : Number(category.targetSessionsPer1000Aadt || 0);
+  const rawAadt = Number(site?.aadt || 0);
+  const effectiveAadtCap = Number(category.effectiveAadtCap || rawAadt || 0);
+  const effectiveAadt = effectiveAadtCap > 0 ? Math.min(rawAadt, effectiveAadtCap) : rawAadt;
+  return { categoryKey, category, targetSessionsPer1000Aadt, rawAadt, effectiveAadt, maturityRamp: pdfPortfolioMaturityRamp(site) };
+}
+function pdfPortfolioCalibratedMonthly(site, inputs = DEFAULT_INPUTS) {
+  const profile = pdfPortfolioProfile(site);
+  const sessionEnergy = Number(inputs.averageSessionEnergy || DEFAULT_INPUTS.averageSessionEnergy || 30.4);
+  const targetDailySessions = profile.effectiveAadt > 0 ? (profile.effectiveAadt / 1000) * profile.targetSessionsPer1000Aadt * profile.maturityRamp : 0;
+  let modelSessions = Math.max(0, targetDailySessions * 30);
+  let modelKwh = Math.max(0, modelSessions * sessionEnergy);
+  const destinationFloorKwh = Number(profile.category.destinationMonthlyFloorKwh || 0);
+  const destinationFloorMaxAadt = Number(profile.category.destinationFloorMaxAadt || Infinity);
+  if (destinationFloorKwh > 0 && profile.rawAadt <= destinationFloorMaxAadt && modelKwh < destinationFloorKwh) {
+    modelKwh = destinationFloorKwh;
+    modelSessions = sessionEnergy > 0 ? modelKwh / sessionEnergy : modelSessions;
+  }
+  return { ...profile, modelKwh, modelSessions };
+}
+function pdfPortfolioScenario(site) {
+  const key = pdfPortfolioCategoryKey(site);
+  const factor = PDF_PORTFOLIO_CATEGORY_FACTORS[key] || PDF_PORTFOLIO_CATEGORY_FACTORS.review;
+  return { ...DEFAULT_INPUTS, modelStartYear: 2025, codYear: 2025, trafficSourceYear: 2025, siteAddress: site.address || site.name, rawCorridorTrafficAadt: Number(site.aadt || 0), averageSessionEnergy: DEFAULT_INPUTS.averageSessionEnergy, siteRelevanceFactor: factor.relevance, siteCaptureRate: factor.capture, siteLimitationFactor: DEFAULT_INPUTS.siteLimitationFactor, annualBevShareGrowthRate: DEFAULT_INPUTS.annualBevShareGrowthRate, fastChargePropensity: DEFAULT_INPUTS.fastChargePropensity, peakWindowShare: DEFAULT_INPUTS.peakWindowShare, peakHourShareWithinPeakWindow: DEFAULT_INPUTS.peakHourShareWithinPeakWindow, rampUpYear1: DEFAULT_INPUTS.rampUpYear1, rampUpYear2: DEFAULT_INPUTS.rampUpYear2 };
+}
+function pdfPortfolioMetrics(site) {
+  const actual = site?.actual || {};
+  const actualKwh = Number(actual.rolling30Kwh || 0);
+  const actualSessions = Number(actual.rolling30Sessions || 0);
+  const dailyKwh = Number(actual.dailyKwh || (actualKwh > 0 ? actualKwh / 30 : 0));
+  const dailySessions = Number(actual.dailySessions || (actualSessions > 0 ? actualSessions / 30 : 0));
+  const aadt = Number(site?.aadt || 0);
+  const plugs = Number(site?.modelEquivalentPlugs || 0);
+  const micKva = Number(site?.realMicKva || 0);
+  return { dailyKwh, dailySessions, annualisedKwh: dailyKwh * 365, avgKwhSession: actualSessions > 0 ? actualKwh / actualSessions : Number(DEFAULT_INPUTS.averageSessionEnergy || 30.4), sessionsPer1000Aadt: aadt > 0 ? dailySessions / (aadt / 1000) : null, kwhPerPlugDay: plugs > 0 ? dailyKwh / plugs : null, kwhPerKvaDay: micKva > 0 ? dailyKwh / micKva : null };
+}
+function pdfPortfolioAnnualValues(site, metrics = pdfPortfolioMetrics(site)) {
+  const actual = site?.actual || {};
+  const annualKwh = Number(actual.annualKwh || 0) > 0 ? Number(actual.annualKwh) : Number(metrics.annualisedKwh || 0);
+  return { annualKwh };
+}
+function pdfPortfolioDoNothing(site, metrics, derived, inputs) {
+  const startYear = Number(inputs?.modelStartYear || 2025);
+  const installedOutputs = Math.max(0, Number(derived?.installedOutputs || site?.modelEquivalentPlugs || 0));
+  const installedPowerKw = Math.max(0, Number(derived?.installedChargerPowerKw || 0));
+  const micKva = Math.max(0, Number(site?.realMicKva || inputs?.selectedMicKva || 0));
+  const gridPowerKw = micKva * Number(inputs?.powerFactor || DEFAULT_INPUTS.powerFactor || 0.98);
+  const annualTrafficGrowth = Number(inputs?.annualTrafficGrowthRate ?? DEFAULT_INPUTS.annualTrafficGrowthRate ?? 0.01);
+  const annualBevGrowth = Number(inputs?.annualBevShareGrowthRate ?? DEFAULT_INPUTS.annualBevShareGrowthRate ?? 0.18);
+  const bevStart = Math.max(0.0001, Number(inputs?.onRoadBevShareAtCod ?? DEFAULT_INPUTS.onRoadBevShareAtCod ?? 0.04));
+  const bevCap = Math.max(bevStart, Number(inputs?.bevShareCap ?? DEFAULT_INPUTS.bevShareCap ?? 0.25));
+  const baseFleetPower = Number(inputs?.baseFleetPlanningPower || DEFAULT_INPUTS.baseFleetPlanningPower || 60);
+  const sessionEnergy = Number(metrics?.avgKwhSession || inputs?.averageSessionEnergy || DEFAULT_INPUTS.averageSessionEnergy || 30.4);
+  const overhead = Number(inputs?.plugInOverstayOverheadHours || DEFAULT_INPUTS.plugInOverstayOverheadHours || 0.03);
+  const peakShare = Number(inputs?.peakWindowShare || DEFAULT_INPUTS.peakWindowShare || 0.50);
+  const peakHourShare = Number(inputs?.peakHourShareWithinPeakWindow || DEFAULT_INPUTS.peakHourShareWithinPeakWindow || 0.25);
+  const designFloor = Number(inputs?.designPeakFloorSessions || DEFAULT_INPUTS.designPeakFloorSessions || 1);
+  let techUplift = 1;
+  let durationUplift = 1;
+  let firstPlugYear = null, firstMicYear = null, firstChargerYear = null, firstConstraintYear = null;
+  for (let t = 0; t < 20; t += 1) {
+    if (t > 0) {
+      const techRate = t <= 10 ? Number(inputs?.techUpliftEarlyPhaseRate ?? DEFAULT_INPUTS.techUpliftEarlyPhaseRate ?? 0.025) : Number(inputs?.techUpliftMiddlePhaseRate ?? DEFAULT_INPUTS.techUpliftMiddlePhaseRate ?? 0.01);
+      const techCap = Number(inputs?.techUpliftCap ?? DEFAULT_INPUTS.techUpliftCap ?? 1.25);
+      const durationResponse = Number(inputs?.durationResponseFactor ?? DEFAULT_INPUTS.durationResponseFactor ?? 0.4);
+      techUplift = Math.min(techCap, techUplift * (1 + techRate));
+      durationUplift = Math.min(techCap, durationUplift * (1 + techRate * durationResponse));
+    }
+    const bevFuture = Math.min(bevCap, bevStart * Math.pow(1 + annualBevGrowth, t));
+    const growthFactor = Math.pow(1 + annualTrafficGrowth, t) * (bevFuture / bevStart);
+    const dailySessions = Math.max(0, Number(metrics?.dailySessions || 0) * growthFactor);
+    const fleetPowerKw = baseFleetPower * techUplift;
+    const sessionDurationHrs = sessionEnergy / Math.max(1, fleetPowerKw / durationUplift) + overhead;
+    const peakConcurrentSessions = Math.max(designFloor, dailySessions * peakShare * peakHourShare * sessionDurationHrs);
+    const peakDemandKw = peakConcurrentSessions * fleetPowerKw;
+    const plugPlanningTrigger = installedOutputs > 0 && peakConcurrentSessions > installedOutputs * 0.80;
+    const micPlanningTrigger = gridPowerKw > 0 && peakDemandKw > gridPowerKw * 0.90;
+    const chargerPlanningTrigger = installedPowerKw > 0 && peakDemandKw > installedPowerKw * 0.90;
+    const capacityRatio = Math.min(installedOutputs > 0 ? Math.min(1, installedOutputs / Math.max(1, peakConcurrentSessions)) : 0, gridPowerKw > 0 ? Math.min(1, gridPowerKw / Math.max(1, peakDemandKw)) : 0, installedPowerKw > 0 ? Math.min(1, installedPowerKw / Math.max(1, peakDemandKw)) : 0);
+    if (!firstPlugYear && plugPlanningTrigger) firstPlugYear = startYear + t;
+    if (!firstMicYear && micPlanningTrigger) firstMicYear = startYear + t;
+    if (!firstChargerYear && chargerPlanningTrigger) firstChargerYear = startYear + t;
+    if (!firstConstraintYear && (capacityRatio < 0.98 || plugPlanningTrigger || micPlanningTrigger || chargerPlanningTrigger)) firstConstraintYear = startYear + t;
+  }
+  const firstPlanningYear = [firstPlugYear, firstMicYear, firstChargerYear].filter(Boolean).sort((a,b)=>a-b)[0] || null;
+  const firstActionYear = [firstConstraintYear, firstPlanningYear].filter(Boolean).sort((a,b)=>a-b)[0] || null;
+  const triggerDrivers = [firstPlugYear === firstActionYear ? "plug utilisation" : "", firstMicYear === firstActionYear ? "MIC/grid power" : "", firstChargerYear === firstActionYear ? "charger output" : ""].filter(Boolean);
+  return { startYear, firstActionYear, triggerDrivers };
+}
+function pdfPortfolioResult(site) {
+  const inputs = pdfPortfolioScenario(site);
+  const config = { ...DEFAULT_SELECTED_CONFIG, ...site.modelConfig };
+  const demand = calculateDemand(inputs);
+  const yy = calculateYearByYear(inputs, config, demand);
+  const metrics = pdfPortfolioMetrics(site);
+  const actual = pdfPortfolioAnnualValues(site, metrics);
+  const cal = pdfPortfolioCalibratedMonthly(site, inputs);
+  const annualScale = 365 / 30;
+  const modelAnnual = Number(cal.modelKwh || 0) * annualScale;
+  const variance = actual.annualKwh > 0 ? (modelAnnual - actual.annualKwh) / actual.annualKwh : null;
+  const doNothing = pdfPortfolioDoNothing(site, metrics, yy.derived, inputs);
+  const tier = site.maturity?.tier || "review";
+  const aadtReview = ["medium_low", "review"].includes(pdfPortfolioToken(site.aadtConfidence));
+  let status = "In benchmark";
+  if (tier === "early") status = "Ramp-up";
+  if (aadtReview || pdfPortfolioCategoryKey(site) === "review") status = "Review";
+  if (doNothing.firstActionYear && doNothing.firstActionYear <= doNothing.startYear + 5) status = "Capacity pressure";
+  if (tier !== "early" && variance > 0.20) status = "Under-capturing";
+  if (tier !== "early" && variance < -0.20 && status !== "Capacity pressure") status = "Outperforming";
+  return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, annualVariance: variance, status, triggerYear: doNothing.firstActionYear || "Monitor" };
+}
+function portfolioExportRows(limit = 32) {
+  return PORTFOLIO_CALIBRATION_SITES.map(pdfPortfolioResult).sort((a,b) => String(a.site.name).localeCompare(String(b.site.name))).slice(0, limit);
+}
+function portfolioPdfTableRows(limit = 32) {
+  return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.status)]);
+}
+function portfolioXlsxRows() {
+  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual kWh/yr", "Model kWh/yr", "Variance", "Status", "Action year"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.status, r.triggerYear])];
+}
+
 export function exportDemandCsv(demand) {
   downloadText("ev_hub_demand_model.csv", toCsv(demand.years), "text/csv;charset=utf-8");
 }
@@ -210,42 +520,64 @@ export function exportAnnualFinancialsExcel(state, results) {
   const rows = results.yearByYear.rows.slice(0, state.inputs.investmentHorizon);
   const financial = results.financialSummary;
   const recommended = results.compare.recommended;
-  const annualRows = rows.map(r => [
-    r.year,
-    number(r.sessionsServed, 0),
-    number(r.deliveredEnergyServedKwh, 0),
-    currency(r.totalRevenue, 0),
-    currency(r.electricityCost, 0),
-    currency(r.grossProfit, 0),
-    currency(r.totalOperatingCosts, 0),
-    currency(r.annualCashFlow, 0),
-    currency(r.cumulativeCashFlow, 0)
-  ]);
-  const scenario = results.compare.scenarios.map(s => [
-    esc(s.name), esc(s.config.platform), `${esc(s.config.selectedMicKva)} kVA`, esc(s.config.batterySize || "No battery"), Number.isFinite(s.roi) ? pct(s.roi,1) : "—", currency(s.cumulativeCashFlow,0), s.breakEvenYear || "Not within horizon", esc(s.feasibilityStatus)
-  ]);
-  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-    body{font-family:Inter,Arial,sans-serif;color:#14221f;padding:20px;} h1,h2{color:#0f8f4f;} table{border-collapse:collapse;margin:12px 0 28px;width:100%;} th{background:#e6f6ec;} th,td{border:1px solid #cbdccc;padding:7px;text-align:right;} th:first-child,td:first-child{text-align:left;}
-  </style></head><body>
-  <h1>EV Hub Annual Financials</h1>
-  <h2>Investment Summary</h2>
-  ${htmlTable(["Metric","Value"], [
-    ["Site", esc(state.inputs.siteAddress)],
-    ["Investment horizon", `${esc(state.inputs.investmentHorizon)} years`],
-    ["Selected platform", esc(state.config.platform)],
-    ["Selected MIC", `${esc(state.config.selectedMicKva)} kVA`],
-    ["Selected battery", esc(state.config.batterySize || "No battery")],
-    ["Recommended scenario", esc(recommended?.name || "No feasible scenario")],
-    ["Cumulative cash flow", currency(financial.cumulativeCashFlow,0)],
-    ["ROI", Number.isFinite(financial.roi) ? pct(financial.roi,1) : "—"],
+  const summaryRows = [
+    ["Metric", "Value"],
+    ["Site", state.inputs.siteAddress],
+    ["Investment horizon", state.inputs.investmentHorizon + " years"],
+    ["Selected platform", state.config.platform],
+    ["Selected MIC kVA", Number(state.config.selectedMicKva || 0)],
+    ["Selected battery", state.config.batterySize || "No battery"],
+    ["Recommended scenario", recommended?.name || "No feasible scenario"],
+    ["Cumulative cash flow", Number(financial.cumulativeCashFlow || 0)],
+    ["ROI", Number.isFinite(financial.roi) ? financial.roi : ""],
     ["Break-even year", financial.breakEvenYear || "Not within horizon"]
-  ])}
-  <h2>Annual Financials</h2>
-  ${htmlTable(["Year","Sessions served","Delivered kWh","Revenue","Electricity cost","Gross profit","Total opex","Annual cash flow","Cumulative cash flow"], annualRows)}
-  <h2>Scenario Ranking</h2>
-  ${htmlTable(["Scenario","Platform","MIC","Battery","ROI","Cumulative cash flow","Break-even","Status"], scenario)}
-  </body></html>`;
-  downloadText("ev_hub_annual_financials.xls", html, "application/vnd.ms-excel;charset=utf-8");
+  ];
+  const annualRows = [["Year","Sessions served","Delivered kWh","Revenue","Electricity cost","Gross profit","Total opex","Annual cash flow","Cumulative cash flow"],
+    ...rows.map(r => [
+      r.year,
+      Number(r.sessionsServed || 0),
+      Number(r.deliveredEnergyServedKwh || 0),
+      Number(r.totalRevenue || 0),
+      Number(r.electricityCost || 0),
+      Number(r.grossProfit || 0),
+      Number(r.totalOperatingCosts || 0),
+      Number(r.annualCashFlow || 0),
+      Number(r.cumulativeCashFlow || 0)
+    ])
+  ];
+  const technicalRows = [ANNUAL_TECH_HEADERS, ...rows.map(r => [
+    r.year,
+    Number(r.peakDemandRequiredKw || 0),
+    Number(r.selectedMicKva || 0),
+    Number(r.installedBatteryUnits || 0),
+    Number(r.installedBatteryUnits ? r.batterySohEnd || 0 : 0),
+    Number(r.batteryEnergyAvailableKwhSohAdjusted || 0),
+    Number(r.batteryPowerDeficitKw || 0),
+    Number(r.batteryEnergyDeficitKwh || 0),
+    r.batteryReplacementTrigger ? "Battery replacement" : "",
+    r.chargerReplacementTrigger ? "Charger replacement" : "",
+    r.augmentationFlag ? "Battery deployment / augmentation" : "",
+    Number((r.batteryReplacementCapex || 0) + (r.chargerReplacementCapex || 0) + (r.augmentationCapex || 0))
+  ])];
+  const scenarioRows = [["Scenario","Platform","MIC kVA","Battery","ROI","Cumulative cash flow","Break-even","Status"],
+    ...results.compare.scenarios.map(s => [
+      s.name,
+      s.config.platform,
+      Number(s.config.selectedMicKva || 0),
+      s.config.batterySize || "No battery",
+      Number.isFinite(s.roi) ? s.roi : "",
+      Number(s.cumulativeCashFlow || 0),
+      s.breakEvenYear || "Not within horizon",
+      s.feasibilityStatus
+    ])
+  ];
+  downloadXlsx("ev_hub_annual_financials.xlsx", [
+    { name: "Investment Summary", rows: summaryRows },
+    { name: "Annual Financials", rows: annualRows },
+    { name: "Annual Technical Detail", rows: technicalRows },
+    { name: "Scenario Ranking", rows: scenarioRows },
+    { name: "Portfolio Calibration", rows: portfolioXlsxRows() }
+  ]);
 }
 
 export async function exportInvestorPdf(state, results) {
@@ -265,6 +597,8 @@ export async function exportInvestorPdf(state, results) {
     annualPeakWindowKwh: (r.annualEnergyDemandedKwh || 0) * state.inputs.peakWindowShare,
     annualNonPeakKwh: (r.annualEnergyDemandedKwh || 0) * (1 - state.inputs.peakWindowShare)
   }));
+
+  const annualTechnicalTableRows = annualTechnicalRows(horizonRows);
 
   const annualTableRows = horizonRows.map(r => [
     r.year,
@@ -295,6 +629,7 @@ export async function exportInvestorPdf(state, results) {
   ]);
 
   const scenarioTableRows = scenarioRows(results.compare);
+  const portfolioTableRows = portfolioPdfTableRows(32);
   const capexRows = (f.capexEvents || []).map(e => [e.year, currency(e.amount, 0), esc(e.reason)]);
   const technicalStatus = results.yearByYear.technical.feasible
     ? "Configuration is technically feasible under the model checks."
@@ -422,10 +757,25 @@ export async function exportInvestorPdf(state, results) {
       <h3>Annual financial table</h3>
       ${htmlTable(["Year", "Sessions served", "Delivered kWh", "Revenue", "Electricity cost", "Gross profit", "Total opex", "Annual cash flow", "Cumulative cash flow"], annualTableRows)}
     </div>
+    <div class="panel">
+      <h3>Annual technical detail</h3>
+      <p class="report-caption">Shows why lifecycle capex is deployed: staged battery additions, SOH-adjusted usable kWh, battery replacement and charger replacement events.</p>
+      ${htmlTable(ANNUAL_TECH_HEADERS, annualTechnicalTableRows)}
+    </div>
+  </section>
+
+
+  <section class="print-page portfolio-page">
+    <h2>6. Portfolio Calibration Benchmark</h2>
+    <p class="report-caption">Annual actual performance is compared with the portfolio-calibrated model using each operating site's MIC, AADT, maturity and site category. Mature sites carry the highest benchmark confidence; early sites are directional.</p>
+    <div class="panel">
+      <h3>Operating hub benchmark table</h3>
+      ${htmlTable(["Site", "Maturity", "Category", "MIC", "AADT", "Actual kWh/yr", "Model kWh/yr", "Variance", "Status"], portfolioTableRows)}
+    </div>
   </section>
 
   <section class="print-page scenario-page">
-    <h2>6. Scenario Ranking</h2>
+    <h2>7. Scenario Ranking</h2>
     <div class="recommend-card">
       <div>
         <div class="eyebrow">Recommended configuration</div>

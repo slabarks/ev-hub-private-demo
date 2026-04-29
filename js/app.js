@@ -186,8 +186,22 @@ function leaseRiskCard(f) {
   return `<section class="panel lease-risk-card ${status}"><div class="lease-risk-head"><span class="badge ${badge}">${status === "good" ? "Lease OK" : status === "bad" ? "Lease risk" : "Lease warning"}</span><h3>${h(title)}</h3></div><p>${h(message)}</p><div class="lease-risk-grid">${kpi("Lease term", leaseTerm ? `${leaseTerm} years` : "Not set")}${kpi("Investment horizon", `${horizon} years`)}${kpi("Lease expiry", leaseExpiryYear || "n/a")}${kpi("Break-even", f.breakEvenYear || "No break-even")}</div></section>`;
 }
 
+function plainTableLabel(value) {
+  return String(value ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function table(headers, rows, cls = "") {
-  const body = rows.length ? rows.map(row => `<tr>${row.map(x => `<td>${x}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}">No rows to display.</td></tr>`;
+  const labels = headers.map(plainTableLabel);
+  const body = rows.length
+    ? rows.map(row => `<tr>${row.map((x, i) => `<td data-label="${h(labels[i] || "Value")}">${x}</td>`).join("")}</tr>`).join("")
+    : `<tr><td data-label="Status" colspan="${headers.length}">No rows to display.</td></tr>`;
   return `<div class="table-wrap"><table class="${cls}"><thead><tr>${headers.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
@@ -1850,7 +1864,7 @@ function renderInvestorReport(r) {
     <div class="export-card-grid">
       <section class="export-card primary-export">
         <h3>Investor PDF Pack</h3>
-        <p>Exports tabs 1–6 as a polished PDF-ready report: Site Screening, Demand Forecast, Product Configuration, Investment Case, Annual Financials and Scenario Ranking. AADT is explained in the assumptions section of the report.</p>
+        <p>Exports a polished PDF-ready report covering Site Screening, Demand Forecast, Product Configuration, Investment Case, Annual Financials, Scenario Ranking and Portfolio Calibration. AADT is explained in the assumptions section of the report.</p>
         <button class="primary" id="exportInvestorPdf">Export investor PDF</button>
       </section>
       <section class="export-card excel-export">

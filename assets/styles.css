@@ -1866,3 +1866,154 @@ button[disabled] { opacity: .68; cursor: progress; }
   .portfolio-page .report-table-wrap th,
   .portfolio-page .report-table-wrap td { padding: 4px 5px; }
 }
+
+/* v35.24 full responsive hardening: desktop, laptop, tablet and mobile */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+img, svg, canvas, video { max-width: 100%; height: auto; }
+.app, .header-inner, .panel, .kpi, .chart-shell, .site-card, .validator-card, .ranking-card,
+.portfolio-hero, .selected-backtest-card, .portfolio-filter-panel { min-width: 0; }
+.app { width: min(100%, 1400px); }
+.panel, .kpi, .notice, .site-card, .chart-shell, .reset-card, .validator-card, .ranking-card { overflow-wrap: anywhere; }
+.field, .unit-input-wrap, .kpi, .kpi-window, .benchmark-mini-card, .portfolio-config-grid > div { min-width: 0; }
+.chart-shell svg, .chart-shell canvas { width: 100% !important; max-width: 100%; }
+
+/* Use fluid grids by default so intermediate tablet widths do not overflow. */
+.grid-3 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+.grid-4 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); }
+.input-grid.three { grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); }
+.input-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); }
+.investment-windows, .advanced-groups { grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); }
+.kpi-window-grid, .recommend-metrics, .validator-grid, .product-validator-grid, .demand-snapshot-grid, .portfolio-summary-grid, .portfolio-group-grid, .portfolio-config-grid, .portfolio-benchmark-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+}
+.portfolio-filter-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
+.portfolio-multi-filter-menu { max-width: min(340px, calc(100vw - 28px)); }
+
+/* Keep the concise Portfolio Calibration table readable on laptops/tablets. */
+.portfolio-annual-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+.portfolio-annual-table th,
+.portfolio-annual-table td {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.portfolio-annual-table th:nth-child(1),
+.portfolio-annual-table td:nth-child(1) { width: 23%; }
+.portfolio-annual-table th:nth-child(2),
+.portfolio-annual-table td:nth-child(2) { width: 8%; }
+.portfolio-annual-table th:nth-child(3),
+.portfolio-annual-table td:nth-child(3) { width: 14%; }
+.portfolio-annual-table th:nth-child(4),
+.portfolio-annual-table td:nth-child(4) { width: 7%; }
+.portfolio-annual-table th:nth-child(5),
+.portfolio-annual-table td:nth-child(5) { width: 8%; }
+.portfolio-annual-table th:nth-child(6),
+.portfolio-annual-table td:nth-child(6),
+.portfolio-annual-table th:nth-child(7),
+.portfolio-annual-table td:nth-child(7) { width: 11%; }
+.portfolio-annual-table th:nth-child(8),
+.portfolio-annual-table td:nth-child(8) { width: 7%; }
+.portfolio-annual-table th:nth-child(9),
+.portfolio-annual-table td:nth-child(9) { width: 11%; }
+
+@media (max-width: 1180px) {
+  .app { padding: 22px 20px 56px; }
+  .header-inner { padding: 24px 22px 28px; }
+  .grid-2, .site-search-grid, .recommend-card, .config-bottom-grid, .report-hero, .report-chart-grid.two { grid-template-columns: 1fr; }
+  .portfolio-hero, .portfolio-selector-panel { grid-template-columns: 1fr; }
+  .tabs { justify-content: flex-start; }
+  .workflow-stepper { overflow-x: auto; overscroll-behavior-x: contain; }
+  .portfolio-annual-table th, .portfolio-annual-table td { font-size: 11.4px; padding: 7px 5px; }
+  .portfolio-annual-table .badge { font-size: 10.5px; padding: 3px 6px; }
+}
+
+@media (max-width: 900px) {
+  :root { --radius: 18px; }
+  .app-header, .header-inner { min-height: 132px; }
+  .header-inner { align-items: center; }
+  .brand-logo { width: clamp(120px, 24vw, 170px); }
+  .hero-copy { max-width: 56vw; }
+  .app-header h1 { font-size: clamp(24px, 5.2vw, 36px); }
+  .page-title { align-items: flex-start; flex-direction: column; }
+  .panel { padding: 16px; }
+  .reset-card, .selected-backtest-head { flex-direction: column; align-items: flex-start; }
+  .map-overview { position: static; width: auto; margin: 12px 12px 0; }
+  #map, .map-fallback { height: min(68vh, 480px); }
+  .portfolio-status-popover { width: min(420px, calc(100vw - 24px)) !important; left: 12px !important; right: 12px !important; }
+}
+
+/* Mobile table-to-card pattern. It avoids tiny text and horizontal scrolling on phones. */
+@media (max-width: 720px) {
+  .app { padding: 18px 12px 48px; }
+  .tabs { padding: 8px 10px 10px; gap: 6px; }
+  .tabs button { padding: 8px 10px; font-size: 12px; }
+  .workflow-stepper { top: 46px; padding-left: 10px; padding-right: 10px; }
+  .header-inner { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .hero-copy { margin-left: 0; max-width: 100%; text-align: left; }
+  .app-header h1::after { margin-left: 0; margin-right: auto; }
+  .search-row, .workflow-status, .validator-summary, .lease-risk-grid, .scenario-summary-strip, .first-use-banner, .guide-flow-grid, .scenario-chip-grid, .scenario-chip-grid.compact { grid-template-columns: 1fr !important; }
+  .map-heading { flex-direction: column; align-items: flex-start; }
+  #map, .map-fallback { height: min(62vh, 400px); }
+  .portfolio-multi-filter-menu { position: static; width: 100%; max-width: none; margin-top: 8px; box-shadow: none; }
+
+  .table-wrap { overflow: visible; border: 0; background: transparent; box-shadow: none; }
+  .table-wrap table { display: block; width: 100%; min-width: 0 !important; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  .table-wrap thead { display: none; }
+  .table-wrap tbody { display: grid; gap: 10px; width: 100%; }
+  .table-wrap tr {
+    display: block;
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: rgba(255,255,255,.92);
+    box-shadow: var(--shadow-soft);
+    overflow: hidden;
+  }
+  .table-wrap td {
+    display: grid;
+    grid-template-columns: minmax(112px, 42%) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 9px 11px;
+    text-align: right !important;
+    white-space: normal !important;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: anywhere;
+    font-size: 12.5px;
+  }
+  .table-wrap td:last-child { border-bottom: 0; }
+  .table-wrap td::before {
+    content: attr(data-label);
+    text-align: left;
+    color: var(--muted);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+  }
+  .portfolio-annual-table td:nth-child(n),
+  .portfolio-annual-table th:nth-child(n) { width: auto; text-align: right; }
+  .portfolio-site-cell strong { font-size: 13px; }
+  .portfolio-status-trigger { justify-content: flex-end; }
+}
+
+@media (max-width: 480px) {
+  .app { padding-left: 10px; padding-right: 10px; }
+  .panel { padding: 14px; border-radius: 16px; }
+  .kpi .value { font-size: 19px; }
+  .app-header, .header-inner { min-height: 118px; }
+  .brand-logo { width: 118px; }
+  .app-header h1 { font-size: 25px; }
+  .table-wrap td { grid-template-columns: 1fr; text-align: left !important; gap: 4px; }
+  .portfolio-status-trigger { justify-content: flex-start; }
+  .portfolio-status-popover-kpis { grid-template-columns: 1fr; }
+  .portfolio-status-popover { border-radius: 16px; }
+  .guide-panel { width: calc(100vw - 16px); }
+}

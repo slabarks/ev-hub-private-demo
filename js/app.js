@@ -843,9 +843,19 @@ function cleanChargerLabel(s) {
 function scenarioMetric(label, value, extra = "") {
   return `<span class="scenario-chip"><small>${h(label)}</small><strong>${value}</strong>${extra ? `<em>${h(extra)}</em>` : ""}</span>`;
 }
-function scenarioCard(s, tone = "good") {
+function scenarioGradientClass(tone = "good", index = 0, total = 0) {
+  if (tone !== "good") return "scenario-card-bad";
+  const safeIndex = Number.isFinite(index) ? index : 0;
+  const safeTotal = Math.max(1, Number(total) || 1);
+  if (safeIndex === 0) return "scenario-card-best";
+  if (safeIndex <= Math.max(1, Math.floor(safeTotal * 0.30))) return "scenario-card-strong";
+  if (safeIndex <= Math.max(2, Math.floor(safeTotal * 0.65))) return "scenario-card-mid";
+  return "scenario-card-soft";
+}
+function scenarioCard(s, tone = "good", index = 0, total = 0) {
   const isGood = tone === "good";
-  return `<article class="scenario-card ${isGood ? "scenario-card-good" : "scenario-card-bad"}">
+  const toneClass = scenarioGradientClass(tone, index, total);
+  return `<article class="scenario-card ${toneClass}">
     <div class="scenario-card-rank"><span class="rank-pill ${isGood ? "good" : "bad"}">#${s.rank || "—"}</span></div>
     <div class="scenario-card-main">
       <div class="scenario-card-head">
@@ -888,8 +898,9 @@ function renderScenarioRanking(r) {
       ${kpi("Infeasible scenarios", number(infeasible.length,0))}
       ${kpi("Ranking rule", "Feasibility first, ROI second")}
     </div>
-    <section class="panel scenario-section feasible-section"><h3>✓ Feasible scenarios ranked first</h3><div class="scenario-card-list">${feasible.map(s => scenarioCard(s, "good")).join("") || `<div class="notice">No feasible scenarios under current assumptions.</div>`}</div></section>
-    <section class="panel scenario-section infeasible-section"><h3>⚠ Infeasible scenarios</h3><p>These options were reviewed but are not recommendable because they fail one or more technical checks.</p><div class="scenario-card-list">${infeasible.map(s => scenarioCard(s, "bad")).join("") || `<div class="notice good">No infeasible scenarios in this run.</div>`}</div></section>
+    <div class="scenario-gradient-legend"><span class="legend-chip best">Best ranked</span><span class="legend-chip strong">Strong</span><span class="legend-chip mid">Acceptable</span><span class="legend-chip soft">Weaker feasible</span><span class="legend-chip bad">Infeasible</span></div>
+    <section class="panel scenario-section feasible-section"><h3>✓ Feasible scenarios ranked first</h3><div class="scenario-card-list">${feasible.map((s, index) => scenarioCard(s, "good", index, feasible.length)).join("") || `<div class="notice">No feasible scenarios under current assumptions.</div>`}</div></section>
+    <section class="panel scenario-section infeasible-section"><h3>⚠ Infeasible scenarios</h3><p>These options were reviewed but are not recommendable because they fail one or more technical checks.</p><div class="scenario-card-list">${infeasible.map((s, index) => scenarioCard(s, "bad", index, infeasible.length)).join("") || `<div class="notice good">No infeasible scenarios in this run.</div>`}</div></section>
     <div class="notice scenario-footnote">Ranking is based on technical feasibility first, then ROI among feasible scenarios only. Infeasible scenarios are shown for comparison with recommended fixes.</div>`;
 }
 
@@ -1884,6 +1895,22 @@ function renderInvestorReport(r) {
     </div>`;
 }
 
+function updateResponsiveTabNavigation() {
+  const tabs = document.getElementById("tabs");
+  if (!tabs) return;
+  const width = window.innerWidth || document.documentElement.clientWidth || 1280;
+  const compact = width <= 1279;
+  const wrap = width <= 1024 && width > 720;
+  tabs.classList.toggle("tabs-compact", compact);
+  tabs.classList.toggle("tabs-wrap", wrap);
+  tabs.querySelectorAll("button").forEach(btn => {
+    const longLabel = btn.dataset.long || btn.textContent.trim();
+    const shortLabel = btn.dataset.short || longLabel;
+    btn.textContent = compact ? shortLabel : longLabel;
+    btn.title = longLabel;
+  });
+}
+
 function render() {
   enforceConfigCompatibility();
   let r;
@@ -1900,6 +1927,7 @@ function render() {
   };
   try {
     activeTab = VALID_TABS.includes(activeTab) ? activeTab : "site";
+    updateResponsiveTabNavigation();
     document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
     updateWorkflowStepper();
     if (activeTab !== "site" && map) {
@@ -2446,7 +2474,8 @@ document.addEventListener("keydown", e => {
   }
 });
 
-window.addEventListener("resize", () => { closePortfolioStatusPopover(); closePortfolioFilterMenus(); });
+window.addEventListener("resize", () => { updateResponsiveTabNavigation(); closePortfolioStatusPopover(); closePortfolioFilterMenus(); });
 window.addEventListener("scroll", () => { closePortfolioStatusPopover(); closePortfolioFilterMenus(); }, true);
 
+updateResponsiveTabNavigation();
 render();

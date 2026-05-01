@@ -136,6 +136,10 @@ body::before { display: none; }
 }
 .tabs button:hover { transform: translateY(-1px); border-color: var(--line-2); }
 .tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 10px 24px rgba(15,143,79,.18); }
+.tabs.tabs-compact { gap: 6px; }
+.tabs.tabs-compact button { padding: 8px 11px; font-size: 12.75px; }
+.tabs.tabs-wrap { flex-wrap: wrap; overflow-x: visible; justify-content: center; }
+.tabs.tabs-wrap button { flex: 0 1 auto; }
 .app { max-width: 1400px; margin: 0 auto; padding: 28px 28px 70px; }
 .page-title { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
 .page-title h2 { margin: 0; font-size: clamp(24px, 2.1vw, 32px); letter-spacing: -.04em; color: #10231d; }
@@ -1057,6 +1061,17 @@ input, select { border-color: var(--line-2); background: #fcfefd; }
 }
 .scenario-card-good { border-color: #cfe7d8; }
 .scenario-card-bad { border-color: #f1c5bf; background: linear-gradient(180deg, rgba(255,252,251,.98), rgba(255,247,246,.94)); }
+.scenario-card-best { border-color: #91d5af; background: linear-gradient(135deg, rgba(232,248,238,.98), rgba(247,253,249,.96)); }
+.scenario-card-strong { border-color: #b7dfc7; background: linear-gradient(135deg, rgba(241,250,245,.98), rgba(251,254,252,.96)); }
+.scenario-card-mid { border-color: #dfe8e1; background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(248,251,249,.95)); }
+.scenario-card-soft { border-color: #edd5bd; background: linear-gradient(135deg, rgba(255,250,244,.98), rgba(255,253,250,.95)); }
+.scenario-gradient-legend { display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 14px; }
+.legend-chip { display:inline-flex; align-items:center; padding: 7px 11px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; font-weight: 800; color:#344054; background:#fff; }
+.legend-chip.best { background: #e7f6ee; border-color: #91d5af; color: #0f7e49; }
+.legend-chip.strong { background: #f0f8f3; border-color: #b7dfc7; color: #1a7d4d; }
+.legend-chip.mid { background: #f8fbf9; border-color: #dfe8e1; color: #4a5b52; }
+.legend-chip.soft { background: #fff7ef; border-color: #edd5bd; color: #9a6524; }
+.legend-chip.bad { background: #fff1ef; border-color: #f1c5bf; color: #c24f45; }
 .scenario-card-rank { display: flex; align-items: flex-start; justify-content: center; padding-top: 4px; }
 .scenario-card-head {
   display: flex;
@@ -1248,6 +1263,9 @@ button[disabled] { opacity: .68; cursor: progress; }
   .lease-risk-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .map-overview { position: static; width: auto; margin: 12px 16px; }
   #map, .map-fallback { height: 470px; }
+  .tabs { padding: 10px 12px 12px; gap: 6px; overflow-x: visible; justify-content: center; flex-wrap: wrap; }
+  .tabs button { padding: 8px 10px; font-size: 12px; }
+  .guide-tab-button { margin-left: 0; }
 }
 
 @media (max-width: 760px) {
@@ -1255,7 +1273,7 @@ button[disabled] { opacity: .68; cursor: progress; }
   .header-inner { min-height: 96px; padding: 16px; }
   .hero-copy { display: none; }
   .brand-logo { width: 130px; }
-  .tabs { justify-content: flex-start; }
+  .tabs { justify-content: center; flex-wrap: wrap; overflow-x: visible; }
   .workflow-status { grid-template-columns: 1fr; }
   .grid-4, .grid-3, .input-grid, .input-grid.three, .demand-snapshot-grid, .product-validator-grid, .validator-summary, .lease-risk-grid { grid-template-columns: 1fr; }
   .search-row { grid-template-columns: 1fr; }
@@ -1928,7 +1946,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   .header-inner { padding: 24px 22px 28px; }
   .grid-2, .site-search-grid, .recommend-card, .config-bottom-grid, .report-hero, .report-chart-grid.two { grid-template-columns: 1fr; }
   .portfolio-hero, .portfolio-selector-panel { grid-template-columns: 1fr; }
-  .tabs { justify-content: flex-start; }
+  .tabs { justify-content: center; flex-wrap: wrap; overflow-x: visible; }
   .workflow-stepper { overflow-x: auto; overscroll-behavior-x: contain; }
   .portfolio-annual-table th, .portfolio-annual-table td { font-size: 11.4px; padding: 7px 5px; }
   .portfolio-annual-table .badge { font-size: 10.5px; padding: 3px 6px; }

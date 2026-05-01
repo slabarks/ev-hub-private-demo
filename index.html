@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
-  <link rel="stylesheet" href="./assets/styles.css?v=35.24-responsive" />
+  <link rel="stylesheet" href="./assets/styles.css?v=35.25-tabs-gradient" />
 </head>
 <body>
   <header class="app-header">
@@ -22,16 +22,16 @@
   </header>
 
   <nav class="tabs" id="tabs">
-    <button type="button" data-tab="site" class="active" onclick="window.__evHubGoTab && window.__evHubGoTab('site')">1. Site Screening</button>
-    <button type="button" data-tab="demand" onclick="window.__evHubGoTab && window.__evHubGoTab('demand')">2. Demand Forecast</button>
-    <button type="button" data-tab="setup" onclick="window.__evHubGoTab && window.__evHubGoTab('setup')">3. Product Configuration</button>
-    <button type="button" data-tab="investment" onclick="window.__evHubGoTab && window.__evHubGoTab('investment')">4. Investment Case</button>
-    <button type="button" data-tab="annuals" onclick="window.__evHubGoTab && window.__evHubGoTab('annuals')">5. Annual Financials</button>
-    <button type="button" data-tab="scenario" onclick="window.__evHubGoTab && window.__evHubGoTab('scenario')">6. Scenario Ranking</button>
-    <button type="button" data-tab="portfolio" onclick="window.__evHubGoTab && window.__evHubGoTab('portfolio')">7. Portfolio Calibration</button>
-    <button type="button" data-tab="advanced" onclick="window.__evHubGoTab && window.__evHubGoTab('advanced')">8. Advanced Model Settings</button>
-    <button type="button" data-tab="report" onclick="window.__evHubGoTab && window.__evHubGoTab('report')">9. Investor Report</button>
-    <button type="button" id="guideButton" class="guide-tab-button">ⓘ Guide</button>
+    <button type="button" data-tab="site" data-long="1. Site Screening" data-short="1. Screening" class="active" onclick="window.__evHubGoTab && window.__evHubGoTab('site')">1. Site Screening</button>
+    <button type="button" data-tab="demand" data-long="2. Demand Forecast" data-short="2. Demand" onclick="window.__evHubGoTab && window.__evHubGoTab('demand')">2. Demand Forecast</button>
+    <button type="button" data-tab="setup" data-long="3. Product Configuration" data-short="3. Product" onclick="window.__evHubGoTab && window.__evHubGoTab('setup')">3. Product Configuration</button>
+    <button type="button" data-tab="investment" data-long="4. Investment Case" data-short="4. Investment" onclick="window.__evHubGoTab && window.__evHubGoTab('investment')">4. Investment Case</button>
+    <button type="button" data-tab="annuals" data-long="5. Annual Financials" data-short="5. Annuals" onclick="window.__evHubGoTab && window.__evHubGoTab('annuals')">5. Annual Financials</button>
+    <button type="button" data-tab="scenario" data-long="6. Scenario Ranking" data-short="6. Ranking" onclick="window.__evHubGoTab && window.__evHubGoTab('scenario')">6. Scenario Ranking</button>
+    <button type="button" data-tab="portfolio" data-long="7. Portfolio Calibration" data-short="7. Calibration" onclick="window.__evHubGoTab && window.__evHubGoTab('portfolio')">7. Portfolio Calibration</button>
+    <button type="button" data-tab="advanced" data-long="8. Advanced Model Settings" data-short="8. Settings" onclick="window.__evHubGoTab && window.__evHubGoTab('advanced')">8. Advanced Model Settings</button>
+    <button type="button" data-tab="report" data-long="9. Investor Report" data-short="9. Report" onclick="window.__evHubGoTab && window.__evHubGoTab('report')">9. Investor Report</button>
+    <button type="button" id="guideButton" class="guide-tab-button" data-long="ⓘ Guide" data-short="ⓘ Guide">ⓘ Guide</button>
   </nav>
 
   <section class="workflow-stepper" id="workflowStepper" aria-label="Workflow progress">
@@ -49,6 +49,6 @@
 
   <main id="app" class="app"></main>
 
-  <script type="module" src="./js/app.js?v=35.24-responsive"></script>
+  <script type="module" src="./js/app.js?v=35.25-tabs-gradient"></script>
 </body>
 </html>

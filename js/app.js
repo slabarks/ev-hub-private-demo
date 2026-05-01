@@ -156,6 +156,139 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
+const DEMAND_BENCHMARK_PROFILES = {
+  motorway_plaza: {
+    label: "Motorway / plaza", shortLabel: "Motorway / plaza", relevance: 0.35, capture: 0.22, targetSessionsPer1000Aadt: 0.32, effectiveAadtCap: 45000,
+    basis: "AADT-led planned charging stop", note: "Best for visible motorway, junction, plaza or service-area sites where passing traffic is naturally stopping."
+  },
+  retail: {
+    label: "Retail park / shopping centre", shortLabel: "Retail / shopping", relevance: 0.30, capture: 0.20, targetSessionsPer1000Aadt: 1.20, effectiveAadtCap: 20000,
+    basis: "destination plus passing traffic", note: "Best for retail parks and shopping destinations where dwell time supports charging."
+  },
+  urban_service: {
+    label: "Urban service station", shortLabel: "Urban service", relevance: 0.22, capture: 0.16, targetSessionsPer1000Aadt: 0.19, highPlugTargetSessionsPer1000Aadt: 0.36, effectiveAadtCap: 35000,
+    basis: "local corridor / fuel-stop behaviour", note: "Best for fuel-stop and local corridor sites where access, signage and local competition matter strongly."
+  },
+  hotel_destination: {
+    label: "Hotel / destination", shortLabel: "Hotel / destination", relevance: 0.12, capture: 0.12, targetSessionsPer1000Aadt: 0.34, effectiveAadtCap: 12000,
+    basis: "destination-led demand", note: "Best for hotels, resorts, tourist or dwell-led locations where AADT can understate destination demand."
+  },
+  local_community: {
+    label: "Local / community", shortLabel: "Local / community", relevance: 0.06, capture: 0.08, targetSessionsPer1000Aadt: 0.06, effectiveAadtCap: 120000,
+    basis: "local repeat usage", note: "Best for community, sports or local-captive sites where AADT is less predictive."
+  },
+  review: {
+    label: "Review / custom", shortLabel: "Review", relevance: 0.24, capture: 0.16, targetSessionsPer1000Aadt: 0.80, effectiveAadtCap: 20000,
+    basis: "manual review required", note: "Use where the address has mixed signals or the AADT counter may not reflect the site entrance."
+  }
+};
+const DEMAND_PROFILE_ORDER = ["motorway_plaza", "retail", "urban_service", "hotel_destination", "local_community", "review"];
+function demandBenchmarkProfile(key) {
+  return DEMAND_BENCHMARK_PROFILES[key] || DEMAND_BENCHMARK_PROFILES.review;
+}
+function demandProfileLabel(key) {
+  return demandBenchmarkProfile(key).label;
+}
+function demandBenchmarkProfileOptions(selected) {
+  const opts = [`<option value="auto" ${selected === "auto" ? "selected" : ""}>Auto-suggest from address</option>`];
+  DEMAND_PROFILE_ORDER.forEach(key => opts.push(`<option value="${h(key)}" ${selected === key ? "selected" : ""}>${h(demandProfileLabel(key))}</option>`));
+  return opts.join("");
+}
+function inferDemandBenchmarkProfile() {
+  const ctx = state.siteContext || {};
+  const text = [state.inputs.siteAddress, ctx?.site?.name, ctx?.site?.display_address, ctx?.site?.source]
+    .filter(Boolean).join(" ").toLowerCase();
+  const aadt = Number(state.inputs.rawCorridorTrafficAadt || 0);
+  const chargers = Array.isArray(ctx?.chargers) ? ctx.chargers : [];
+  let key = "review";
+  let confidence = "Medium";
+  let reason = "Address does not strongly indicate a site type; review the profile manually.";
+  if (/\b(m[0-9]{1,2}|n[0-9]{1,2})\b|junction|jct|motorway|plaza|services|service\s+area|rest\s+area/.test(text)) {
+    key = "motorway_plaza";
+    confidence = aadt >= 10000 ? "Medium-high" : "Medium";
+    reason = "Address/nearby text suggests motorway, junction, plaza or planned-stop behaviour.";
+  }
+  if (/retail\s+park|shopping\s+centre|shopping\s+center|mall|supervalu|tesco|dunnes|lidl|aldi|business\s+park|industrial\s+estate/.test(text)) {
+    key = "retail";
+    confidence = "Medium-high";
+    reason = "Address text suggests a retail, business-park or shopping destination.";
+  }
+  if (/circle\s*k|corrib\s*oil|centra|service\s+station|filling\s+station|petrol|fuel|garage|forecourt/.test(text)) {
+    key = "urban_service";
+    confidence = "Medium-high";
+    reason = "Address/name suggests service-station or fuel-stop behaviour.";
+  }
+  if (/hotel|resort|spa|golf|tourist|destination/.test(text)) {
+    key = "hotel_destination";
+    confidence = "Medium-high";
+    reason = "Address/name suggests destination-led charging demand.";
+  }
+  if (/afc|gaa|club|community|sports|stadium|school|college|university/.test(text)) {
+    key = "local_community";
+    confidence = "Medium";
+    reason = "Address/name suggests local, community or repeat-use demand.";
+  }
+  if (key === "review" && aadt > 80000) {
+    confidence = "Medium-low";
+    reason = "AADT is very high but address context is unclear; use Review/custom until access and relevance are checked.";
+  } else if (key !== "review" && chargers.length >= 6) {
+    reason += " Nearby charger density is material, so capture should be reviewed against competition.";
+  }
+  return { key, confidence, reason };
+}
+function activeDemandBenchmarkProfileKey() {
+  const selected = state.inputs.benchmarkProfile || "auto";
+  return selected === "auto" ? inferDemandBenchmarkProfile().key : selected;
+}
+function applyDemandBenchmarkProfile(selected = state.inputs.benchmarkProfile || "auto") {
+  const suggestion = inferDemandBenchmarkProfile();
+  const profileKey = selected === "auto" ? suggestion.key : selected;
+  const profile = demandBenchmarkProfile(profileKey);
+  setInput("benchmarkProfile", selected);
+  setInput("siteRelevanceFactor", profile.relevance);
+  setInput("siteCaptureRate", profile.capture);
+  setInput("effectiveAadtCap", Number(profile.effectiveAadtCap || 0));
+  setInput("benchmarkTargetSessionsPer1000Aadt", Number(profile.targetSessionsPer1000Aadt || 0));
+}
+function demandBenchmarkProfileCard() {
+  const selected = state.inputs.benchmarkProfile || "auto";
+  const suggestion = inferDemandBenchmarkProfile();
+  const activeKey = activeDemandBenchmarkProfileKey();
+  const activeProfile = demandBenchmarkProfile(activeKey);
+  const rawAadt = Number(state.inputs.rawCorridorTrafficAadt || 0);
+  const selectedCap = Number(activeProfile.effectiveAadtCap || 0);
+  const effectiveAadt = selectedCap > 0 ? Math.min(rawAadt, selectedCap) : rawAadt;
+  const suggestedProfile = demandBenchmarkProfile(suggestion.key);
+  const confidenceClass = String(suggestion.confidence || "medium").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const heading = selected === "auto" ? `Suggested site type: ${suggestedProfile.label}` : `Selected site type: ${activeProfile.label}`;
+  const appliedLabel = selected === "auto" ? suggestedProfile.label : activeProfile.label;
+  return `<section class="benchmark-profile-card benchmark-profile-${h(confidenceClass)}">
+    <div class="benchmark-profile-banner">
+      <div class="benchmark-profile-copy">
+        <span class="eyebrow">Benchmark profile suggestion</span>
+        <div class="benchmark-title-row"><h3>${h(heading)}</h3><span class="benchmark-confidence ${h(confidenceClass)}">${h(suggestion.confidence)}</span></div>
+        <p>${h(suggestion.reason)}</p>
+      </div>
+      <div class="benchmark-profile-control">
+        <label for="benchmarkProfileSelect">Choose site type</label>
+        <div class="benchmark-control-row">
+          <select id="benchmarkProfileSelect">${demandBenchmarkProfileOptions(selected)}</select>
+          <button type="button" class="primary" id="applyBenchmarkProfile">Apply benchmark profile</button>
+        </div>
+        <small>Loads benchmark relevance, capture and AADT settings. You can still edit assumptions manually afterwards.</small>
+      </div>
+    </div>
+    <div class="benchmark-profile-active-note"><strong>Profile basis:</strong> ${h(appliedLabel)} · ${h(activeProfile.note)}</div>
+    <div class="benchmark-factor-grid">
+      <span><small>Relevance to apply</small><strong>${pct(activeProfile.relevance,0)}</strong></span>
+      <span><small>Capture to apply</small><strong>${pct(activeProfile.capture,0)}</strong></span>
+      <span><small>Effective AADT cap</small><strong>${number(selectedCap,0)}</strong></span>
+      <span><small>Effective AADT after cap</small><strong>${number(effectiveAadt,0)}</strong></span>
+      <span><small>Target sessions / 1k AADT</small><strong>${number(activeProfile.targetSessionsPer1000Aadt,2)}</strong></span>
+    </div>
+  </section>`;
+}
+
 function leaseRiskCard(f) {
   const leaseTerm = Number(state.inputs.leaseTerm || 0);
   const horizon = Number(state.inputs.investmentHorizon || f.horizon || 0);
@@ -223,7 +356,7 @@ function assignDefaults(keys) {
   });
 }
 
-const DEMAND_KEYS = ["annualBevShareGrowthRate", "siteCaptureRate", "siteLimitationFactor", "peakWindowShare", "peakHourShareWithinPeakWindow", "averageSessionEnergy", "baseFleetPlanningPower"];
+const DEMAND_KEYS = ["benchmarkProfile", "effectiveAadtCap", "benchmarkTargetSessionsPer1000Aadt", "annualBevShareGrowthRate", "siteCaptureRate", "siteLimitationFactor", "peakWindowShare", "peakHourShareWithinPeakWindow", "averageSessionEnergy", "baseFleetPlanningPower"];
 const SETUP_INPUT_KEYS = ["netSellingPriceExVat", "electricityCost", "grantSupport", "groundRentPerEvSpace", "leaseTerm", "landlordGpShare", "landlordGrossSalesShare", "batteryReplacementThresholdSoh", "chargerEquipmentReplacementCycleYears"];
 const SITE_RESET_INPUT_KEYS = ["siteAddress", "rawCorridorTrafficAadt"];
 function resetPage(tab) {
@@ -235,7 +368,7 @@ function resetPage(tab) {
     state.filters.category = "Any";
     state.filters.manualAadtOverride = false;
   }
-  if (tab === "demand") assignDefaults(DEMAND_KEYS);
+  if (tab === "demand") assignDefaults([...DEMAND_KEYS, "siteRelevanceFactor"]);
   if (tab === "setup") {
     assignDefaults(SETUP_INPUT_KEYS);
     Object.assign(state.config, DEFAULT_SELECTED_CONFIG);
@@ -524,7 +657,7 @@ function renderDemandDashboard(r) {
       ${demandCard(demandIcon("ccs"), "Required plugs", "peak simultaneous charging points needed", number(first.requiredPlugs || 0, 1), number(final.requiredPlugs || 0, 1))}
       ${demandCard(demandIcon("grid"), "Required MIC", "grid capacity needed without battery", number(first.requiredMicNoBatteryKva || 0, 0), number(final.requiredMicNoBatteryKva || 0, 0), "kVA")}
     </div></section>` },
-    { id: "assumptions", title: "Editable demand assumptions", html: `<div class="notice aadt-help"><strong>AADT baseline</strong><br>${h(aadtHelpText())}</div><div class="panel">
+    { id: "assumptions", title: "Editable demand assumptions", html: `<div class="notice aadt-help"><strong>AADT baseline</strong><br>${h(aadtHelpText())}</div>${demandBenchmarkProfileCard()}<div class="panel">
       <h3>Editable demand assumptions</h3>
       <div class="input-grid three">
         ${inputField("annualBevShareGrowthRate", "Annual BEV share growth rate", { step: 0.01, help: "Compounds the starting BEV share each model year, capped by the model BEV share cap." })}
@@ -1729,7 +1862,7 @@ const DEVELOPER_GROUPS = [
 
 const ADVANCED_EXCLUDED_KEYS = new Set([...DEMAND_KEYS, ...SETUP_INPUT_KEYS, "siteAddress", "rawCorridorTrafficAadt", "trafficSourceYear", "investmentHorizon", "modelStartYear", "codYear"]);
 const UNIT_MAP = {
-  annualTrafficGrowthRate: "%", siteRelevanceFactor: "%", onRoadBevShareAtCod: "%", bevShareCap: "%", fastChargePropensity: "%",
+  annualTrafficGrowthRate: "%", siteRelevanceFactor: "%", onRoadBevShareAtCod: "%", bevShareCap: "%", fastChargePropensity: "%", effectiveAadtCap: "veh/day", benchmarkTargetSessionsPer1000Aadt: "sessions/1k AADT",
   rampUpYear1: "%", rampUpYear2: "%", annualFailureRateStarting: "%", downtimeImpactFactor: "%",
   grossSellingPriceInclVat: "€/kWh", annualTariffEscalation: "%", annualElectricityCostEscalation: "%", discountRate: "%",
   gridThresholdModeling: "kVA", powerFactor: "%", esbConnectionApplicationFee: "€",
@@ -1756,6 +1889,9 @@ function advancedStep(unit) {
 }
 const DEVELOPER_NOTES = {
   rawCorridorTrafficAadt: "Raw traffic count used at the start of the model demand chain. It is multiplied by traffic growth and site relevance before BEV share is applied.",
+  benchmarkProfile: "Site-type benchmark profile used to load relevance, capture, effective AADT cap and target sessions/1k AADT.",
+  effectiveAadtCap: "Optional cap applied to matched AADT before the demand chain where only part of passing traffic is commercially relevant.",
+  benchmarkTargetSessionsPer1000Aadt: "Portfolio benchmark capture metric used as guidance for the selected site type.",
   trafficSourceYear: "Base year of the traffic count. The model grows the AADT from this year to the COD year and then through the model horizon.",
   annualTrafficGrowthRate: "Compounds raw corridor traffic year by year before applying site relevance and BEV share.",
   siteRelevanceFactor: "Converts raw corridor AADT into traffic considered relevant to the site.",
@@ -1982,6 +2118,18 @@ function wirePage(r) {
       setInput(key, value);
       preserveScrollRender();
     });
+  });
+
+  const benchmarkProfileSelect = el("benchmarkProfileSelect");
+  if (benchmarkProfileSelect) benchmarkProfileSelect.addEventListener("change", e => {
+    setInput("benchmarkProfile", e.target.value);
+    preserveScrollRender();
+  });
+  const applyBenchmarkProfileButton = el("applyBenchmarkProfile");
+  if (applyBenchmarkProfileButton) applyBenchmarkProfileButton.addEventListener("click", () => {
+    const selected = el("benchmarkProfileSelect")?.value || state.inputs.benchmarkProfile || "auto";
+    applyDemandBenchmarkProfile(selected);
+    preserveScrollRender();
   });
 
   document.querySelectorAll("[data-config]").forEach(node => {

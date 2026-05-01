@@ -8,7 +8,13 @@ export function calculateDemand(inputs) {
 
   for (let t = 0; t < horizon; t += 1) {
     const year = startYear + t;
-    const rawCorridorTraffic = inputs.rawCorridorTrafficAadt * Math.pow(1 + inputs.annualTrafficGrowthRate, startYear - trafficSourceYear + t);
+    const trafficGrowthFactor = Math.pow(1 + inputs.annualTrafficGrowthRate, startYear - trafficSourceYear + t);
+    const matchedRawCorridorTraffic = Number(inputs.rawCorridorTrafficAadt || 0) * trafficGrowthFactor;
+    const effectiveAadtCap = Number(inputs.effectiveAadtCap || 0);
+    const effectiveBaseAadt = effectiveAadtCap > 0
+      ? Math.min(Number(inputs.rawCorridorTrafficAadt || 0), effectiveAadtCap)
+      : Number(inputs.rawCorridorTrafficAadt || 0);
+    const rawCorridorTraffic = effectiveBaseAadt * trafficGrowthFactor;
     const relevantTraffic = rawCorridorTraffic * inputs.siteRelevanceFactor;
     const bevShare = Math.min(inputs.bevShareCap, inputs.onRoadBevShareAtCod * Math.pow(1 + inputs.annualBevShareGrowthRate, t));
     const bevDailyTraffic = relevantTraffic * bevShare;
@@ -41,6 +47,8 @@ export function calculateDemand(inputs) {
       index: t + 1,
       year,
       rawCorridorTraffic,
+      matchedRawCorridorTraffic,
+      effectiveAadtCap,
       relevantTraffic,
       bevShare,
       bevDailyTraffic,

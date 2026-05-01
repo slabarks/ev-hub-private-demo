@@ -1898,17 +1898,30 @@ function renderInvestorReport(r) {
 function updateResponsiveTabNavigation() {
   const tabs = document.getElementById("tabs");
   if (!tabs) return;
-  const width = window.innerWidth || document.documentElement.clientWidth || 1280;
-  const compact = width <= 1279;
-  const wrap = width <= 1024 && width > 720;
-  tabs.classList.toggle("tabs-compact", compact);
-  tabs.classList.toggle("tabs-wrap", wrap);
-  tabs.querySelectorAll("button").forEach(btn => {
-    const longLabel = btn.dataset.long || btn.textContent.trim();
-    const shortLabel = btn.dataset.short || longLabel;
-    btn.textContent = compact ? shortLabel : longLabel;
-    btn.title = longLabel;
-  });
+  const buttons = Array.from(tabs.querySelectorAll("button"));
+  if (!buttons.length) return;
+  const applyLabels = (mode = "long") => {
+    buttons.forEach(btn => {
+      const longLabel = btn.dataset.long || btn.textContent.trim();
+      const shortLabel = btn.dataset.short || longLabel;
+      btn.textContent = mode === "short" ? shortLabel : longLabel;
+      btn.title = longLabel;
+    });
+  };
+  const totalButtonWidth = () => {
+    const gap = Number.parseFloat(getComputedStyle(tabs).columnGap || getComputedStyle(tabs).gap || "8") || 8;
+    return Math.ceil(buttons.reduce((sum, btn) => sum + btn.offsetWidth, 0) + gap * Math.max(0, buttons.length - 1));
+  };
+  tabs.classList.remove("tabs-compact", "tabs-wrap");
+  applyLabels("long");
+  void tabs.offsetWidth;
+  const available = Math.max(0, tabs.clientWidth - 6);
+  if (totalButtonWidth() <= available) return;
+  tabs.classList.add("tabs-compact");
+  applyLabels("short");
+  void tabs.offsetWidth;
+  if (totalButtonWidth() <= available) return;
+  tabs.classList.add("tabs-wrap");
 }
 
 function render() {

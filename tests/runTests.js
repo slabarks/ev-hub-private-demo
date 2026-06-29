@@ -63,6 +63,42 @@ assert.equal(scenarios.totalCombinationsGenerated, 6, "Excel scenario compare ha
 assert.ok(scenarios.scenarios.length === 6, "Scenario matrix must contain six scenarios");
 assert.ok(scenarios.recommended || scenarios.technicallyFeasibleCombinations === 0, "Recommendation exists when feasible scenarios exist, otherwise no infeasible recommendation is made");
 
+const rightSizeInputs = {
+  ...inputs,
+  rawCorridorTrafficAadt: 20000,
+  effectiveAadtCap: 0,
+  benchmarkTargetSessionsPer1000Aadt: 0
+};
+const rightSizeDemand = calculateDemand(rightSizeInputs);
+const rightSizeScenarios = compareExcelScenarios(rightSizeInputs, rightSizeDemand, 20);
+const rightSizedAutelDistributed = rightSizeScenarios.scenarios.find(s => s.name === "Autel Distributed — Grid + Battery");
+assert.ok(rightSizedAutelDistributed, "Autel distributed battery scenario should be present");
+assert.equal(rightSizedAutelDistributed.config.selectedMicKva, 100, "Right-size regression should keep the low-MIC distributed battery case");
+assert.equal(rightSizedAutelDistributed.config.dispenserCount, 3, "Right-size regression should keep the 6-plug distributed layout");
+assert.equal(rightSizedAutelDistributed.config.batterySize, "Autel 3x125kW/261kWh", "Distributed ranking should choose the smallest feasible battery envelope for the same MIC and plug layout, not the oversized 7-unit envelope");
+assert.ok(rightSizedAutelDistributed.technical.feasible, "Right-sized distributed battery scenario should remain technically feasible");
+const rightSizedAutelStandalone = rightSizeScenarios.scenarios.find(s => s.name === "Autel Standalone — Grid + Battery");
+assert.ok(rightSizedAutelStandalone, "Autel standalone battery scenario should be present");
+assert.equal(rightSizedAutelStandalone.config.selectedMicKva, 100, "Right-size regression should keep the low-MIC standalone battery case");
+assert.equal(rightSizedAutelStandalone.config.chargerCount, 3, "Right-size regression should keep the 6-plug standalone layout");
+assert.equal(rightSizedAutelStandalone.config.batterySize, "Autel 3x125kW/261kWh", "Standalone ranking should choose the smallest feasible battery envelope for the same MIC and charger layout, not the oversized 7-unit envelope");
+assert.ok(rightSizedAutelStandalone.technical.feasible, "Right-sized standalone battery scenario should remain technically feasible");
+
+const highBatteryRightSizeInputs = {
+  ...inputs,
+  rawCorridorTrafficAadt: 60000,
+  effectiveAadtCap: 0,
+  benchmarkTargetSessionsPer1000Aadt: 0
+};
+const highBatteryRightSizeDemand = calculateDemand(highBatteryRightSizeInputs);
+const highBatteryRightSizeScenarios = compareExcelScenarios(highBatteryRightSizeInputs, highBatteryRightSizeDemand, 20);
+const highBatteryAutelDistributed = highBatteryRightSizeScenarios.scenarios.find(s => s.name === "Autel Distributed — Grid + Battery");
+assert.ok(highBatteryAutelDistributed, "High-demand Autel distributed battery scenario should be present");
+assert.equal(highBatteryAutelDistributed.config.selectedMicKva, 400, "High-demand regression should use the 400 kVA distributed battery case");
+assert.equal(highBatteryAutelDistributed.config.dispenserCount, 7, "High-demand regression should use the 14-plug distributed layout");
+assert.equal(highBatteryAutelDistributed.config.batterySize, "Autel 5x125kW/261kWh", "Distributed ranking should calculate the minimum required battery envelope before ROI sorting, not retain the oversized 7-unit envelope");
+assert.ok(highBatteryAutelDistributed.technical.feasible, "High-demand right-sized distributed battery scenario should remain technically feasible");
+
 const zeroDemand = calculateDemand({ ...inputs, rawCorridorTrafficAadt: 0 });
 assert.equal(zeroDemand.years[0].annualEnergyDemandedKwh, 0, "Zero traffic produces zero demand energy");
 

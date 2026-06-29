@@ -2156,3 +2156,30 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   .benchmark-factor-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .benchmark-profile-card { padding: 14px; border-radius: 20px; }
 }
+
+/* v35.32 live calibration upload card */
+.live-calibration-card {
+  margin-top: 18px;
+  background: linear-gradient(135deg, rgba(230,246,236,.96), rgba(255,255,255,.96) 58%, rgba(245,250,205,.58));
+  border-color: #c8e9d4;
+}
+.live-calibration-card.stored {
+  background: linear-gradient(135deg, rgba(255,249,232,.96), rgba(255,255,255,.96) 62%, rgba(238,247,251,.72));
+  border-color: #efd38e;
+}
+.live-calibration-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.live-calibration-head h3 { margin: 3px 0 6px; font-size: 20px; letter-spacing: -.03em; }
+.live-calibration-head p { margin: 0; max-width: 820px; color: var(--muted); }
+.live-calibration-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.live-calibration-kpis { margin-top: 10px; }
+@media (max-width: 760px) {
+  .live-calibration-head { flex-direction: column; }
+  .live-calibration-actions { align-items: stretch; }
+  .live-calibration-actions button, .live-calibration-actions .file-button { width: 100%; text-align: center; }
+}

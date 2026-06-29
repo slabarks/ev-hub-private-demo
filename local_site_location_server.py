@@ -2496,6 +2496,318 @@ def _extract_multipart_file(body: bytes, content_type: str) -> tuple[str, bytes]
     raise ValueError("No uploaded file field named 'file' was found")
 
 
+def _extract_multipart_files(body: bytes, content_type: str) -> list[tuple[str, bytes]]:
+    match = re.search(r"boundary=([^;]+)", content_type or "")
+    if not match:
+        raise ValueError("Missing multipart boundary")
+    boundary = match.group(1).strip().strip('"').encode()
+    files: list[tuple[str, bytes]] = []
+    for part in body.split(b"--" + boundary):
+        if b"Content-Disposition" not in part:
+            continue
+        header_blob, _, data = part.partition(b"\r\n\r\n")
+        if not data:
+            continue
+        headers = header_blob.decode("utf-8", errors="replace")
+        fname_match = re.search(r'filename="([^"]*)"', headers)
+        if not fname_match:
+            continue
+        filename = fname_match.group(1).strip() or "uploaded-file"
+        data = data.rsplit(b"\r\n", 1)[0]
+        if data:
+            files.append((filename, data))
+    if not files:
+        raise ValueError("No uploaded calibration files were found")
+    return files
+
+
+def _xlsx_col_index(cell_ref: str) -> int:
+    letters = re.sub(r"[^A-Z]", "", (cell_ref or "").upper())
+    idx = 0
+    for ch in letters:
+        idx = idx * 26 + (ord(ch) - ord("A") + 1)
+    return max(0, idx - 1)
+
+
+def _xlsx_text(node) -> str:
+    if node is None:
+        return ""
+    return "".join(node.itertext())
+
+
+def _xlsx_rows_stdlib(raw: bytes, max_rows: int | None = None) -> list[list[object]]:
+    """Small XLSX reader for flat dashboard export workbooks.
+
+    This intentionally avoids turning the app into a general Excel processor. It
+    supports the simple worksheet shape used by the dashboard exports: one sheet,
+    string headers, and numeric/date values.
+    """
+    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    rel_ns = {"r": "http://schemas.openxmlformats.org/package/2006/relationships"}
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        shared: list[str] = []
+        if "xl/sharedStrings.xml" in zf.namelist():
+            root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+            for si in root.findall("m:si", ns):
+                shared.append(_xlsx_text(si))
+        workbook = ET.fromstring(zf.read("xl/workbook.xml"))
+        first_sheet = workbook.find("m:sheets/m:sheet", ns)
+        if first_sheet is None:
+            raise ValueError("Excel workbook has no worksheets")
+        rel_id = first_sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+        rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
+        target = None
+        for rel in rels.findall("r:Relationship", rel_ns):
+            if rel.attrib.get("Id") == rel_id:
+                target = rel.attrib.get("Target")
+                break
+        if not target:
+            target = "worksheets/sheet1.xml"
+        sheet_path = "xl/" + target.lstrip("/")
+        sheet_path = sheet_path.replace("xl/xl/", "xl/")
+        if sheet_path not in zf.namelist():
+            sheet_path = "xl/worksheets/sheet1.xml"
+        root = ET.fromstring(zf.read(sheet_path))
+        rows: list[list[object]] = []
+        for row in root.findall(".//m:sheetData/m:row", ns):
+            values: list[object] = []
+            for cell in row.findall("m:c", ns):
+                col_idx = _xlsx_col_index(cell.attrib.get("r", ""))
+                while len(values) < col_idx:
+                    values.append(None)
+                cell_type = cell.attrib.get("t")
+                val_node = cell.find("m:v", ns)
+                if cell_type == "s":
+                    try:
+                        value = shared[int(val_node.text)] if val_node is not None and val_node.text is not None else ""
+                    except Exception:
+                        value = ""
+                elif cell_type == "inlineStr":
+                    value = _xlsx_text(cell.find("m:is", ns))
+                else:
+                    raw_value = val_node.text if val_node is not None else ""
+                    if raw_value == "":
+                        value = ""
+                    else:
+                        try:
+                            num = float(raw_value)
+                            value = int(num) if abs(num - int(num)) < 1e-9 else num
+                        except Exception:
+                            value = raw_value
+                values.append(value)
+            rows.append(values)
+            if max_rows and len(rows) >= max_rows:
+                break
+        return rows
+
+
+def _dashboard_matrix_from_upload(filename: str, raw: bytes) -> list[list[object]]:
+    lower = (filename or "").lower()
+    if lower.endswith((".xlsx", ".xlsm")) or raw[:2] == b"PK":
+        try:
+            import openpyxl  # optional, faster and more complete when available
+            wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+            ws = wb.worksheets[0]
+            return [list(row) for row in ws.iter_rows(values_only=True)]
+        except Exception:
+            return _xlsx_rows_stdlib(raw)
+    text = raw.decode("utf-8-sig", errors="replace")
+    return [list(row) for row in csv.reader(io.StringIO(text))]
+
+
+def _live_header_key(value) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()).strip("_")
+
+
+def _live_number(value) -> float:
+    if value is None or value == "":
+        return 0.0
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        return float(value)
+    text = str(value).replace(",", "").replace("€", "").strip()
+    try:
+        return float(text)
+    except Exception:
+        return 0.0
+
+
+def _live_parse_date(value):
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    if isinstance(value, (int, float)) and 20000 < float(value) < 70000:
+        return (dt.date(1899, 12, 30) + dt.timedelta(days=int(value)))
+    text = str(value or "").strip()
+    for fmt in ("%d %b %Y", "%d %B %Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+        try:
+            return dt.datetime.strptime(text, fmt).date()
+        except Exception:
+            pass
+    return None
+
+
+def _normalise_live_site_key(value: str) -> str:
+    text = str(value or "").lower()
+    text = text.replace("&", " and ")
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    text = re.sub(r"\b(dc|kw|kwh|epower|everyday|ev|charger|charging)\b", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _clean_live_site_name(charge_point_name: str) -> str:
+    name = str(charge_point_name or "").strip()
+    name = re.sub(r"^ePower\s+eVeryday\s+-\s+", "", name, flags=re.I)
+    name = re.sub(r"\s*-?\s*eP\d+\b.*$", "", name, flags=re.I).strip(" -")
+    replacements = {
+        "Ahern's Centra Carrigtwohill": "Aherns Centra - Carrigtwohill",
+        "Ahern's Centra Castlemartyr": "Ahern's Centra - Castlemartyr",
+        "Aherne's Circle K Thurles": "Circle K - Aherns Service Station",
+        "Corrib Oil, Lee Garage, Cork": "Corrib Oil - Cork City",
+        "Corrib Oil Fermoy": "Corrib Oil - Fermoy",
+        "Greenhills Hotel DC": "Greenhills Hotel",
+        "The Brehon Hotel DC": "The Brehon Hotel",
+        "Mallow N20 Plaza": "Mallow Plaza",
+        "Long Mile Road - Finline Furniture": "Finline Furniture - Dublin",
+        "Supervalu Tipperary": "Supervalu - Tipperary",
+        "Banner Plaza Ennis, Junction 12": "Banner Plaza Ennis Junction 12",
+        "Fota Island Resort 180 kW DC": "Fota Island Resort",
+        "SCG Cobh golf club": "SCG - Cobh golf club",
+        "SCG Dundalk Golf Club": "SCG - Dundalk Golf Club",
+    }
+    return replacements.get(name, name)
+
+
+def _header_index(headers: list[object], *candidates: str):
+    normalised = [_live_header_key(h) for h in headers]
+    for candidate in candidates:
+        key = _live_header_key(candidate)
+        if key in normalised:
+            return normalised.index(key)
+    return None
+
+
+def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
+    errors: list[str] = []
+    warnings: list[str] = []
+    parsed_sources: list[str] = []
+    site_days: dict[str, dict] = {}
+    total_rows = 0
+
+    for filename, raw in files:
+        lower = filename.lower()
+        if not lower.endswith((".xlsx", ".xlsm", ".csv")):
+            warnings.append(f"Ignored unsupported file type: {filename}")
+            continue
+        try:
+            matrix = _dashboard_matrix_from_upload(filename, raw)
+        except Exception as exc:
+            errors.append(f"{filename}: could not read file ({exc})")
+            continue
+        if not matrix or len(matrix) < 2:
+            warnings.append(f"{filename}: no data rows found")
+            continue
+        headers = matrix[0]
+        date_idx = _header_index(headers, "Date of start_time", "date")
+        cp_idx = _header_index(headers, "charge_point_name")
+        kwh_idx = _header_index(headers, "Total charge_amount")
+        net_idx = _header_index(headers, "Total net")
+        sessions_idx = _header_index(headers, "transaction_id Count")
+        if cp_idx is None or kwh_idx is None or date_idx is None:
+            warnings.append(f"{filename}: not a charger-level daily actuals export; kept as supporting file only")
+            continue
+        parsed_sources.append(filename)
+        for row in matrix[1:]:
+            total_rows += 1
+            if len(row) <= max(date_idx, cp_idx, kwh_idx):
+                continue
+            date = _live_parse_date(row[date_idx])
+            raw_name = row[cp_idx]
+            if not date or not raw_name:
+                continue
+            site_name = _clean_live_site_name(str(raw_name))
+            site_key = _normalise_live_site_key(site_name)
+            if not site_key:
+                continue
+            site = site_days.setdefault(site_key, {"siteName": site_name, "siteKey": site_key, "daily": {}, "chargerNames": set(), "sourceFiles": set()})
+            site["chargerNames"].add(str(raw_name))
+            site["sourceFiles"].add(filename)
+            day = site["daily"].setdefault(date, {"kwh": 0.0, "net": 0.0, "sessions": 0.0})
+            day["kwh"] += _live_number(row[kwh_idx] if kwh_idx is not None and kwh_idx < len(row) else 0)
+            day["net"] += _live_number(row[net_idx] if net_idx is not None and net_idx < len(row) else 0)
+            day["sessions"] += _live_number(row[sessions_idx] if sessions_idx is not None and sessions_idx < len(row) else 0)
+
+    if not parsed_sources:
+        raise ValueError("No usable charger-level daily export was found. Upload Daily_Charger_kWh.xlsx or another file containing Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns.")
+
+    all_dates = [d for site in site_days.values() for d in site["daily"].keys()]
+    if not all_dates:
+        raise ValueError("The uploaded charger-level export did not contain any readable dated rows.")
+    latest_date = max(all_dates)
+    rolling_start = latest_date - dt.timedelta(days=29)
+    trailing_start = latest_date - dt.timedelta(days=364)
+    actuals: list[dict] = []
+    for site in site_days.values():
+        daily = site["daily"]
+        active_dates = [d for d, vals in daily.items() if vals.get("kwh", 0) > 0 or vals.get("sessions", 0) > 0 or vals.get("net", 0) > 0]
+        first_active = min(active_dates) if active_dates else None
+        data_days = (latest_date - first_active).days + 1 if first_active else 0
+        rolling_vals = [vals for d, vals in daily.items() if rolling_start <= d <= latest_date]
+        trailing_vals = [vals for d, vals in daily.items() if trailing_start <= d <= latest_date]
+        rolling_kwh = sum(v["kwh"] for v in rolling_vals)
+        rolling_net = sum(v["net"] for v in rolling_vals)
+        rolling_sessions = sum(v["sessions"] for v in rolling_vals)
+        trailing_kwh = sum(v["kwh"] for v in trailing_vals)
+        trailing_net = sum(v["net"] for v in trailing_vals)
+        trailing_sessions = sum(v["sessions"] for v in trailing_vals)
+        tier = "mature" if data_days >= 365 else "near" if data_days >= 300 else "early"
+        actual = {
+            "siteName": site["siteName"],
+            "siteKey": site["siteKey"],
+            "actual": {
+                "rolling30Kwh": round(rolling_kwh, 3),
+                "rolling30Sessions": round(rolling_sessions, 3),
+                "rolling30NetRevenue": round(rolling_net, 2),
+                "dailyKwh": round(rolling_kwh / 30, 4),
+                "dailySessions": round(rolling_sessions / 30, 4),
+                "asOfDate": latest_date.isoformat(),
+                "sourceFile": ", ".join(sorted(site["sourceFiles"])),
+                "source": "Uploaded live calibration files",
+            },
+            "maturity": {"dataDays": int(data_days), "tier": tier},
+            "diagnostics": {
+                "firstActiveDate": first_active.isoformat() if first_active else None,
+                "latestDate": latest_date.isoformat(),
+                "chargerCount": len(site["chargerNames"]),
+                "chargerNames": sorted(site["chargerNames"]),
+            }
+        }
+        if data_days >= 365:
+            actual["actual"].update({
+                "annualKwh": round(trailing_kwh, 3),
+                "annualSessions": round(trailing_sessions, 3),
+                "annualNetRevenue": round(trailing_net, 2),
+            })
+        actuals.append(actual)
+
+    actuals.sort(key=lambda x: x["siteName"].lower())
+    return {
+        "ok": True,
+        "source": "uploaded_live_calibration_files",
+        "status": "active",
+        "latestDate": latest_date.isoformat(),
+        "rollingWindowDays": 30,
+        "siteActuals": actuals,
+        "siteCount": len(actuals),
+        "rowCount": total_rows,
+        "parsedFiles": parsed_sources,
+        "warnings": warnings[:25],
+        "errors": [],
+        "message": f"Uploaded live calibration actuals loaded successfully. Latest actuals date: {latest_date.isoformat()}."
+    }
+
+
 def _auth_token() -> str:
     """Stable HMAC token for the demo password session cookie."""
     if not DEMO_PASSWORD:
@@ -2666,6 +2978,30 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"ok": True, "traffic": traffic})
             except Exception as exc:
                 return self._send_json({"ok": False, "error": str(exc)})
+
+        if parsed.path == "/api/import-live-calibration":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0:
+                    return self._send_json({"ok": False, "error": "No uploaded files were received."}, status=400)
+                if length > 80 * 1024 * 1024:
+                    return self._send_json({"ok": False, "error": "Upload is too large. Please upload the dashboard Excel exports only."}, status=400)
+                content_type = self.headers.get("Content-Type", "")
+                body = self.rfile.read(length)
+                files = _extract_multipart_files(body, content_type)
+                parsed_actuals = parse_live_calibration_uploads(files)
+                return self._send_json(parsed_actuals)
+            except Exception as exc:
+                return self._send_json({
+                    "ok": False,
+                    "error": str(exc),
+                    "message": "Live calibration upload failed. The app will continue using the stored calibration dataset.",
+                    "what_to_do": [
+                        "Upload Daily_Charger_kWh.xlsx or equivalent charger-level daily export.",
+                        "Check that the file contains Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns.",
+                        "If the export format changed, re-export from the dashboard and try again."
+                    ]
+                }, status=400)
 
         if parsed.path == "/api/import-tii-monthly-volume":
             try:

@@ -156,6 +156,104 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
+const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v1";
+let portfolioLiveActualsSnapshot = (() => {
+  try {
+    const raw = sessionStorage.getItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+})();
+let portfolioLiveUploadError = null;
+
+function normalisePortfolioLiveKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(dc|kw|kwh|epower|everyday|ev|charger|charging)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function portfolioLiveActualIndex(snapshot = portfolioLiveActualsSnapshot) {
+  const index = new Map();
+  (snapshot?.siteActuals || []).forEach(item => {
+    const keys = [item.siteKey, item.siteName, item.name].map(normalisePortfolioLiveKey).filter(Boolean);
+    keys.forEach(key => index.set(key, item));
+  });
+  return index;
+}
+function portfolioMergeLiveActual(site, liveItem) {
+  if (!liveItem?.actual) return site;
+  const liveActual = { ...liveItem.actual };
+  ["annualKwh", "annualSessions", "annualNetRevenue"].forEach(key => {
+    if (!Number.isFinite(Number(liveActual[key])) || Number(liveActual[key]) <= 0) delete liveActual[key];
+  });
+  return {
+    ...site,
+    actual: { ...(site.actual || {}), ...liveActual },
+    maturity: { ...(site.maturity || {}), ...(liveItem.maturity || {}) },
+    liveActuals: {
+      source: "uploaded",
+      siteName: liveItem.siteName,
+      asOfDate: liveActual.asOfDate || portfolioLiveActualsSnapshot?.latestDate,
+      sourceFile: liveActual.sourceFile || portfolioLiveActualsSnapshot?.parsedFiles?.join(", "),
+      diagnostics: liveItem.diagnostics || {}
+    }
+  };
+}
+function portfolioSites() {
+  const liveIndex = portfolioLiveActualIndex();
+  return PORTFOLIO_CALIBRATION_SITES.map(site => {
+    const candidateKeys = [site.name, site.id, site.modelEquivalentSummary]
+      .map(normalisePortfolioLiveKey)
+      .filter(Boolean);
+    const liveItem = candidateKeys.map(key => liveIndex.get(key)).find(Boolean);
+    return liveItem ? portfolioMergeLiveActual(site, liveItem) : site;
+  });
+}
+function portfolioLiveActualStatus(sites = portfolioSites()) {
+  const liveIndex = portfolioLiveActualIndex();
+  const matchedCleanSites = sites.filter(s => s.liveActuals?.source === "uploaded").length;
+  const actuals = portfolioLiveActualsSnapshot?.siteActuals || [];
+  const matchedKeys = new Set(sites.filter(s => s.liveActuals?.source === "uploaded").map(s => normalisePortfolioLiveKey(s.liveActuals.siteName || s.name)));
+  const additional = actuals.filter(a => !matchedKeys.has(normalisePortfolioLiveKey(a.siteName))).length;
+  return { matchedCleanSites, additional, uploadedSiteCount: actuals.length, hasLive: !!portfolioLiveActualsSnapshot, liveIndexSize: liveIndex.size };
+}
+function savePortfolioLiveActuals(snapshot) {
+  portfolioLiveActualsSnapshot = snapshot;
+  portfolioLiveUploadError = null;
+  try { sessionStorage.setItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY, JSON.stringify(snapshot)); } catch (_) {}
+}
+function clearPortfolioLiveActuals() {
+  portfolioLiveActualsSnapshot = null;
+  portfolioLiveUploadError = null;
+  try { sessionStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY); } catch (_) {}
+}
+function portfolioLiveCalibrationCard(sites = portfolioSites()) {
+  const status = portfolioLiveActualStatus(sites);
+  const hasLive = status.hasLive;
+  const latest = portfolioLiveActualsSnapshot?.latestDate || "—";
+  const parsedFiles = portfolioLiveActualsSnapshot?.parsedFiles || [];
+  const warnings = portfolioLiveActualsSnapshot?.warnings || [];
+  const errorHtml = portfolioLiveUploadError ? `<div class="notice bad"><strong>Live calibration upload failed.</strong><br>${h(portfolioLiveUploadError.message || portfolioLiveUploadError.error || "Could not validate uploaded files.")}<br><span class="muted small">The app is still using the stored calibration dataset. Upload the charger-level daily export again and retry.</span></div>` : "";
+  return `<section class="panel live-calibration-card ${hasLive ? "active" : "stored"}">
+    <div class="live-calibration-head">
+      <div><span class="eyebrow">Live calibration data</span><h3>${hasLive ? "Uploaded actuals active" : "Using stored calibration data"}</h3><p>${hasLive ? "Portfolio Calibration is using validated uploaded operating-hub actuals for this browser session." : "Upload the latest dashboard exports to refresh actual kWh, sessions and revenue without changing the built-in fallback dataset."}</p></div>
+      <span class="badge ${hasLive ? "good" : "warn"}">${hasLive ? "Live session" : "Stored fallback"}</span>
+    </div>
+    <div class="portfolio-summary-grid live-calibration-kpis">${kpi("Latest actuals date", h(latest), hasLive ? "from uploaded files" : "stored app library")}${kpi("Matched clean sites", `${number(status.matchedCleanSites,0)} / ${number(PORTFOLIO_CALIBRATION_SITES.length,0)}`, "used in calibration table")}${kpi("Additional live sites", number(status.additional,0), "detected but not in clean set")}${kpi("Uploaded site rows", number(status.uploadedSiteCount,0), hasLive ? "validated live sites" : "none uploaded")}</div>
+    ${errorHtml}
+    ${warnings.length ? `<div class="notice warn"><strong>Upload warnings</strong><br>${warnings.slice(0,4).map(h).join("<br>")}</div>` : ""}
+    <div class="live-calibration-actions">
+      <label class="file-button" for="portfolioCalibrationFiles">Choose calibration Excel files</label>
+      <input id="portfolioCalibrationFiles" type="file" accept=".xlsx,.xlsm,.csv" multiple style="display:none" />
+      <button type="button" class="primary" id="uploadPortfolioCalibrationFiles">Validate and use uploaded actuals</button>
+      ${hasLive ? `<button type="button" class="secondary" id="clearPortfolioCalibrationUpload">Use stored app data</button>` : ""}
+    </div>
+    <div id="portfolioCalibrationUploadStatus" class="muted small">${hasLive ? `Source files: ${h(parsedFiles.join(", ") || "uploaded dashboard export")}` : "Select the exported calibration files. The app will only use them if validation passes."}</div>
+  </section>`;
+}
+
 const DEMAND_BENCHMARK_PROFILES = {
   motorway_plaza: {
     label: "Motorway / plaza", shortLabel: "Motorway / plaza", relevance: 0.35, capture: 0.22, targetSessionsPer1000Aadt: 0.32, effectiveAadtCap: 45000,
@@ -1221,11 +1319,12 @@ function portfolioAnnualOperatingValues(site, metrics = portfolioOperatingMetric
   const annualSessions = explicitAnnualSessions > 0 ? explicitAnnualSessions : Number(metrics.annualisedSessions || 0);
   const annualRevenue = explicitAnnualRevenue > 0 ? explicitAnnualRevenue : annualKwh * Number(metrics.revenuePerKwh || DEFAULT_INPUTS.netSellingPriceExVat || 0);
   const dataDays = Number(site?.maturity?.dataDays || 0);
+  const uploadedSuffix = site?.liveActuals?.source === "uploaded" ? ` · uploaded actuals${site.liveActuals.asOfDate ? ` as of ${site.liveActuals.asOfDate}` : ""}` : "";
   const basis = hasExplicitAnnual
-    ? "Trailing 12-month actual"
+    ? `Trailing 12-month actual${uploadedSuffix}`
     : dataDays >= 365
-      ? "Annualised from latest operating run-rate; site has 12+ months of history"
-      : "Annualised run-rate from available operating data";
+      ? `Annualised from latest operating run-rate; site has 12+ months of history${uploadedSuffix}`
+      : `Annualised run-rate from available operating data${uploadedSuffix}`;
   return { annualKwh, annualSessions, annualRevenue, hasExplicitAnnual, dataDays, basis };
 }
 
@@ -1255,7 +1354,7 @@ function portfolioCompareMetric(value, stats, tolerance = 0.10) {
   if (value > stats.p75 * (1 + tolerance)) return "above";
   return "within";
 }
-function portfolioBenchmarksByCategory(sites = PORTFOLIO_CALIBRATION_SITES) {
+function portfolioBenchmarksByCategory(sites = portfolioSites()) {
   const benchmarks = {};
   Object.keys(PORTFOLIO_CATEGORY_FACTORS).forEach(categoryKey => {
     const sameCategory = sites.filter(site => portfolioCategoryKey(site) === categoryKey);
@@ -1735,10 +1834,11 @@ function portfolioBenchmarkCard(title, value, sub) {
   return `<div class="benchmark-mini-card"><strong>${title}</strong><span>${value}</span><small>${sub || ""}</small></div>`;
 }
 function renderPortfolioCalibration() {
-  const selectedId = localStorage.getItem("evHub.portfolio.selectedSite") || PORTFOLIO_CALIBRATION_SITES[0]?.id;
-  const selected = PORTFOLIO_CALIBRATION_SITES.find(s => s.id === selectedId) || PORTFOLIO_CALIBRATION_SITES[0];
-  const benchmarks = portfolioBenchmarksByCategory(PORTFOLIO_CALIBRATION_SITES);
-  const results = PORTFOLIO_CALIBRATION_SITES.map(site => portfolioSiteResults(site, benchmarks));
+  const portfolioSiteList = portfolioSites();
+  const selectedId = localStorage.getItem("evHub.portfolio.selectedSite") || portfolioSiteList[0]?.id;
+  const selected = portfolioSiteList.find(s => s.id === selectedId) || portfolioSiteList[0];
+  const benchmarks = portfolioBenchmarksByCategory(portfolioSiteList);
+  const results = portfolioSiteList.map(site => portfolioSiteResults(site, benchmarks));
   const selectedResult = portfolioSiteResults(selected, benchmarks);
   const selectedProfile = selectedResult.calibratedProfile || portfolioCalibrationProfile(selected);
   const filtered = portfolioApplyFilters(results);
@@ -1750,7 +1850,7 @@ function renderPortfolioCalibration() {
   const normalCount = filtered.filter(r => r.assessment?.band === "normal").length;
   const earliestTrigger = filtered.map(r => r.doNothing?.firstActionYear).filter(Boolean).sort((a,b)=>a-b)[0];
   const medianAbsAnnualVariance = medianAbsVariance(filtered, "annualKwhVariance");
-  const siteOptions = PORTFOLIO_CALIBRATION_SITES.map(s => `<option value="${h(s.id)}" ${s.id === selected.id ? "selected" : ""}>${h(s.name)}</option>`).join("");
+  const siteOptions = portfolioSiteList.map(s => `<option value="${h(s.id)}" ${s.id === selected.id ? "selected" : ""}>${h(s.name)}</option>`).join("");
   const row = r => [
     `<div class="portfolio-site-cell"><strong>${h(r.site.name)}</strong></div>`,
     portfolioMaturityBadge(r.site.maturity?.tier),
@@ -1801,6 +1901,7 @@ function renderPortfolioCalibration() {
     ${sectionTitle("Portfolio Calibration", "Compare annualised real performance against the model using MIC, AADT, maturity and site category.")}
     <section class="portfolio-hero panel"><div><span class="eyebrow">Operating intelligence layer</span><h3>Annual actual vs modelled performance</h3><p>The main table is kept deliberately concise: site, maturity, category, MIC, AADT, annual kWh, variance and status. Click any status pill for the action year and recommendation.</p></div><div class="portfolio-summary-grid mature-only-summary">${kpi("Clean sites", number(results.length,0), "Irish operating hubs")}${kpi("Benchmark basis", `${number(mature.length + near.length,0)} sites`, "mature + near where possible")}${kpi("Capacity pressure", number(results.filter(r => r.assessment?.band === "capacity_pressure").length,0), "expansion candidates")}${kpi("Under-capturing", number(results.filter(r => r.assessment?.band === "under_capture").length,0), "improve site before capex")}</div></section>
     <section class="panel portfolio-method-note compact"><h3>How to read this page</h3><p class="muted">AADT shows passing traffic opportunity. MIC shows available grid capacity. Annual kWh and variance show whether the modelled expectation is above or below real operating performance. Click the Status pill to see the recommended action, timing and reason. Sites with less than 12 months of history are shown as annualised run-rate, not a full-year actual.</p></section>
+    ${portfolioLiveCalibrationCard(portfolioSiteList)}
     <section class="panel portfolio-selector-panel"><div class="field"><label for="portfolioSiteSelect">Select operating hub</label><select id="portfolioSiteSelect">${siteOptions}</select><small>Sites are mapped to model-equivalent charger configurations; mixed sites, Banner, Fota and Banbridge are excluded.</small></div><button type="button" class="primary" id="applyPortfolioSite">Load site into model + map</button></section>
     <section class="panel selected-backtest-card"><div class="selected-backtest-head"><div><span class="eyebrow">Selected hub</span><h3>${h(selected.name)}</h3><p>${h(selected.address || "Address unavailable")}</p></div>${portfolioMaturityBadge(selected.maturity?.tier)}</div><div class="portfolio-summary-grid selected-hub-overview">${kpi("Actual kWh/yr", kwh(selectedResult.actualAnnualKwh,0), selectedResult.actualAnnualBasis)}${kpi("Model kWh/yr", kwh(selectedResult.modelledAnnualKwh,0), "site-type calibrated model")}${kpi("Variance", portfolioVarianceBadge(selectedResult.annualKwhVariance), "model vs actual")}${kpi("kWh/plug/day", number(selectedResult.metrics.kwhPerPlugDay,1), "actual productivity")}${kpi("AADT", number(selected.aadt,0), "vehicles/day")}${kpi("MIC", kva(selected.realMicKva,0), "actual connection")}${kpi("Status", portfolioPerformanceBadge(selectedResult.assessment.band), portfolioBenchmarkStatusLabel(selectedResult.assessment.benchmarkPosition))}</div><div class="notice ${selectedResult.assessment.band === "capacity_pressure" ? "warn" : selectedResult.assessment.band === "under_capture" ? "warn" : "good"}"><strong>${h(selectedAction.year)} · ${h(selectedAction.action)}:</strong> ${h(selectedResult.assessment.action)}</div><div class="portfolio-accordion-stack"><details class="portfolio-diagnostic-details"><summary>Traffic and benchmark detail</summary><div class="portfolio-benchmark-grid">${selectedMethodCards}</div><div class="portfolio-config-grid compact"><div><strong>Matched AADT</strong><span>${number(selected.aadt,0)} veh/day · ${h(selected.aadtCounter || "AADT counter")}</span></div><div><strong>Effective benchmark AADT</strong><span>${number(selectedProfile.effectiveAadt,0)} veh/day after site-type cap</span></div><div><strong>Actual sessions / 1k AADT</strong><span>${number(selectedResult.metrics.sessionsPer1000Aadt,2)}</span></div><div><strong>Peer kWh/plug/day median</strong><span>${number(peerMedianPlug,1)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>MIC / grid capacity detail</summary><div class="portfolio-config-grid compact"><div><strong>Current MIC</strong><span>${kva(selected.realMicKva,0)}</span></div><div><strong>Recommended MIC by Year 20</strong><span>${kva(selectedResult.doNothing.year20?.requiredMicKva,0)}</span></div><div><strong>Year 20 MIC gap</strong><span>${kva(Math.max(0, Number(selectedResult.doNothing.year20?.requiredMicKva || 0) - Number(selected.realMicKva || 0)),0)}</span></div><div><strong>First MIC trigger</strong><span>${selectedResult.doNothing.firstMicYear ? h(String(selectedResult.doNothing.firstMicYear)) : "No MIC trigger in 20yr"}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Configuration and 20-year do-nothing path</summary><div class="portfolio-config-grid compact"><div><strong>Model-equivalent configuration</strong><span>${h(selected.modelEquivalentSummary)}</span></div><div><strong>20-year do-nothing trigger</strong><span>${h(portfolioTriggerLabel(selectedResult.doNothing))}</span></div><div><strong>Trigger drivers</strong><span>${h(selectedResult.doNothing.triggerDrivers?.join(" + ") || "No near-term driver")}</span></div><div><strong>20-yr lost revenue risk</strong><span>${currency(selectedResult.doNothing.lostRevenue20yr,0)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Model QA diagnostics</summary><div class="portfolio-summary-grid">${kpi("Actual 30D kWh", kwh(selectedResult.actualKwh,0), "latest rolling operating data")}${kpi("Modelled 30D kWh", kwh(selectedResult.calibratedKwh,0), "site-type target")}${kpi("30D variance", portfolioVarianceBadge(selectedResult.calibratedKwhVariance), "QA comparison")}${kpi("Base annual variance", portfolioVarianceBadge(selectedResult.baseAnnualKwhVariance), "uncalibrated QA")}</div><p class="muted small">Technical diagnostics are retained for audit and investment review. The main comparison is annualised because the financial model is year-based.</p></details></div></section>
     <section class="panel portfolio-filter-panel"><h3>Filters and sorting</h3><div class="portfolio-filter-grid">${portfolioMultiFilter("portfolioMaturity", "maturity", maturityOptions, "Maturity", "All maturity")}${portfolioMultiFilter("portfolioCategory", "category", categoryOptions, "Site category", "All categories")}${portfolioMultiFilter("portfolioPerformance", "performanceBand", statusOptions, "Status", "All statuses")}${portfolioMultiFilter("portfolioConfidence", "confidence", confidenceOptions, "AADT confidence", "All AADT confidence")}${portfolioMultiFilter("portfolioMicBand", "micBand", micBandOptions, "MIC band", "All MIC")}</div><p class="muted small">Open a filter and tick one or more options. Click a header to sort. Current sort: ${h(sortNames[sortKey] || "investment priority")} · ${h(sortDir)}.</p></section>
@@ -2190,10 +2291,42 @@ function wirePage(r) {
       showPortfolioStatusPopover(e.currentTarget);
     });
   });
+  const portfolioUploadBtn = el("uploadPortfolioCalibrationFiles");
+  const portfolioUploadInput = el("portfolioCalibrationFiles");
+  const portfolioUploadStatus = el("portfolioCalibrationUploadStatus");
+  if (portfolioUploadBtn) portfolioUploadBtn.addEventListener("click", async () => {
+    const files = Array.from(portfolioUploadInput?.files || []);
+    if (!files.length) {
+      if (portfolioUploadStatus) portfolioUploadStatus.textContent = "Choose one or more calibration Excel files first.";
+      return;
+    }
+    const form = new FormData();
+    files.forEach(file => form.append("files", file, file.name));
+    portfolioUploadBtn.disabled = true;
+    if (portfolioUploadStatus) portfolioUploadStatus.textContent = "Validating uploaded calibration files…";
+    try {
+      const res = await fetch("/api/import-live-calibration", { method: "POST", body: form });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || !payload.ok) throw payload;
+      savePortfolioLiveActuals(payload);
+      render();
+    } catch (err) {
+      portfolioLiveUploadError = err || { message: "Unknown upload error" };
+      clearPortfolioLiveActuals();
+      portfolioLiveUploadError = err || { message: "Unknown upload error" };
+      render();
+    } finally {
+      portfolioUploadBtn.disabled = false;
+    }
+  });
+  const clearPortfolioUpload = el("clearPortfolioCalibrationUpload");
+  if (clearPortfolioUpload) clearPortfolioUpload.addEventListener("click", () => { clearPortfolioLiveActuals(); render(); });
+
   const applyPortfolioSite = el("applyPortfolioSite");
   if (applyPortfolioSite) applyPortfolioSite.addEventListener("click", () => {
-    const selectedId = localStorage.getItem("evHub.portfolio.selectedSite") || PORTFOLIO_CALIBRATION_SITES[0]?.id;
-    const site = PORTFOLIO_CALIBRATION_SITES.find(s => s.id === selectedId) || PORTFOLIO_CALIBRATION_SITES[0];
+    const portfolioSiteList = portfolioSites();
+    const selectedId = localStorage.getItem("evHub.portfolio.selectedSite") || portfolioSiteList[0]?.id;
+    const site = portfolioSiteList.find(s => s.id === selectedId) || portfolioSiteList[0];
     if (!site) return;
     applyPortfolioSiteModelConfig(site);
     setInput("siteAddress", site.address || site.name);
@@ -2284,7 +2417,7 @@ function wirePage(r) {
   if (pendingPortfolioSiteSearch && activeTab === "site") {
     const pending = pendingPortfolioSiteSearch;
     pendingPortfolioSiteSearch = null;
-    const site = PORTFOLIO_CALIBRATION_SITES.find(s => s.id === pending.siteId);
+    const site = portfolioSites().find(s => s.id === pending.siteId);
     if (site) setTimeout(() => runSiteSearch({ portfolioSite: site, address: site.address || site.name }), 0);
   }
   if (addressInput) addressInput.addEventListener("keydown", e => {

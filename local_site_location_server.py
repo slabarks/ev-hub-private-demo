@@ -721,6 +721,59 @@ AADT_PRIORITY_COUNTER_RULES = [
     ({"ballincollig"}, "000000001228", "place anchor: N22 Ballincollig Bypass corridor"),
 ]
 
+
+
+# v35.39 curated portfolio AADT rules. These lock the known operating sites to
+# the manually reviewed TII counter IDs from the site-to-AADT mapping workbook.
+# They are used only when the searched address/site name clearly matches a known
+# portfolio site. New arbitrary addresses still use the automatic ranked counter
+# engine below.
+CURATED_PORTFOLIO_AADT_RULES = [
+    {"match": ["castlemartyr", "p25r762", "p25 r762"], "aadt": 15882, "ids": ["000000001252"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N25 Castlemartyr-Midleton counter."},
+    {"match": ["carrigtwohill", "t45vk22", "t45 vk22"], "aadt": 40885, "ids": ["000000020256"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N25 Carrigtwohill bypass counter."},
+    {"match": ["aldi donabate", "turvey avenue", "k36d2t2", "k36 d2t2"], "aadt": 63453, "ids": ["000000001015"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected M01 Donabate-Balbriggan South counter."},
+    {"match": ["anner hotel", "e41x789", "e41 x789"], "aadt": 14976, "ids": ["000000020087", "000000020088"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected M08 Thurles/Cashel corridor counters."},
+    {"match": ["ashbourne high street", "a84kt25", "a84 kt25"], "aadt": 30837, "ids": ["000000020022"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected M02 Ashbourne South counter; mixed-site row is reference only."},
+    {"match": ["athlone", "westpoint business", "n37w5k5", "n37 w5k5"], "aadt": 38658, "ids": ["000000001065", "000000020065"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected Athlone bypass/M6 Junction 13 counters."},
+    {"match": ["axis retail", "n39x7w0", "n39 x7w0"], "aadt": 11200, "ids": ["000000020045", "000000001057"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N04/N5 Longford bypass counters."},
+    {"match": ["castleknock hotel", "d15wnr7", "d15 wnr7"], "aadt": 155138, "ids": ["000000001508"], "confidence": "medium / high-corridor curated proxy", "method": "single_counter_high_corridor_proxy", "note": "Selected M50 Castleknock corridor; hotel/site-type caps moderate demand."},
+    {"match": ["castletroy park", "v94y0an", "v94 y0an"], "aadt": 32782, "ids": ["000000200722"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected M07 Castletroy/Ballysimon corridor."},
+    {"match": ["charleville park", "p56v268", "p56 v268"], "aadt": 11173, "ids": ["000000001201"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N20 Buttevant-Charleville counter."},
+    {"match": ["aherene", "aherens"], "aadt": 14976, "ids": ["000000020087", "000000020088"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected M08 Thurles/Cashel corridor counters."},
+    {"match": ["aherne", "thurles", "e41f9n1"], "aadt": 14976, "ids": ["000000020087", "000000020088"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected M08 Thurles/Cashel corridor counters."},
+    {"match": ["junction 20", "ravensdale", "a91ayw7", "a91 ayw7"], "aadt": 28140, "ids": ["000000020016", "000000020018"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N01/M01 Junction 20 corridor counters."},
+    {"match": ["dungarvan", "x35xt71", "x35 xt71"], "aadt": 11304, "ids": ["000000001251", "000000020255"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N25 Dungarvan corridor counters."},
+    {"match": ["model farm", "lee garage", "t12t326", "t12 t326"], "aadt": 17056, "ids": ["000000001221", "000000020222"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N22 Cork/Model Farm corridor counters."},
+    {"match": ["fermoy", "p61yd71", "p61 yd71"], "aadt": 20164, "ids": ["000000020086"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected M08 Mitchelstown-Fermoy counter."},
+    {"match": ["swinford", "f12c6e8", "f12 c6e8"], "aadt": 7434, "ids": ["000000001053", "000000001058"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N05 Swinford approach counters."},
+    {"match": ["tralee", "v92k7dh", "v92 k7dh"], "aadt": 9112, "ids": ["000000001225", "000000001703"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N22/N70 Tralee ring-road counters."},
+    {"match": ["douglas court", "t12v597", "t12 v597"], "aadt": 49079, "ids": ["000000001283"], "confidence": "high / curated retail corridor proxy", "method": "single_counter_retail_proxy", "note": "Selected N28 N40-Rochestown counter; retail category cap moderates demand."},
+    {"match": ["euro business", "little island", "t45y261", "t45 y261"], "aadt": 54530, "ids": ["000000020257", "000000020258"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N25/N28 Little Island corridor counters."},
+    {"match": ["fota island", "t45hx62", "t45 hx62"], "aadt": 45944, "ids": ["000000020256", "000000020257"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N25 Carrigtwohill/Little Island counters; review-only row."},
+    {"match": ["greenhills", "v94x2rv", "v94 x2rv"], "aadt": 22504, "ids": ["000000030189", "000000030201"], "confidence": "medium / curated TII mapping", "method": "selected_corridor_average_medium_confidence", "note": "Average of selected N18/Ennis Road corridor counters; hotel/local access may differ."},
+    {"match": ["killashee", "w91dc98", "w91 dc98"], "aadt": 73992, "ids": ["000000020072"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected M07 Naas bypass counter; review-only row."},
+    {"match": ["leopardstown", "d18cc94", "d18 cc94"], "aadt": 14086, "ids": ["000000001312"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N31 Brewery Road counter."},
+    {"match": ["long mile", "finline", "d12dx0p", "d12 dx0p"], "aadt": 103245, "ids": ["000000001072"], "confidence": "medium / high-corridor curated proxy", "method": "single_counter_high_corridor_proxy", "note": "Selected N07 Newlands Cross-Kingswood counter; site-type caps moderate demand."},
+    {"match": ["banner plaza", "kilbreckan", "clarecastle", "v95txa3", "v95 txa3"], "aadt": 30589, "ids": ["000000020182"], "confidence": "high / curated junction counter", "method": "selected_junction_counter_special", "note": "Uses Ennis South/Junction 12 counter because the site is Junction 12 / Clarecastle side."},
+    {"match": ["malahide afc", "k36ya97", "k36 ya97"], "aadt": 102700, "ids": ["000000020011"], "confidence": "medium / high-corridor curated proxy", "method": "single_counter_medium_confidence", "note": "Selected M01 Airport-Swords corridor; local/community cap applies strongly."},
+    {"match": ["mallow plaza", "p51nx3f", "p51 nx3f"], "aadt": 17537, "ids": ["000000020204"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N20 Blarney-Mallow counter."},
+    {"match": ["newbridge retail", "w12n728", "w12 n728"], "aadt": 49320, "ids": ["000000020074", "000000020075"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected M07 Newbridge/Kildare corridor counters."},
+    {"match": ["newtown park", "y35e8kt", "y35 e8kt"], "aadt": 8395, "ids": ["000000020252"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N25 Carrickbyrne counter."},
+    {"match": ["larkin", "y35tr2a", "y35 tr2a"], "aadt": 8395, "ids": ["000000020252"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N25 Carrickbyrne counter."},
+    {"match": ["oran point", "oranpoint", "h91k6wf", "h91 k6wf"], "aadt": 13908, "ids": ["000000003181", "000000003182"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected M18/N18 Oranmore/Kilcolgan corridor counters."},
+    {"match": ["cobh golf", "p24y226", "p24 y226"], "aadt": 10519, "ids": ["000000001282"], "confidence": "high / curated TII mapping", "method": "single_counter_dc50_class", "note": "Selected N28 Ringaskiddy-Shannonpark counter; DC50 class."},
+    {"match": ["dundalk golf", "a91y7yd", "a91 y7yd"], "aadt": 8343, "ids": ["000000020525"], "confidence": "high / selected local TII proxy", "method": "selected_local_counter_dc50_class", "note": "Uses N52 Dundalk Southlink as the local/access proxy; M01 counter is wider context only."},
+    {"match": ["southgate", "a92ef80", "a92 ef80"], "aadt": 52456, "ids": ["000000001019"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected M01 Drogheda South counter."},
+    {"match": ["supervalu", "tipperary", "e34vp78", "e34 vp78"], "aadt": 7093, "ids": ["000000001241"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N24 Bansha-Tipperary Town counter; fixes previous zero AADT."},
+    {"match": ["texaco", "newcastle", "d22e7n6", "d22 e7n6"], "aadt": 88622, "ids": ["000000200723"], "confidence": "medium / high-corridor curated proxy", "method": "single_counter_medium_confidence", "note": "Selected N07 Newcastle/Kilteel counter; service-station factors moderate demand."},
+    {"match": ["brehon", "muckross", "v93rt22", "v93 rt22"], "aadt": 14326, "ids": ["000000001222", "000000001223"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N22 Killarney counters; replaces low old proxy."},
+    {"match": ["cope shopping", "dungloe", "f94n406", "f94 n406"], "aadt": 3526, "ids": ["000000020562"], "confidence": "high / curated TII mapping", "method": "single_counter_excluding_abnormal_low", "note": "Uses valid N56 counter only; abnormal 12-AADT CMU counter is excluded."},
+    {"match": ["rhu glenn", "slieverue", "x91e395", "x91 e395"], "aadt": 9080, "ids": ["000000032502", "000000001243"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N25/N24 Waterford approach counters."},
+    {"match": ["tullamore retail", "r35vn23", "r35 vn23"], "aadt": 11266, "ids": ["000000020801"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N80 Tullamore counter."},
+    {"match": ["walsh", "roscommon", "f42cd63", "f42 cd63"], "aadt": 6523, "ids": ["000000001602", "000000020611"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N60/N61 Roscommon approach counters."},
+    {"match": ["west point", "ennis", "v95kh42", "v95 kh42"], "aadt": 23976, "ids": ["000000020181", "000000020182"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected Ennis M18 counters; mixed site shown for reference only."},
+]
+
 # Coordinates attached locally to important traffic counters. The uploaded AADT
 # Excel has values but not always WGS84 coordinates, and online TII enrichment may
 # be unavailable in a demo environment. These point-level proxies let the app
@@ -964,8 +1017,8 @@ def _score_local_aadt_record(rec: dict, address: str) -> tuple[float, list[str],
 def _record_to_aadt_result(rec: dict, source: str, confidence: str, method_note: str, *, distance_km=None, match_basis="priority/nearest fallback", matched_terms=None, limit_candidates=None) -> dict:
     candidate = {
         "selected": True,
-        "counter_id": rec.get("site_id"),
-        "counter_name": rec.get("site_name"),
+        "counter_id": ", ".join(str(g["score_tuple"][4].get("site_id")) for g in selected_group),
+        "counter_name": "; ".join(str(g["score_tuple"][4].get("site_name")) for g in selected_group),
         "description": rec.get("description"),
         "route": rec.get("route") or "route not provided",
         "aadt": rec.get("latest_aadt"),
@@ -998,6 +1051,148 @@ def _record_to_aadt_result(rec: dict, source: str, confidence: str, method_note:
         "method_note": method_note,
     }
 
+
+
+
+def _aadt_rule_matches_address(rule: dict, address: str) -> bool:
+    compact = _aadt_compact(address)
+    norm_tokens = set(_aadt_normalise_text(address).split())
+    for term in rule.get("match") or []:
+        tcompact = _aadt_compact(term)
+        if not tcompact:
+            continue
+        if tcompact in compact:
+            return True
+        ttoks = set(_aadt_normalise_text(term).split())
+        if ttoks and ttoks.issubset(norm_tokens):
+            return True
+    return False
+
+
+def _records_for_ids(ids: list[str]) -> list[dict]:
+    records = load_local_tii_aadt_records()
+    by_id = {normalise_cosit(r.get("site_id")) or str(r.get("site_id")): r for r in records}
+    out = []
+    for sid in ids or []:
+        rec = by_id.get(normalise_cosit(sid) or sid)
+        if rec:
+            out.append(rec)
+    return out
+
+
+def _curated_aadt_result(rule: dict, site: dict | None = None) -> dict:
+    ids = rule.get("ids") or []
+    records = _records_for_ids(ids)
+    candidates = []
+    for i, rec in enumerate(records):
+        candidate = {
+            "selected": True,
+            "counter_id": rec.get("site_id"),
+            "counter_name": rec.get("site_name"),
+            "description": rec.get("description"),
+            "route": rec.get("route") or "route not provided",
+            "aadt": rec.get("latest_aadt"),
+            "aadt_year": rec.get("latest_year"),
+            "valid_days": f"TII Excel {rec.get('latest_year')}",
+            "match_score": 100 - i,
+            "matched_terms": rule.get("match") or [],
+            "match_basis": rule.get("method") or "curated counter mapping",
+        }
+        if _record_has_coord(rec):
+            candidate.update({"lat": rec.get("lat"), "lon": rec.get("lon"), "location_source": rec.get("location_source")})
+            if site:
+                try:
+                    candidate["distance_km"] = round(haversine_km(float(site["lat"]), float(site["lon"]), float(rec["lat"]), float(rec["lon"])), 2)
+                except Exception:
+                    pass
+        candidates.append(candidate)
+    return {
+        "aadt": int(rule.get("aadt") or 0),
+        "source": f"Curated TII AADT mapping · {'/'.join(ids) if ids else 'manual'}",
+        "confidence": rule.get("confidence") or "high / curated TII mapping",
+        "provider": "Curated site-to-AADT mapping workbook",
+        "counter_id": ", ".join(ids),
+        "counter_name": "; ".join(str(c.get("counter_name")) for c in candidates[:3] if c.get("counter_name")),
+        "route": ", ".join(sorted({str(c.get("route")) for c in candidates if c.get("route")})) or "route not provided",
+        "aadt_year": "2026",
+        "sample_days": "published annual AADT values from uploaded Excel",
+        "sample_mode": rule.get("method") or "curated counter mapping",
+        "candidates": candidates,
+        "reference": "Charger_Sites_to_AADT_Mapping.xlsx + AADT Summary Report Public sites 2019-2026",
+        "method_note": rule.get("note") or "Known operating hub uses manually reviewed TII counter mapping. New unknown addresses use the ranked automatic counter engine.",
+    }
+
+
+def tii_aadt_from_curated_portfolio_mapping(address: str, site: dict | None = None) -> dict:
+    for rule in CURATED_PORTFOLIO_AADT_RULES:
+        if _aadt_rule_matches_address(rule, address):
+            return _curated_aadt_result(rule, site)
+    raise RuntimeError("No curated portfolio AADT rule matched this address")
+
+
+def _valid_aadt_number(value, *, min_value=250) -> bool:
+    try:
+        v = float(value)
+        return math.isfinite(v) and v >= min_value
+    except Exception:
+        return False
+
+
+def _route_norm_for_group(value) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+
+
+def _aadt_ratio_ok(a, b, max_ratio=2.75) -> bool:
+    try:
+        a = float(a); b = float(b)
+        if a <= 0 or b <= 0:
+            return False
+        return max(a, b) / min(a, b) <= max_ratio
+    except Exception:
+        return False
+
+
+def _selected_same_corridor_group(sorted_candidates: list[dict], *, score_key="selection_score", distance_key="distance_km", aadt_key="aadt") -> list[dict]:
+    """Return a selected group only when counters are same-corridor.
+
+    This prevents the old closest-3 average problem. It averages only candidates
+    with the same route, similar score/distance and plausible AADT values.
+    """
+    usable = [c for c in sorted_candidates if _valid_aadt_number(c.get(aadt_key) or c.get("latest_aadt") or c.get("precomputed_aadt"))]
+    if not usable:
+        return []
+    selected = usable[0]
+    selected_route = _route_norm_for_group(selected.get("route"))
+    selected_score = float(selected.get(score_key, 0) or 0)
+    selected_dist = float(selected.get(distance_key, 0) or 0)
+    selected_aadt = selected.get(aadt_key) or selected.get("latest_aadt") or selected.get("precomputed_aadt")
+    group = [selected]
+    for c in usable[1:8]:
+        route = _route_norm_for_group(c.get("route"))
+        if not selected_route or route != selected_route:
+            continue
+        score = float(c.get(score_key, 0) or 0)
+        dist = float(c.get(distance_key, 0) or 0)
+        aadt = c.get(aadt_key) or c.get("latest_aadt") or c.get("precomputed_aadt")
+        if score < selected_score - 12:
+            continue
+        if abs(dist - selected_dist) > 10:
+            continue
+        if not _aadt_ratio_ok(selected_aadt, aadt):
+            continue
+        group.append(c)
+    return group
+
+
+def _average_aadt_for_group(group: list[dict], aadt_key="aadt") -> int:
+    vals = []
+    for c in group:
+        v = c.get(aadt_key) or c.get("latest_aadt") or c.get("precomputed_aadt")
+        if _valid_aadt_number(v):
+            vals.append(float(v))
+    if not vals:
+        return 0
+    return int(round(sum(vals) / len(vals)))
 
 def tii_aadt_priority_counter_lookup(address: str, site: dict | None = None) -> dict:
     records = load_local_tii_aadt_records()
@@ -1052,21 +1247,33 @@ def tii_aadt_from_local_excel_name_lookup(address: str, limit: int = 12) -> dict
         raise RuntimeError("No matching Site Name or Description rows found in the uploaded TII AADT Summary Excel")
 
     scored.sort(key=lambda x: (-x[0], -(x[1].get("latest_year") or 0), str(x[1].get("site_id", ""))))
+    # Reject abnormal very-low counters when another plausible match exists. This
+    # prevents cases such as a CMU 12-AADT row being averaged with a proper TMU row.
+    plausible = [x for x in scored if _valid_aadt_number(x[1].get("latest_aadt"), min_value=250)]
+    if plausible:
+        scored = plausible
     top_score = scored[0][0]
-    # Use all relevant rows that match the address meaningfully. Keep weak single-token results only if they are close to the best score.
-    matches = [x for x in scored if x[0] >= max(3, top_score - 2)]
-    if len(matches) < 2:
+    candidates_for_group = []
+    for score, rec, matched_terms, has_strong in scored[:limit]:
+        candidates_for_group.append({
+            "score_tuple": (score, rec, matched_terms, has_strong),
+            "selection_score": score,
+            "distance_km": 0,
+            "route": rec.get("route"),
+            "aadt": rec.get("latest_aadt"),
+        })
+    group_candidates = _selected_same_corridor_group(candidates_for_group, score_key="selection_score", distance_key="distance_km", aadt_key="aadt")
+    if len(group_candidates) >= 2:
+        matches = [c["score_tuple"] for c in group_candidates]
+    else:
+        # If several strong text hits are on different routes, use the best single
+        # counter rather than averaging unrelated roads.
         matches = scored[:1]
-    if len(matches) > limit:
-        matches = matches[:limit]
 
-    aadts = [float(x[1]["latest_aadt"]) for x in matches]
-    avg_aadt = int(round(sum(aadts) / len(aadts)))
+    avg_aadt = _average_aadt_for_group([{"aadt": x[1].get("latest_aadt")} for x in matches], aadt_key="aadt")
     years = sorted({str(x[1].get("latest_year")) for x in matches if x[1].get("latest_year")})
     route_labels = sorted({x[1].get("route") for x in matches if x[1].get("route")})
-    confidence = "high / TII Excel text match" if len(matches) == 1 and matches[0][0] >= 7 else "medium / TII Excel averaged text match"
-    if len(matches) > 5:
-        confidence = "medium-low / broad TII Excel text match"
+    confidence = "high / TII Excel selected text match" if len(matches) == 1 and matches[0][0] >= 7 else "medium / TII Excel same-corridor text average"
 
     candidates = []
     for i, (score, rec, matched_terms, has_strong) in enumerate(matches):
@@ -1093,7 +1300,7 @@ def tii_aadt_from_local_excel_name_lookup(address: str, limit: int = 12) -> dict
 
     return {
         "aadt": avg_aadt,
-        "source": f"Uploaded TII AADT Summary Excel · name/description lookup · {len(matches)} matched row{'s' if len(matches) != 1 else ''} averaged",
+        "source": f"Uploaded TII AADT Summary Excel · ranked name/description lookup · {len(matches)} selected row{'s' if len(matches) != 1 else ''}",
         "confidence": confidence,
         "provider": "Uploaded TII AADT Summary Excel database",
         "counter_id": ", ".join(str(x[1].get("site_id")) for x in matches[:3]) + ("…" if len(matches) > 3 else ""),
@@ -1101,10 +1308,10 @@ def tii_aadt_from_local_excel_name_lookup(address: str, limit: int = 12) -> dict
         "route": ", ".join(route_labels) if route_labels else "route not provided",
         "aadt_year": ", ".join(years) if years else "latest available",
         "sample_days": "published annual AADT values from uploaded Excel",
-        "sample_mode": "TII Excel name/description lookup",
+        "sample_mode": "TII Excel ranked name/description lookup",
         "candidates": candidates,
         "reference": "AADT Summary Report Public sites 04-2025 2019 to 2026 (1).xlsx",
-        "method_note": "The app matched the searched address text against Site Name and Description in the uploaded TII AADT Summary Excel. Where several relevant TII rows matched, their latest available AADT values were averaged. If TII counter coordinates were available, they are attached to the matched rows; otherwise this remains a text-based corridor proxy. Use manual override if you know the correct counter.",
+        "method_note": "The app matched the searched address text against Site Name and Description in the uploaded TII AADT Summary Excel. It selects the strongest counter, or averages only same-corridor counters with plausible AADT values. Unrelated roads and abnormal low counters are not blindly averaged. Use manual override if you know the correct counter.",
     }
 
 
@@ -1133,12 +1340,26 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
     if not ranked:
         raise RuntimeError("No coordinate-enriched TII AADT Excel counters were close enough to the searched site")
     ranked.sort(key=lambda x: (-x[0], x[1]))
-    selected = ranked[0]
+    candidate_objs = []
+    for score, d, text_score, route_score, r, terms in ranked[:limit]:
+        candidate_objs.append({
+            "score_tuple": (score, d, text_score, route_score, r, terms),
+            "selection_score": score,
+            "distance_km": d,
+            "route": r.get("route"),
+            "aadt": r.get("latest_aadt"),
+        })
+    selected_group = _selected_same_corridor_group(candidate_objs, score_key="selection_score", distance_key="distance_km", aadt_key="aadt")
+    if not selected_group:
+        selected_group = [candidate_objs[0]]
+    selected = selected_group[0]["score_tuple"]
     rec = selected[4]
+    selected_ids = {g["score_tuple"][4].get("site_id") for g in selected_group}
+    selected_aadt = _average_aadt_for_group(selected_group, aadt_key="aadt")
     candidates = []
     for i, (score, d, text_score, route_score, r, terms) in enumerate(ranked[:limit]):
         candidates.append({
-            "selected": i == 0,
+            "selected": r.get("site_id") in selected_ids,
             "counter_id": r.get("site_id"),
             "counter_name": r.get("site_name"),
             "description": r.get("description"),
@@ -1154,14 +1375,15 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
             "lat": r.get("lat"),
             "lon": r.get("lon"),
             "location_source": r.get("location_source"),
-            "match_basis": "nearest coordinate-enriched TII counter with address/route scoring",
+            "match_basis": "ranked coordinate-enriched TII counter with same-corridor averaging guard",
         })
-    confidence = "high / nearest TII Excel counter with official coordinates" if selected[1] <= 5 else "medium / nearest TII Excel counter with official coordinates"
+    confidence = "high / ranked TII Excel counter with official coordinates" if selected[1] <= 5 else "medium / ranked TII Excel counter with official coordinates"
     if selected[1] > 25:
-        confidence = "medium-low / distant nearest TII counter"
+        confidence = "medium-low / distant ranked TII counter"
+    group_note = "single best counter" if len(selected_group) == 1 else f"same-corridor average of {len(selected_group)} counters"
     return {
-        "aadt": int(round(float(rec.get("latest_aadt")))),
-        "source": f"Uploaded TII AADT Summary Excel · nearest coordinate-enriched counter · {rec.get('site_name')} · {rec.get('latest_year')}",
+        "aadt": int(selected_aadt),
+        "source": f"Uploaded TII AADT Summary Excel · ranked coordinate-enriched lookup · {group_note} · {rec.get('site_name')} · {rec.get('latest_year')}",
         "confidence": confidence,
         "provider": "Uploaded TII AADT Excel joined to TII counter locations",
         "counter_id": rec.get("site_id"),
@@ -1170,10 +1392,10 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
         "counter_distance_km": round(selected[1], 2),
         "aadt_year": rec.get("latest_year"),
         "sample_days": "published annual AADT value from uploaded Excel",
-        "sample_mode": "TII Excel nearest coordinate-enriched lookup",
+        "sample_mode": "TII Excel ranked coordinate-enriched lookup",
         "candidates": candidates,
         "reference": "AADT Summary Report Public sites 04-2025 2019 to 2026 (1).xlsx + TII traffic counter location file",
-        "method_note": "The uploaded TII AADT Excel provides the annual AADT values. The app attempts to attach official TII counter coordinates by Site ID, then selects the nearest counter to the searched address. Address/route text is used as a tie-breaker. Treat as a corridor AADT proxy where the charging site is not directly on the countered road.",
+        "method_note": "The uploaded TII AADT Excel provides the annual AADT values. The app attaches official TII counter coordinates where available, ranks nearby counters by distance, route/address relevance and data quality, then averages only same-corridor counters. Treat as a corridor AADT proxy where the charging site is not directly on the countered road.",
         "location_enrichment": dict(TII_LOCATION_ENRICHMENT_CACHE),
     }
 
@@ -1764,7 +1986,12 @@ def nearest_tii_aadt_summary_for_site(site, address: str = "", limit: int = 6, m
         raise RuntimeError("TII AADT Summary loaded, but no counter was close enough to the searched site")
 
     candidates.sort(key=lambda c: (-c.get("selection_score", -999), c.get("distance_km", 999)))
-    selected = candidates[0]
+    selected_group = _selected_same_corridor_group(candidates, score_key="selection_score", distance_key="distance_km", aadt_key="precomputed_aadt")
+    if not selected_group:
+        selected_group = [candidates[0]]
+    selected = selected_group[0]
+    selected_ids = {c.get("cosit") for c in selected_group}
+    selected_aadt = _average_aadt_for_group(selected_group, aadt_key="precomputed_aadt")
     distance = selected.get("distance_km", 999)
     confidence = "high" if distance <= 5 else "medium" if distance <= 15 else "low"
     audit_candidates = []
@@ -1778,26 +2005,27 @@ def nearest_tii_aadt_summary_for_site(site, address: str = "", limit: int = 6, m
             "valid_days": "published AADT summary",
             "year_used": c.get("aadt_year") or "latest in report",
             "status": "ok",
-            "selected": c.get("cosit") == selected.get("cosit"),
+            "selected": c.get("cosit") in selected_ids,
         })
 
     route_label = selected.get("route") or selected.get("name") or selected.get("cosit")
     year_label = selected.get("aadt_year") or "latest available"
+    group_note = "single best counter" if len(selected_group) == 1 else f"same-corridor average of {len(selected_group)} counters"
     return {
-        "aadt": int(selected["precomputed_aadt"]),
-        "source": f"TII AADT Summary Report · nearest counter · {route_label} · {year_label}",
+        "aadt": int(selected_aadt),
+        "source": f"TII AADT Summary Report · ranked {group_note} · {route_label} · {year_label}",
         "confidence": confidence,
         "provider": "Transport Infrastructure Ireland AADT Summary Report",
-        "counter_id": selected.get("cosit"),
-        "counter_name": selected.get("name"),
+        "counter_id": ", ".join(str(c.get("cosit")) for c in selected_group),
+        "counter_name": "; ".join(str(c.get("name")) for c in selected_group),
         "route": selected.get("route"),
         "counter_distance_km": round(distance, 2),
         "sample_days": "published AADT summary",
         "sample_period": str(year_label),
-        "sample_mode": "TII AADT Summary nearest point",
+        "sample_mode": "TII AADT Summary ranked counter selection",
         "candidates": audit_candidates,
         "reference": TII_PUBLIC_AADT_SUMMARY_URLS[0],
-        "method_note": "Automatically geocodes the searched address, loads the TII AADT Summary Report, selects the nearest published counter point, and applies the AADT value from that list. Treat as a corridor AADT proxy where the charging site is not directly on the countered road.",
+        "method_note": "Automatically geocodes the searched address, loads the TII AADT Summary Report, ranks nearby counters by distance and route relevance, and averages only same-corridor candidates. It no longer blindly averages the closest three counters. Treat as a corridor AADT proxy where the charging site is not directly on the countered road.",
     }
 
 
@@ -1976,7 +2204,12 @@ def tii_aadt_for_site(site, address: str = "", mode: str = "balanced"):
         ok = [r for r in year_results if r.get("status") == "ok" and r.get("aadt")]
         if ok:
             ok.sort(key=lambda r: (-r.get("selection_score", -999), r.get("distance_km", 99)))
-            selected = ok[0]
+            selected_group = _selected_same_corridor_group(ok, score_key="selection_score", distance_key="distance_km", aadt_key="aadt")
+            if not selected_group:
+                selected_group = [ok[0]]
+            selected = selected_group[0]
+            selected_ids = {c.get("cosit") for c in selected_group}
+            selected_aadt = _average_aadt_for_group(selected_group, aadt_key="aadt")
             distance = selected["distance_km"]
             valid_days = selected.get("valid_days", 0)
             sample_ratio = valid_days / max(1, len(dates))
@@ -1993,21 +2226,22 @@ def tii_aadt_for_site(site, address: str = "", mode: str = "balanced"):
                     "valid_days": c.get("valid_days", 0),
                     "year_used": c.get("year_used"),
                     "status": c.get("status"),
-                    "selected": c.get("cosit") == selected.get("cosit"),
+                    "selected": c.get("cosit") in selected_ids,
                 })
-            source_label = f"TII automatic AADT · {route_label} · {valid_days}/{len(dates)} sample days · {year}"
-            method_note = "Fully automated estimate from official TII open data: nearest candidate counters are tested against the daily per-site-class aggregated CSV files, then ranked by route relevance, data completeness and distance. Treat as a corridor AADT proxy where the charging site is not directly on the countered road."
+            group_note = "single best counter" if len(selected_group) == 1 else f"same-corridor average of {len(selected_group)} counters"
+            source_label = f"TII automatic AADT · ranked {group_note} · {route_label} · {valid_days}/{len(dates)} sample days · {year}"
+            method_note = "Fully automated estimate from official TII open data: nearby candidate counters are tested against the daily per-site-class aggregated CSV files, then ranked by route relevance, data completeness and distance. The engine selects one best counter or averages only same-corridor candidates. Treat as a corridor AADT proxy where the charging site is not directly on the countered road."
             if selected.get("from_public_summary"):
                 source_label = f"TII public AADT summary · {route_label} · {selected.get('aadt_year') or 'latest available'}"
-                method_note = "Fully automated estimate from the TII public AADT Summary Report exposed through the trafficdata.tii.ie reporting system. Counter rows are ranked by distance and route relevance. Treat as a corridor AADT proxy where the charging site is not directly on the countered road."
+                method_note = "Fully automated estimate from the TII public AADT Summary Report exposed through the trafficdata.tii.ie reporting system. Counter rows are ranked by distance, route relevance and data quality, with averaging only for same-corridor candidates. Treat as a corridor AADT proxy where the charging site is not directly on the countered road."
                 confidence = "high" if distance <= 8 else "medium" if distance <= 20 else "low"
             return {
-                "aadt": int(selected["aadt"]),
+                "aadt": int(selected_aadt),
                 "source": source_label,
                 "confidence": confidence,
                 "provider": "Transport Infrastructure Ireland traffic counter data",
-                "counter_id": selected.get("cosit"),
-                "counter_name": selected.get("name"),
+                "counter_id": ", ".join(str(c.get("cosit")) for c in selected_group),
+                "counter_name": "; ".join(str(c.get("name")) for c in selected_group),
                 "route": selected.get("route"),
                 "counter_distance_km": round(distance, 2),
                 "sample_days": valid_days,
@@ -2040,6 +2274,10 @@ def estimate_traffic(site, address="", matched_dataset=None):
     #    by Site ID and the nearest coordinate-enriched counter is used. If not,
     #    the engine falls back to the multi-tag text lookup from the same Excel.
     tii_errors = []
+    try:
+        return tii_aadt_from_curated_portfolio_mapping(address, site)
+    except Exception as exc:
+        tii_errors.append(f"Curated portfolio AADT mapping: {exc}")
     try:
         return tii_aadt_priority_counter_lookup(address, site)
     except Exception as exc:

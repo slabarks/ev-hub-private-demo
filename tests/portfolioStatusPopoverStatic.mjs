@@ -10,7 +10,11 @@ const requiredAppTokens = [
   'closePortfolioStatusPopover',
   'Click any status pill for the action year and recommendation',
   'portfolioSortHeader("category", "Category")',
-  'portfolioSortHeader("performance", "Status")'
+  'portfolioSortHeader("performance", "Status")',
+  'data-portfolio-maturity-trigger',
+  'showPortfolioMaturityPopover',
+  'portfolioMaturityDescription',
+  'Secondary signal:'
 ];
 for (const token of requiredAppTokens) {
   if (!app.includes(token)) throw new Error(`Missing portfolio status popover token: ${token}`);
@@ -28,6 +32,7 @@ for (const token of removedMainColumns) {
 const requiredCssTokens = [
   '.portfolio-status-popover',
   '.portfolio-status-trigger',
+  '.portfolio-maturity-trigger',
   '.portfolio-status-popover-kpis',
   'v35.21 portfolio concise status popover'
 ];

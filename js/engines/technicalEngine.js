@@ -1,5 +1,5 @@
 import { platformItem, dispenserNameForPlatform } from "../data/platformLibrary.js";
-import { batteryItem } from "../data/batteryLibrary.js";
+import { batteryItem, batteryDeploymentCostProfile } from "../data/batteryLibrary.js";
 import { GRID_SUBSTATION, approximateLvConnectionCost, substationMultiplier } from "../data/gridSubstation.js";
 import { deriveCivilElectricalCost } from "../data/civilElectricalCostLibrary.js";
 import { estimateEsbConnectionCostExVat } from "../data/esbConnectionCostLibrary.js";
@@ -137,6 +137,10 @@ export function initialCapexDetail(config, inputs) {
   const standaloneHw = config.platform === "Autel Standalone" ? (charger ? charger.unitCost : 0) * chargerCount : 0;
   const batteryHw = battery.hardwareCost || 0;
   const batteryInstall = battery.installComm || 0;
+  const batteryProfile = batteryDeploymentCostProfile(battery);
+  const batteryUnitInstall = batteryProfile.totalDeploymentCapexExcludingCivils > 0
+    ? Math.max(0, Number(batteryProfile.totalDeploymentCapexExcludingCivils || 0) - Number(battery.hardwareCost || 0) - Number(battery.installComm || 0) - Number(battery.logisticsCost || 0) - Number(battery.installCommissioning || 0))
+    : 0;
   const install = deriveCivilElectricalCost(config, inputs, { charger, cabinet, battery, dispenser, chargerCount, dispenserCount });
 
   const esbEstimate = estimateEsbConnectionCostExVat(config.selectedMicKva, inputs.modelStartYear || inputs.codYear, inputs.esbConnectionCostEscalationRate);
@@ -153,7 +157,7 @@ export function initialCapexDetail(config, inputs) {
     ? (charger ? charger.commissioning || 0 : 0) * chargerCount
     : (cabinet ? cabinet.commissioning || 0 : 0);
 
-  const calculatedTotal = cabinetHw + dispenserHw + standaloneHw + batteryHw + batteryInstall + install + gridConnection + substation + batteryLogistics + batteryInstallCommissioning + commissioning;
+  const calculatedTotal = cabinetHw + dispenserHw + standaloneHw + batteryHw + batteryInstall + batteryUnitInstall + install + gridConnection + substation + batteryLogistics + batteryInstallCommissioning + commissioning;
   const overrideTotal = actualInitialCapexOverride(config);
   const total = overrideTotal || calculatedTotal;
   return {
@@ -166,6 +170,7 @@ export function initialCapexDetail(config, inputs) {
     standaloneHw,
     batteryHw,
     batteryInstall,
+    batteryUnitInstall,
     civilElectricalInstall: install,
     gridConnection,
     esbConnectionCostEstimate: esbEstimate,

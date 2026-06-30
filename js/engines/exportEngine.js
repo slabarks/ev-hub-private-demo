@@ -446,10 +446,10 @@ function pdfPortfolioResult(site) {
   const aadtReview = ["medium_low", "review"].includes(pdfPortfolioToken(site.aadtConfidence));
   let status = "In benchmark";
   if (tier === "early") status = "Ramp-up";
-  if (aadtReview || pdfPortfolioCategoryKey(site) === "review") status = "Review";
-  if (doNothing.firstActionYear && doNothing.firstActionYear <= doNothing.startYear + 5) status = "Capacity pressure";
-  if (tier !== "early" && variance > 0.20) status = "Under-capturing";
-  if (tier !== "early" && variance < -0.20 && status !== "Capacity pressure") status = "Outperforming";
+  else if (aadtReview || pdfPortfolioCategoryKey(site) === "review") status = "Review";
+  else if (doNothing.firstActionYear && doNothing.firstActionYear <= doNothing.startYear + 5) status = "Capacity pressure";
+  else if (variance > 0.20) status = "Under-capturing";
+  else if (variance < -0.20) status = "Outperforming";
   return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, annualVariance: variance, status, triggerYear: doNothing.firstActionYear || "Monitor" };
 }
 function portfolioExportRows(limit = 80) {
@@ -459,7 +459,7 @@ function portfolioPdfTableRows(limit = 80) {
   return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.status)]);
 }
 function portfolioXlsxRows() {
-  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual kWh/yr", "Model kWh/yr", "Variance", "Status", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.status, r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
+  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual / annualised kWh/yr", "Model kWh/yr", "Variance", "Status", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.status, r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
 }
 
 export function exportDemandCsv(demand) {
@@ -770,7 +770,7 @@ export async function exportInvestorPdf(state, results) {
     <p class="report-caption">Annual actual performance is compared with the portfolio-calibrated model using each operating site's MIC, AADT, maturity and site category. Mature sites carry the highest benchmark confidence; early sites are directional.</p>
     <div class="panel">
       <h3>Operating hub benchmark table</h3>
-      ${htmlTable(["Site", "Maturity", "Category", "MIC", "AADT", "Actual kWh/yr", "Model kWh/yr", "Variance", "Status"], portfolioTableRows)}
+      ${htmlTable(["Site", "Maturity", "Category", "MIC", "AADT", "Actual / annualised kWh/yr", "Model kWh/yr", "Variance", "Status"], portfolioTableRows)}
     </div>
   </section>
 

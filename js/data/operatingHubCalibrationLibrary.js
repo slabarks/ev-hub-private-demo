@@ -1,13 +1,13 @@
-// Auto-generated portfolio calibration library for v35.34.
+// Auto-generated portfolio calibration library for v35.39.
 // Each site is mapped to a model-equivalent configuration for back-testing.
 export const PORTFOLIO_CALIBRATION_SITES = [
   {
     "id": "circle_k_express_dungarvan",
     "name": "Circle K Express Dungarvan",
     "address": "X35 XT71, Youghal Road, Dungarvan, Waterford",
-    "aadt": 11427,
+    "aadt": 11304,
     "aadtConfidence": "High",
-    "aadtCounter": "Circle K Express Dungarvan",
+    "aadtCounter": "TII 2026 · 000000001251/000000020255",
     "actual": {
       "rolling30NetRevenue": 1136.16,
       "rolling30Kwh": 1725.0210840439854,
@@ -40,15 +40,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 125696,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000001251",
+      "000000020255"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of two selected N25 counters around Dungarvan; both are same-corridor public TII AADT rows."
   },
   {
     "id": "circle_k_junction_20",
     "name": "Circle K - Junction 20",
     "address": "A91 AYW7, Drumad, Ravensdale, Louth",
-    "aadt": 30720,
+    "aadt": 28140,
     "aadtConfidence": "High",
-    "aadtCounter": "Circle K - Junction 20",
+    "aadtCounter": "TII 2026 · 000000020016/000000020018",
     "actual": {
       "rolling30NetRevenue": 6455.76,
       "rolling30Kwh": 9801.71992811558,
@@ -81,15 +87,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 64999,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000020016",
+      "000000020018"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected N01/M01 Junction 20 corridor counters; same access corridor."
   },
   {
     "id": "anner_hotel_120_kw_dc",
     "name": "Anner Hotel 120 kW DC",
     "address": "E41 X789, Dublin Rd, Thurles, Tipperary",
-    "aadt": 9663,
+    "aadt": 14976,
     "aadtConfidence": "High",
-    "aadtCounter": "Anner Hotel",
+    "aadtCounter": "TII 2026 · 000000020087/000000020088",
     "actual": {
       "rolling30NetRevenue": 1963.03,
       "rolling30Kwh": 2980.450058628067,
@@ -122,7 +134,13 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 58580,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000020087",
+      "000000020088"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected M08 Thurles/Cashel corridor counters; demand model applies hotel/destination relevance cap."
   },
   {
     "id": "the_cope_shopping_centre",
@@ -130,7 +148,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "address": "F94 N406, 35-57 Main Street, Dungloe, Donegal",
     "aadt": 3526,
     "aadtConfidence": "High",
-    "aadtCounter": "The Cope Shopping Centre",
+    "aadtCounter": "TII 2026 · 000000020562",
     "actual": {
       "rolling30NetRevenue": 3035.89,
       "rolling30Kwh": 4609.363345689247,
@@ -163,15 +181,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 120728,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000020562"
+    ],
+    "aadtAggregationMethod": "single_counter_excluding_abnormal_low",
+    "aadtBasisNote": "Uses the valid N56 TMU counter only; CMU 000000080562 has 12 AADT and is excluded as non-representative."
   },
   {
     "id": "walsh_s_centra_service_station_roscommon",
     "name": "Walsh's Centra Service Station Roscommon",
     "address": "F42 CD63, Castle Street, Cloonbrackna, Roscommon",
-    "aadt": 6762,
-    "aadtConfidence": "Medium",
-    "aadtCounter": "Walsh's Centra Service Station Roscommon",
+    "aadt": 6523,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001602/000000020611",
     "actual": {
       "rolling30NetRevenue": 1812.24,
       "rolling30Kwh": 2751.507014283087,
@@ -204,15 +227,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 163576,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000001602",
+      "000000020611"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected N60/N61 Roscommon approach counters."
   },
   {
     "id": "corrib_oil_cork_city",
     "name": "Corrib Oil - Cork City",
     "address": "T12 T326, Lee Garage, Model Farm Road, Cork",
-    "aadt": 52880,
-    "aadtConfidence": "Medium-High",
-    "aadtCounter": "Corrib Oil - Cork City",
+    "aadt": 17056,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001221/000000020222",
     "actual": {
       "rolling30NetRevenue": 11962.04,
       "rolling30Kwh": 18161.853267301714,
@@ -245,15 +274,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 268323,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000001221",
+      "000000020222"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected N22 Cork/Model Farm corridor counters from the curated mapping file."
   },
   {
     "id": "oran_point_oranmore",
     "name": "Oran Point, Oranmore",
     "address": "H91 K6WF, Oranpoint Shopping Centre, Oranmore, Galway",
-    "aadt": 13898,
-    "aadtConfidence": "Medium",
-    "aadtCounter": "Oran Point, Oranmore",
+    "aadt": 13908,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000003181/000000003182",
     "actual": {
       "rolling30NetRevenue": 7108.99,
       "rolling30Kwh": 10793.51291742171,
@@ -286,15 +321,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery. Oran Point MIC corrected to 199 kVA in CAPEX calibration revision.",
     "actualCapexExVat": 85993,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000003181",
+      "000000003182"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected M18/N18 Oranmore/Kilcolgan corridor counters."
   },
   {
     "id": "athlone_m6_junction_13_westpoint_business_centre",
     "name": "Athlone - M6 Junction 13, Westpoint Business Centre",
     "address": "N37 W5K5, Westpoint Business Centre, Athlone, Westmeath",
-    "aadt": 38952,
+    "aadt": 38658,
     "aadtConfidence": "High",
-    "aadtCounter": "Athlone - M6 Junction 13, Westpoint Business Centre",
+    "aadtCounter": "TII 2026 · 000000001065/000000020065",
     "actual": {
       "rolling30NetRevenue": 7030.93,
       "rolling30Kwh": 10674.9951507159,
@@ -327,15 +368,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 142011,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000001065",
+      "000000020065"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected Athlone bypass / M6 Junction 13 corridor counters."
   },
   {
     "id": "corrib_oil_tralee",
     "name": "Corrib Oil - Tralee",
     "address": "V92 K7DH, John Joe Sheehy Rd, Tralee, Kerry",
-    "aadt": 8126,
+    "aadt": 9112,
     "aadtConfidence": "High",
-    "aadtCounter": "Corrib Oil - Tralee",
+    "aadtCounter": "TII 2026 · 000000001225/000000001703",
     "actual": {
       "rolling30NetRevenue": 4725.43,
       "rolling30Kwh": 7174.576099470119,
@@ -368,15 +415,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 171634,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000001225",
+      "000000001703"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected N22/N70 Tralee ring-road counters."
   },
   {
     "id": "the_brehon_hotel",
     "name": "The Brehon Hotel",
     "address": "V93 RT22, Muckross Road, Killarney, Kerry",
-    "aadt": 873,
-    "aadtConfidence": "Medium",
-    "aadtCounter": "The Brehon Hotel",
+    "aadt": 14326,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001222/000000001223",
     "actual": {
       "rolling30NetRevenue": 2126.38,
       "rolling30Kwh": 3228.4628333064443,
@@ -410,15 +463,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 90858,
     "capexSource": "Actual project CAPEX provided by model owner",
-    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 1 DC charger / 2 fast plugs."
+    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 1 DC charger / 2 fast plugs.",
+    "aadtCounterIds": [
+      "000000001222",
+      "000000001223"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected N22 Killarney counters; replaces the low 873 proxy and remains capped by hotel/destination factors."
   },
   {
     "id": "greenhills_hotel",
     "name": "Greenhills Hotel",
     "address": "V94 X2RV, Ennis Road, Limerick",
-    "aadt": 41419,
-    "aadtConfidence": "Medium-High",
-    "aadtCounter": "Greenhills Hotel",
+    "aadt": 22504,
+    "aadtConfidence": "Medium",
+    "aadtCounter": "TII 2026 · 000000030189/000000030201",
     "actual": {
       "rolling30NetRevenue": 2244.57,
       "rolling30Kwh": 3407.909603059964,
@@ -452,15 +511,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 162823,
     "capexSource": "Actual project CAPEX provided by model owner",
-    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains Kempower 1 cabinet + 2 dual DC dispensers."
+    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains Kempower 1 cabinet + 2 dual DC dispensers.",
+    "aadtCounterIds": [
+      "000000030189",
+      "000000030201"
+    ],
+    "aadtAggregationMethod": "selected_corridor_average_medium_confidence",
+    "aadtBasisNote": "Average of selected N18/Ennis Road corridor counters; medium confidence because hotel/local access can differ from corridor traffic."
   },
   {
     "id": "southgate_shopping_centre",
     "name": "Southgate Shopping Centre",
     "address": "A92 EF80, Colp Cross, Drogheda, Meath",
     "aadt": 52456,
-    "aadtConfidence": "Medium-High",
-    "aadtCounter": "Southgate Shopping Centre",
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001019",
     "actual": {
       "rolling30NetRevenue": 7245.48,
       "rolling30Kwh": 11000.74440573424,
@@ -493,15 +558,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 133517,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000001019"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected M01 Drogheda South corridor counter."
   },
   {
     "id": "the_rhu_glenn_hotel",
     "name": "The Rhu Glenn Hotel",
     "address": "X91 E395, Slieverue, Luffany, Kilkenny",
-    "aadt": 2967,
+    "aadt": 9080,
     "aadtConfidence": "High",
-    "aadtCounter": "The Rhu Glenn Hotel",
+    "aadtCounter": "TII 2026 · 000000032502/000000001243",
     "actual": {
       "rolling30NetRevenue": 2224.87,
       "rolling30Kwh": 3377.9992776166573,
@@ -533,7 +603,13 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
-    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 2 DC chargers / 4 fast plugs."
+    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 2 DC chargers / 4 fast plugs.",
+    "aadtCounterIds": [
+      "000000032502",
+      "000000001243"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected N25/N24 Waterford approach counters; replaces the low 2,967 proxy."
   },
   {
     "id": "ahern_s_centra_castlemartyr",
@@ -541,7 +617,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "address": "P25 R762, Main Street, Castlemartyr, Cork",
     "aadt": 15882,
     "aadtConfidence": "High",
-    "aadtCounter": "Ahern's Centra - Castlemartyr",
+    "aadtCounter": "TII 2026 · 000000001252",
     "actual": {
       "rolling30NetRevenue": 4405.62,
       "rolling30Kwh": 6689.011572565362,
@@ -572,7 +648,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "aadtCounterIds": [
+      "000000001252"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N25 Castlemartyr-Midleton counter."
   },
   {
     "id": "aherns_centra_carrigtwohill",
@@ -580,7 +661,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "address": "T45 VK22, Main Street, Carrigtwohill, Cork",
     "aadt": 40885,
     "aadtConfidence": "High",
-    "aadtCounter": "Aherns Centra - Carrigtwohill",
+    "aadtCounter": "TII 2026 · 000000020256",
     "actual": {
       "rolling30NetRevenue": 3459.36,
       "rolling30Kwh": 5252.313879469794,
@@ -611,7 +692,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "aadtCounterIds": [
+      "000000020256"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N25 Carrigtwohill bypass counter."
   },
   {
     "id": "charleville_park_hotel",
@@ -619,7 +705,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "address": "P56 V268, Limerick Road, Charleville, Cork",
     "aadt": 11173,
     "aadtConfidence": "High",
-    "aadtCounter": "Charleville Park Hotel",
+    "aadtCounter": "TII 2026 · 000000001201",
     "actual": {
       "rolling30NetRevenue": 4154.99,
       "rolling30Kwh": 6308.482391557455,
@@ -650,15 +736,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
     "modelEquivalentPlugs": 8,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "aadtCounterIds": [
+      "000000001201"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N20 Buttevant-Charleville counter."
   },
   {
     "id": "castletroy_park_hotel",
     "name": "Castletroy Park Hotel",
     "address": "V94 Y0AN, Dublin Road, Castletroy, Limerick",
-    "aadt": 17639,
+    "aadt": 32782,
     "aadtConfidence": "High",
-    "aadtCounter": "Castletroy Park Hotel",
+    "aadtCounter": "TII 2026 · 000000200722",
     "actual": {
       "rolling30NetRevenue": 5143.05,
       "rolling30Kwh": 7808.644633055572,
@@ -691,7 +782,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 8,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 113416,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000200722"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected M07 Castletroy/Ballysimon corridor counter; hotel/destination cap remains applied."
   },
   {
     "id": "mallow_plaza",
@@ -699,7 +795,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "address": "P51 NX3F, Limerick Road, Mallow, Cork",
     "aadt": 17537,
     "aadtConfidence": "High",
-    "aadtCounter": "Mallow Plaza",
+    "aadtCounter": "TII 2026 · 000000020204",
     "actual": {
       "rolling30NetRevenue": 12005.31,
       "rolling30Kwh": 18227.54970293277,
@@ -730,7 +826,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
     "modelEquivalentPlugs": 8,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "aadtCounterIds": [
+      "000000020204"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N20 Blarney-Mallow counter."
   },
   {
     "id": "leopardstown_retail_park",
@@ -738,7 +839,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "address": "D18 CC94, Arena Road, Dublin",
     "aadt": 14086,
     "aadtConfidence": "High",
-    "aadtCounter": "Leopardstown Retail Park",
+    "aadtCounter": "TII 2026 · 000000001312",
     "actual": {
       "rolling30NetRevenue": 4484.29,
       "rolling30Kwh": 6808.455496556474,
@@ -771,15 +872,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 171779,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000001312"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N31 Brewery Road / Leopardstown counter."
   },
   {
     "id": "finline_furniture_dublin",
     "name": "Finline Furniture - Dublin",
     "address": "D12 DX0P, Long Mile Retail Centre, Long Mile Rd, Dublin",
-    "aadt": 132535,
-    "aadtConfidence": "Medium",
-    "aadtCounter": "Long Mile Road - Finline Furniture - Dublin",
+    "aadt": 103245,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001072",
     "actual": {
       "rolling30NetRevenue": 1827.4,
       "rolling30Kwh": 2774.5243002587476,
@@ -812,15 +918,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 164525,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000001072"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N07 Newlands Cross-Kingswood counter; high corridor proxy moderated by retail category factors."
   },
   {
     "id": "axis_retail_park",
     "name": "Axis Retail Park",
     "address": "N39 X7W0, N4 Axis Centre, Battery Rd, Longford",
-    "aadt": 13286,
+    "aadt": 11200,
     "aadtConfidence": "High",
-    "aadtCounter": "Axis Retail Park",
+    "aadtCounter": "TII 2026 · 000000020045/000000001057",
     "actual": {
       "rolling30NetRevenue": 6389.82,
       "rolling30Kwh": 9701.603843865247,
@@ -851,15 +962,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
     "modelEquivalentPlugs": 8,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "aadtCounterIds": [
+      "000000020045",
+      "000000001057"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected N04/N5 Longford bypass counters."
   },
   {
     "id": "tullamore_retail_park",
     "name": "Tullamore Retail Park",
     "address": "R35 VN23, Tullamore Retail Park, Cloncollog, Tullamore",
     "aadt": 11266,
-    "aadtConfidence": "Medium-High",
-    "aadtCounter": "Tullamore Retail Park",
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000020801",
     "actual": {
       "rolling30NetRevenue": 5744.37,
       "rolling30Kwh": 8721.623155673275,
@@ -892,15 +1009,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 10,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery. Tullamore maps to 5 × Autel DH480; actual 700 kVA maps to 800 kVA model MIC on load.",
     "actualCapexExVat": 642662,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000020801"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N80 Tullamore counter."
   },
   {
     "id": "supervalu_tipperary",
     "name": "Supervalu - Tipperary",
     "address": "E34 VP78, Kickham Place, Tipperary",
-    "aadt": 0,
-    "aadtConfidence": "",
-    "aadtCounter": "Supervalu - Tipperary",
+    "aadt": 7093,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001241",
     "actual": {
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
@@ -931,15 +1053,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Autel Single Cabinet + 2 dual dispensers (DH480 4-connector equivalent)",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "aadtCounterIds": [
+      "000000001241"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N24 Bansha-Tipperary Town counter; fixes previous zero AADT."
   },
   {
     "id": "newtown_park_hotel",
     "name": "Newtown Park Hotel",
     "address": "Y35 E8KT, Ballindinas, Barntown, Wexford",
     "aadt": 8395,
-    "aadtConfidence": "Medium-High",
-    "aadtCounter": "Newtown Park Hotel",
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000020252",
     "actual": {
       "rolling30NetRevenue": 6471,
       "rolling30Kwh": 9824.858677341774,
@@ -970,15 +1097,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
     "modelEquivalentPlugs": 8,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "aadtCounterIds": [
+      "000000020252"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N25 Carrickbyrne counter."
   },
   {
     "id": "newbridge_retail_park",
     "name": "Newbridge Retail Park",
     "address": "W12 N728, Athgarvan Rd, Moorfield, Newbridge, Kildare",
-    "aadt": 51324,
+    "aadt": 49320,
     "aadtConfidence": "High",
-    "aadtCounter": "Newbridge Retail Park",
+    "aadtCounter": "TII 2026 · 000000020074/000000020075",
     "actual": {
       "rolling30NetRevenue": 6273.26,
       "rolling30Kwh": 9524.6318878413,
@@ -1011,15 +1143,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 132300,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000020074",
+      "000000020075"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected M07 Newbridge/Kildare corridor counters."
   },
   {
     "id": "circle_k_aherns_service_station",
     "name": "Circle K - Aherns Service Station",
-    "address": "",
-    "aadt": 9663,
+    "address": "E41 F9N1, Abbey Road, Thurles, Tipperary",
+    "aadt": 14976,
     "aadtConfidence": "High",
-    "aadtCounter": "Circle K - Aherne's Service Station",
+    "aadtCounter": "TII 2026 · 000000020087/000000020088",
     "actual": {
       "rolling30NetRevenue": 2538.26,
       "rolling30Kwh": 3853.8163786662853,
@@ -1052,15 +1190,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 73617,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000020087",
+      "000000020088"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected M08 Thurles/Cashel corridor counters; address added from curated mapping."
   },
   {
     "id": "euro_business_park",
     "name": "Euro Business Park",
     "address": "T45 Y261, Euro Business Park, Little Island, Cork",
-    "aadt": 58056,
+    "aadt": 54530,
     "aadtConfidence": "High",
-    "aadtCounter": "Euro Business Park",
+    "aadtCounter": "TII 2026 · 000000020257/000000020258",
     "actual": {
       "rolling30NetRevenue": 10558.06,
       "rolling30Kwh": 16030.203586291931,
@@ -1093,7 +1237,13 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 171522,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000020257",
+      "000000020258"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected N25/N28 Little Island corridor counters."
   },
   {
     "id": "castleknock_hotel",
@@ -1101,7 +1251,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "address": "D15 WNR7, Porterstown Road, Dublin",
     "aadt": 155138,
     "aadtConfidence": "High",
-    "aadtCounter": "Castleknock Hotel",
+    "aadtCounter": "TII 2026 · 000000001508",
     "actual": {
       "rolling30NetRevenue": 236.21,
       "rolling30Kwh": 358.6354300996601,
@@ -1135,15 +1285,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 133072,
     "capexSource": "Actual project CAPEX provided by model owner",
-    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 1 DC charger / 2 fast plugs."
+    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 1 DC charger / 2 fast plugs.",
+    "aadtCounterIds": [
+      "000000001508"
+    ],
+    "aadtAggregationMethod": "single_counter_high_corridor_proxy",
+    "aadtBasisNote": "Selected M50 Castleknock corridor counter; high proxy moderated by hotel/destination factors."
   },
   {
     "id": "corrib_oil_swinford",
     "name": "Corrib Oil - Swinford",
     "address": "F12 C6E8, Kilbride, Swinford, Mayo",
-    "aadt": 8902,
-    "aadtConfidence": "Medium-High",
-    "aadtCounter": "Corrib Oil - Swinford",
+    "aadt": 7434,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001053/000000001058",
     "actual": {
       "rolling30NetRevenue": 2284.81,
       "rolling30Kwh": 3469.005618077153,
@@ -1174,15 +1329,21 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Autel Single Cabinet + 2 dual dispensers (DH480 4-connector equivalent)",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "aadtCounterIds": [
+      "000000001053",
+      "000000001058"
+    ],
+    "aadtAggregationMethod": "same_corridor_average",
+    "aadtBasisNote": "Average of selected N05 Swinford approach counters."
   },
   {
     "id": "o_brien_s_larkin_s_cross",
     "name": "O'Brien's Larkin's Cross",
     "address": "Y35 TR2A, Londis, Larkin's Cross, Barntown, Wexford",
     "aadt": 8395,
-    "aadtConfidence": "Medium-High",
-    "aadtCounter": "O'Brien's Larkin's Cross",
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000020252",
     "actual": {
       "rolling30NetRevenue": 580.46,
       "rolling30Kwh": 881.3069800416946,
@@ -1213,15 +1374,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
     "modelEquivalentPlugs": 8,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "aadtCounterIds": [
+      "000000020252"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected N25 Carrickbyrne counter."
   },
   {
     "id": "corrib_oil_fermoy",
     "name": "Corrib Oil - Fermoy",
     "address": "P61 YD71, Cork Road, Fermoy, Cork",
     "aadt": 20164,
-    "aadtConfidence": "Medium-High",
-    "aadtCounter": "Corrib Oil - Fermoy",
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000020086",
     "actual": {
       "rolling30NetRevenue": 2659.71,
       "rolling30Kwh": 4038.21277587895,
@@ -1254,15 +1420,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 158644,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000020086"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected M08 Mitchelstown-Fermoy counter."
   },
   {
     "id": "malahide_afc",
     "name": "Malahide AFC",
     "address": "K36 YA97, Malahide United AFC, Gannon Road, Malahide, Dublin",
     "aadt": 102700,
-    "aadtConfidence": "Medium-Low",
-    "aadtCounter": "Malahide AFC",
+    "aadtConfidence": "Medium",
+    "aadtCounter": "TII 2026 · 000000020011",
     "actual": {
       "rolling30NetRevenue": 3889.49,
       "rolling30Kwh": 5905.376228857062,
@@ -1295,15 +1466,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 141297,
-    "capexSource": "Actual project CAPEX provided by model owner"
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "aadtCounterIds": [
+      "000000020011"
+    ],
+    "aadtAggregationMethod": "single_counter_medium_confidence",
+    "aadtBasisNote": "Selected M01 Airport-Swords corridor counter; medium confidence because this is a local/community site and model cap applies strongly."
   },
   {
     "id": "aldi_donabate",
     "name": "Aldi Donabate",
     "address": "Turvey Avenue, Donabate, Dublin, K36 D2T2, Ireland",
-    "aadt": 63013,
-    "aadtConfidence": "Medium",
-    "aadtCounter": "TMU M01 020.0 N / Donabate corridor",
+    "aadt": 63453,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001015",
     "actual": {
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
@@ -1338,15 +1514,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "sourceNote": "Added static setup in CAPEX/live calibration revision. Actual CAPEX not provided; use calibrated/model estimate.",
     "capexCalibrationNote": "Actual CAPEX not provided; use calibrated/model estimate.",
     "benchmarkEligible": false,
-    "displayInPortfolio": true
+    "displayInPortfolio": true,
+    "aadtCounterIds": [
+      "000000001015"
+    ],
+    "aadtAggregationMethod": "single_counter",
+    "aadtBasisNote": "Selected M01 Donabate-Balbriggan South counter."
   },
   {
     "id": "scg_cobh_golf_club",
     "name": "SCG Cobh Golf Club",
     "address": "Cobh Golf Club, Cobh, Cork, P24 Y226, Ireland",
-    "aadt": 31338,
-    "aadtConfidence": "Medium-Low",
-    "aadtCounter": "Cobh / Cork broad TII text match",
+    "aadt": 10519,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001282",
     "actual": {
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
@@ -1381,15 +1562,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "sourceNote": "Added static setup in CAPEX/live calibration revision. Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
     "capexCalibrationNote": "Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
     "benchmarkEligible": false,
-    "displayInPortfolio": true
+    "displayInPortfolio": true,
+    "aadtCounterIds": [
+      "000000001282"
+    ],
+    "aadtAggregationMethod": "single_counter_dc50_class",
+    "aadtBasisNote": "Selected N28 Ringaskiddy-Shannonpark counter; small DC50 class and not part of high-power hub benchmark."
   },
   {
     "id": "scg_dundalk_golf_club",
     "name": "SCG Dundalk Golf Club",
     "address": "Dundalk Golf Club, Dundalk, Louth, A91 Y7YD, Ireland",
-    "aadt": 11555,
-    "aadtConfidence": "Medium",
-    "aadtCounter": "TMU N52 Dundalk averaged text match",
+    "aadt": 8343,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000020525",
     "actual": {
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
@@ -1424,15 +1610,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "sourceNote": "Added static setup in CAPEX/live calibration revision. Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
     "capexCalibrationNote": "Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
     "benchmarkEligible": false,
-    "displayInPortfolio": true
+    "displayInPortfolio": true,
+    "aadtCounterIds": [
+      "000000020525"
+    ],
+    "aadtAggregationMethod": "selected_local_counter_dc50_class",
+    "aadtBasisNote": "Uses N52 Dundalk Southlink as the local/access proxy; M01 counter is retained only as wider context."
   },
   {
     "id": "douglas_court",
     "name": "Douglas Court",
-    "address": "DOUGLAS COURT SHOPPING CENTRE, Cork, Cork, T12 V597, Ireland",
-    "aadt": 24000,
-    "aadtConfidence": "Validation",
-    "aadtCounter": "Curated Douglas / local road-class estimate",
+    "address": "Douglas Court Shopping Centre, Cork, T12 V597, Ireland",
+    "aadt": 49079,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000001283",
     "actual": {
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
@@ -1469,15 +1660,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "capexSource": "Actual project CAPEX provided by model owner",
     "capexCalibrationNote": "1 DS480 + 4 dual dispensers; actual CAPEX provided.",
     "benchmarkEligible": false,
-    "displayInPortfolio": true
+    "displayInPortfolio": true,
+    "aadtCounterIds": [
+      "000000001283"
+    ],
+    "aadtAggregationMethod": "single_counter_retail_proxy",
+    "aadtBasisNote": "Selected N28 N40-Rochestown counter; retail category cap moderates the high corridor value."
   },
   {
     "id": "banner_plaza_ennis_junction_12",
     "name": "Banner Plaza Ennis Junction 12",
-    "address": "V95 TXA3, Texaco, Kilbreckan, Clarecastle, Ennis, Clare, V95 TXA3, Ireland",
-    "aadt": 17350,
-    "aadtConfidence": "Medium",
-    "aadtCounter": "TII Ennis / Clare averaged text match",
+    "address": "Texaco, Kilbreckan, Clarecastle, Ennis, Clare, V95 TXA3, Ireland",
+    "aadt": 30589,
+    "aadtConfidence": "High",
+    "aadtCounter": "TII 2026 · 000000020182",
     "actual": {
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
@@ -1514,15 +1710,20 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "capexSource": "Actual project CAPEX provided by model owner",
     "capexCalibrationNote": "Large skid battery + major infrastructure benchmark; do not mix into normal works benchmark.",
     "benchmarkEligible": false,
-    "displayInPortfolio": true
+    "displayInPortfolio": true,
+    "aadtCounterIds": [
+      "000000020182"
+    ],
+    "aadtAggregationMethod": "selected_junction_counter_special",
+    "aadtBasisNote": "Uses Ennis South/Junction 12 M18 counter because the site is Junction 12 / Clarecastle side; special battery/major infrastructure class."
   },
   {
     "id": "texaco_newcastle",
     "name": "Texaco Newcastle",
-    "address": "D22 E7N6, Main St, Ballynakelly, Dublin, Dublin, D22 E7N6, Ireland",
-    "aadt": 83379,
-    "aadtConfidence": "Medium-Low",
-    "aadtCounter": "Dublin broad TII text match",
+    "address": "Main St, Ballynakelly, Newcastle, Dublin, D22 E7N6, Ireland",
+    "aadt": 88622,
+    "aadtConfidence": "Medium",
+    "aadtCounter": "TII 2026 · 000000200723",
     "actual": {
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
@@ -1559,6 +1760,11 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "capexSource": "Actual project CAPEX provided by model owner",
     "capexCalibrationNote": "Actual CAPEX provided.",
     "benchmarkEligible": false,
-    "displayInPortfolio": true
+    "displayInPortfolio": true,
+    "aadtCounterIds": [
+      "000000200723"
+    ],
+    "aadtAggregationMethod": "single_counter_medium_confidence",
+    "aadtBasisNote": "Selected N07 Newcastle/Kilteel counter; high corridor proxy moderated by service-station factors."
   }
 ];

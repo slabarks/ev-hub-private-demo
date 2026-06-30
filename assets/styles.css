@@ -1726,7 +1726,8 @@ button[disabled] { opacity: .68; cursor: progress; }
   color: var(--text);
   overflow-wrap: anywhere;
 }
-.portfolio-status-trigger {
+.portfolio-status-trigger,
+.portfolio-maturity-trigger {
   border: 0;
   background: transparent;
   padding: 0;
@@ -1736,15 +1737,19 @@ button[disabled] { opacity: .68; cursor: progress; }
   justify-content: center;
   max-width: 100%;
 }
-.portfolio-status-trigger .badge {
+.portfolio-status-trigger .badge,
+.portfolio-maturity-trigger .badge {
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 .portfolio-status-trigger:hover .badge,
-.portfolio-status-trigger:focus-visible .badge {
+.portfolio-status-trigger:focus-visible .badge,
+.portfolio-maturity-trigger:hover .badge,
+.portfolio-maturity-trigger:focus-visible .badge {
   transform: translateY(-1px);
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
 }
-.portfolio-status-trigger:focus-visible {
+.portfolio-status-trigger:focus-visible,
+.portfolio-maturity-trigger:focus-visible {
   outline: 2px solid rgba(10, 151, 88, 0.45);
   outline-offset: 3px;
   border-radius: 999px;

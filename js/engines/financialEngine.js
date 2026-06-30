@@ -1,5 +1,5 @@
 import { deriveConfiguration, technicalChecks, validateConfiguration } from "./technicalEngine.js";
-import { batteryItem } from "../data/batteryLibrary.js";
+import { batteryItem, batteryDeploymentCostProfile } from "../data/batteryLibrary.js";
 import { sum, npv, irr } from "../utils.js";
 
 function batteryEnvelope(config) {
@@ -7,22 +7,17 @@ function batteryEnvelope(config) {
   const selectedPowerKw = Number(battery.powerKw || 0);
   const selectedEnergyKwh = Number(battery.energyKwh || 0);
   if (!selectedPowerKw || !selectedEnergyKwh || config.batteryStrategy === "Grid only") {
-    return { unitsMax: 0, unitPowerKw: 0, unitEnergyKwh: 0, unitDeploymentCapex: 0, unitReplacementCapex: 0, unitServiceCost: 0, battery };
+    return { unitsMax: 0, unitPowerKw: 0, unitEnergyKwh: 0, firstUnitDeploymentCapex: 0, additionalUnitDeploymentCapex: 0, unitReplacementCapex: 0, unitServiceCost: 0, totalDeploymentCapexExcludingCivils: 0, battery };
   }
 
   // Autel batteries are selected in 125 kW / 261 kWh modules.
   // Polarium selections are treated as multiples of the smallest 150 kW / 280 kWh block.
   const unitPowerKw = String(config.batterySize || "").includes("Polarium") ? 150 : 125;
   const unitEnergyKwh = String(config.batterySize || "").includes("Polarium") ? 280 : 261;
-  const unitsMax = Math.max(1, Math.round(selectedPowerKw / unitPowerKw));
-  const totalInitialBatteryCapex = Number(battery.hardwareCost || 0)
-    + Number(battery.installComm || 0)
-    + Number(battery.logisticsCost || 0)
-    + Number(battery.installCommissioning || 0);
-  const unitDeploymentCapex = totalInitialBatteryCapex / unitsMax;
-  const unitReplacementCapex = Number(battery.hardwareCost || 0) / unitsMax;
+  const profile = batteryDeploymentCostProfile(battery);
+  const unitsMax = profile.unitsMax;
   const unitServiceCost = unitPowerKw === 150 ? 350 : 420;
-  return { unitsMax, unitPowerKw, unitEnergyKwh, unitDeploymentCapex, unitReplacementCapex, unitServiceCost, battery };
+  return { unitsMax, unitPowerKw, unitEnergyKwh, firstUnitDeploymentCapex: profile.firstUnitDeploymentCapex, additionalUnitDeploymentCapex: profile.additionalUnitDeploymentCapex, unitReplacementCapex: profile.unitReplacementCapex, unitServiceCost, totalDeploymentCapexExcludingCivils: profile.totalDeploymentCapexExcludingCivils, battery };
 }
 
 function activeBatteryTotals(cohorts) {
@@ -49,8 +44,23 @@ export function calculateYearByYear(inputs, config, demand) {
   const noBatteryDerived = envelope.unitsMax > 0
     ? deriveConfiguration({ ...config, batteryStrategy: "Grid only", batterySize: "No battery", batteryWarrantyYears: 0 }, inputs)
     : derived;
-  const stagedBatteryDeploymentUnitCapex = envelope.unitsMax > 0
-    ? Math.max(envelope.unitDeploymentCapex, (derived.initialInvestmentCapex - noBatteryDerived.initialInvestmentCapex) / envelope.unitsMax)
+  const totalBatteryLibraryDeploymentCapex = envelope.unitsMax > 0
+    ? Number(envelope.totalDeploymentCapexExcludingCivils || 0)
+    : 0;
+  // Battery augmentation rule:
+  // - keep the selected battery size as a staged envelope;
+  // - make main battery civils/electrical provision once for the selected envelope;
+  // - do not re-charge that civils/integration allowance each time an extra module is deployed;
+  // - the first battery deployment carries the one-off provision allowance;
+  // - each later deployment/augmentation pays only the battery module share of HW + shipping/logistics + unit install/commissioning.
+  const batteryEnvelopeProvisionCapex = envelope.unitsMax > 0
+    ? Math.max(0, derived.initialInvestmentCapex - noBatteryDerived.initialInvestmentCapex - totalBatteryLibraryDeploymentCapex)
+    : 0;
+  const stagedFirstBatteryDeploymentBaseCapex = envelope.unitsMax > 0
+    ? envelope.firstUnitDeploymentCapex
+    : 0;
+  const stagedAdditionalBatteryDeploymentCapex = envelope.unitsMax > 0
+    ? envelope.additionalUnitDeploymentCapex
     : 0;
   const rows = [];
   const batteryCohorts = [];
@@ -98,14 +108,21 @@ export function calculateYearByYear(inputs, config, demand) {
     const remainingEnvelopeUnits = Math.max(0, envelope.unitsMax - before.units);
     const newBatteryUnitsInstalled = Math.min(remainingEnvelopeUnits, desiredAdditionalUnits);
     const augmentationFlag = newBatteryUnitsInstalled > 0 ? "AUGMENT" : "";
-    const augmentationCapex = newBatteryUnitsInstalled * stagedBatteryDeploymentUnitCapex;
+    const firstBatteryDeploymentThisYear = newBatteryUnitsInstalled > 0 && before.units === 0;
+    const augmentationCapex = newBatteryUnitsInstalled > 0
+      ? (firstBatteryDeploymentThisYear
+        ? stagedFirstBatteryDeploymentBaseCapex
+          + Math.max(0, newBatteryUnitsInstalled - 1) * stagedAdditionalBatteryDeploymentCapex
+          + batteryEnvelopeProvisionCapex
+        : newBatteryUnitsInstalled * stagedAdditionalBatteryDeploymentCapex)
+      : 0;
     if (newBatteryUnitsInstalled > 0) {
       batteryCohorts.push({
         installYear: year,
         units: newBatteryUnitsInstalled,
         unitPowerKw: envelope.unitPowerKw,
         unitEnergyKwh: envelope.unitEnergyKwh,
-        unitDeploymentCapex: stagedBatteryDeploymentUnitCapex,
+        unitDeploymentCapex: firstBatteryDeploymentThisYear ? stagedFirstBatteryDeploymentBaseCapex : stagedAdditionalBatteryDeploymentCapex,
         unitReplacementCapex: envelope.unitReplacementCapex,
         soh: 1,
         sohStart: 1,
@@ -180,6 +197,7 @@ export function calculateYearByYear(inputs, config, demand) {
     const extendedBatteryWarranty = (config.batteryWarrantyYears === 0 || config.batteryStrategy === "Grid only") ? 0 : (yearNumber <= config.batteryWarrantyYears ? totals.units * (derived.annualBatteryWarrantyCost / Math.max(1, envelope.unitsMax)) : 0);
     const totalOperatingCosts = chargerSlaPpmSupport + managedService + batteryAnnualService + duosStandingCharge + duosCapacityCharge + groundRent + transactionProcessingFee + flatTransactionFee + landlordGpShare + landlordGrossSalesShare + extendedChargerWarranty + extendedBatteryWarranty;
 
+    const initialBatteryProvisionCapex = 0;
     const initialInvestmentCapex = idx === 0 ? nonBatteryInitialCapex - inputs.grantSupport : 0;
     const validChargerReplacementCapex = isValidConfiguration && Number.isFinite(Number(derived.chargerReplacementCapex)) && derived.chargerReplacementCapex > 0;
     const chargerReplacementTrigger = (validChargerReplacementCapex && (yearNumber % inputs.chargerEquipmentReplacementCycleYears === 0)) ? 1 : 0;
@@ -213,7 +231,7 @@ export function calculateYearByYear(inputs, config, demand) {
       energyRevenue, totalRevenue, electricityCost, grossProfit, chargerSlaPpmSupport, managedService,
       batteryAnnualService, duosStandingCharge, duosCapacityCharge, groundRent, transactionProcessingFee,
       flatTransactionFee, landlordGpShare, landlordGrossSalesShare, extendedChargerWarranty,
-      extendedBatteryWarranty, totalOperatingCosts, initialInvestmentCapex, batteryReplacementCapex,
+      extendedBatteryWarranty, totalOperatingCosts, initialInvestmentCapex, initialBatteryProvisionCapex, batteryReplacementCapex,
       chargerReplacementTrigger, chargerReplacementCapex, totalCapex, operatingProfit, annualCashFlow,
       cumulativeCashFlow, breakEvenMarker, helperChargerReplacementYear, helperBatteryReplacementYear,
       helperBreakEvenYear, demandedSessions: d.annualSessionsDemanded, demandedEnergyKwh: d.annualEnergyDemandedKwh,

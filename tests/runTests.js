@@ -108,4 +108,34 @@ assert.equal(zeroCapture.years[0].annualSessionsDemanded, 0, "Zero capture rate 
 const capped = calculateDemand({ ...inputs, annualBevShareGrowthRate: 10 });
 assert.ok(capped.years.every(y => y.bevShare <= inputs.bevShareCap), "BEV share must not exceed cap");
 
+
+const stagedAugmentationInputs = {
+  ...inputs,
+  modelStartYear: 2026,
+  codYear: 2026,
+  trafficSourceYear: 2026,
+  rawCorridorTrafficAadt: 20000,
+  effectiveAadtCap: 0,
+  benchmarkTargetSessionsPer1000Aadt: 0
+};
+const stagedAugmentationConfig = {
+  platform: "Autel Distributed",
+  batteryStrategy: "Grid + battery",
+  chargerModel: "N/A",
+  chargerCount: "N/A",
+  cabinetType: "Autel Single Cabinet",
+  dispenserCount: 3,
+  batterySize: "Autel 3x125kW/261kWh",
+  serviceLevel: "Premium",
+  selectedMicKva: 100,
+  chargerWarrantyYears: 0,
+  batteryWarrantyYears: 0
+};
+const stagedAugmentationYy = calculateYearByYear(stagedAugmentationInputs, stagedAugmentationConfig, calculateDemand(stagedAugmentationInputs));
+const stagedBatteryAdditions = stagedAugmentationYy.rows.filter(r => r.newBatteryUnitsInstalled > 0).map(r => Math.round(r.augmentationCapex));
+assert.ok(stagedBatteryAdditions.length >= 3, "Staged battery augmentation regression should deploy multiple units over time");
+assert.equal(stagedBatteryAdditions[0], 80455, "First battery deployment should include one-off battery provision/civils allowance");
+assert.equal(stagedBatteryAdditions[1], 46260, "Second battery augmentation should not repeat one-off civils/integration allowance");
+assert.equal(stagedBatteryAdditions[2], 46260, "Third battery augmentation should not repeat one-off civils/integration allowance");
+
 console.log("All EV Hub engine tests passed.");

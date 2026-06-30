@@ -95,7 +95,7 @@ export const DEFAULT_SELECTED_CONFIG = {
 export const EXCEL_REFERENCE = {
   defaultDemandYear1AnnualEnergy: 118225.14791224079,
   defaultDemandYear20PeakDemandKw: 621.1281823903814,
-  defaultInitialInvestmentCapex: 323103.5225,
+  defaultInitialInvestmentCapex: 275099.1625,
   defaultYear20CumulativeCashFlow: 1191222.5659317425,
   defaultFirstBatteryReplacementYear: 2044,
   defaultFirstChargerReplacementYear: 2035

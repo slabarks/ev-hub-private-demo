@@ -2183,3 +2183,34 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   .live-calibration-actions { align-items: stretch; }
   .live-calibration-actions button, .live-calibration-actions .file-button { width: 100%; text-align: center; }
 }
+
+/* v35.33 live calibration upload UX refinements */
+.live-calibration-details {
+  margin-top: 12px;
+  border: 1px solid rgba(183, 209, 193, .8);
+  border-radius: 16px;
+  background: rgba(255,255,255,.68);
+  padding: 10px 12px;
+}
+.live-calibration-details summary {
+  cursor: pointer;
+  font-weight: 800;
+  color: var(--accent-strong);
+}
+.live-calibration-details ul { margin: 8px 0 0 18px; padding: 0; color: var(--muted); }
+.live-calibration-details li { margin: 3px 0; }
+.live-file-guidance {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.live-file-guidance > div {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255,255,255,.75);
+}
+@media (max-width: 900px) {
+  .live-file-guidance { grid-template-columns: 1fr; }
+}

@@ -1,11 +1,11 @@
-// Auto-generated portfolio calibration library for v35.12.
+// Auto-generated portfolio calibration library for v35.34.
 // Each site is mapped to a model-equivalent configuration for back-testing.
 export const PORTFOLIO_CALIBRATION_SITES = [
   {
     "id": "circle_k_express_dungarvan",
     "name": "Circle K Express Dungarvan",
     "address": "X35 XT71, Youghal Road, Dungarvan, Waterford",
-    "aadt": 11427.0,
+    "aadt": 11427,
     "aadtConfidence": "High",
     "aadtCounter": "Circle K Express Dungarvan",
     "actual": {
@@ -27,7 +27,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 170,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -36,15 +36,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 170,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 125696,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "circle_k_junction_20",
     "name": "Circle K - Junction 20",
     "address": "A91 AYW7, Drumad, Ravensdale, Louth",
-    "aadt": 30720.0,
+    "aadt": 30720,
     "aadtConfidence": "High",
     "aadtCounter": "Circle K - Junction 20",
     "actual": {
@@ -66,7 +68,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 170,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -75,15 +77,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 170,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 64999,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "anner_hotel_120_kw_dc",
     "name": "Anner Hotel 120 kW DC",
     "address": "E41 X789, Dublin Rd, Thurles, Tipperary",
-    "aadt": 9663.0,
+    "aadt": 9663,
     "aadtConfidence": "High",
     "aadtCounter": "Anner Hotel",
     "actual": {
@@ -105,7 +109,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 120,
-      "chargerModel": "Autel DH240 \u2014 160 kW",
+      "chargerModel": "Autel DH240 — 160 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -114,15 +118,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 120,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 160 kW equivalent",
+    "modelEquivalentSummary": "1 × DH240 / 160 kW equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 58580,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "the_cope_shopping_centre",
     "name": "The Cope Shopping Centre",
     "address": "F94 N406, 35-57 Main Street, Dungloe, Donegal",
-    "aadt": 3526.0,
+    "aadt": 3526,
     "aadtConfidence": "High",
     "aadtCounter": "The Cope Shopping Centre",
     "actual": {
@@ -144,7 +150,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -153,15 +159,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 120728,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "walsh_s_centra_service_station_roscommon",
     "name": "Walsh's Centra Service Station Roscommon",
     "address": "F42 CD63, Castle Street, Cloonbrackna, Roscommon",
-    "aadt": 6762.0,
+    "aadt": 6762,
     "aadtConfidence": "Medium",
     "aadtCounter": "Walsh's Centra Service Station Roscommon",
     "actual": {
@@ -183,7 +191,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -192,15 +200,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 163576,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "corrib_oil_cork_city",
     "name": "Corrib Oil - Cork City",
     "address": "T12 T326, Lee Garage, Model Farm Road, Cork",
-    "aadt": 52880.0,
+    "aadt": 52880,
     "aadtConfidence": "Medium-High",
     "aadtCounter": "Corrib Oil - Cork City",
     "actual": {
@@ -222,7 +232,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -231,15 +241,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 268323,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "oran_point_oranmore",
     "name": "Oran Point, Oranmore",
     "address": "H91 K6WF, Oranpoint Shopping Centre, Oranmore, Galway",
-    "aadt": 13898.0,
+    "aadt": 13898,
     "aadtConfidence": "Medium",
     "aadtCounter": "Oran Point, Oranmore",
     "actual": {
@@ -260,8 +272,8 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
-      "selectedMicKva": 250,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -269,16 +281,18 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "chargerWarrantyYears": 0,
       "batteryWarrantyYears": 0
     },
-    "realMicKva": 250,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 240 kW standalone equivalent",
+    "realMicKva": 199,
+    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery. Oran Point MIC corrected to 199 kVA in CAPEX calibration revision.",
+    "actualCapexExVat": 85993,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "athlone_m6_junction_13_westpoint_business_centre",
     "name": "Athlone - M6 Junction 13, Westpoint Business Centre",
     "address": "N37 W5K5, Westpoint Business Centre, Athlone, Westmeath",
-    "aadt": 38952.0,
+    "aadt": 38952,
     "aadtConfidence": "High",
     "aadtCounter": "Athlone - M6 Junction 13, Westpoint Business Centre",
     "actual": {
@@ -300,7 +314,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -309,15 +323,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 142011,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "corrib_oil_tralee",
     "name": "Corrib Oil - Tralee",
     "address": "V92 K7DH, John Joe Sheehy Rd, Tralee, Kerry",
-    "aadt": 8126.0,
+    "aadt": 8126,
     "aadtConfidence": "High",
     "aadtCounter": "Corrib Oil - Tralee",
     "actual": {
@@ -339,7 +355,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 170,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -348,15 +364,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 170,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 171634,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "the_brehon_hotel",
     "name": "The Brehon Hotel",
     "address": "V93 RT22, Muckross Road, Killarney, Kerry",
-    "aadt": 873.0,
+    "aadt": 873,
     "aadtConfidence": "Medium",
     "aadtCounter": "The Brehon Hotel",
     "actual": {
@@ -378,7 +396,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 160 kW",
+      "chargerModel": "Autel DH240 — 160 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -387,15 +405,18 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 160 kW equivalent",
+    "modelEquivalentSummary": "1 × DH240 / 160 kW equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 90858,
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 1 DC charger / 2 fast plugs."
   },
   {
     "id": "greenhills_hotel",
     "name": "Greenhills Hotel",
     "address": "V94 X2RV, Ennis Road, Limerick",
-    "aadt": 41419.0,
+    "aadt": 41419,
     "aadtConfidence": "Medium-High",
     "aadtCounter": "Greenhills Hotel",
     "actual": {
@@ -428,13 +449,16 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Kempower Single Cabinet + 2 dual Kempower dispensers",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 162823,
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains Kempower 1 cabinet + 2 dual DC dispensers."
   },
   {
     "id": "southgate_shopping_centre",
     "name": "Southgate Shopping Centre",
     "address": "A92 EF80, Colp Cross, Drogheda, Meath",
-    "aadt": 52456.0,
+    "aadt": 52456,
     "aadtConfidence": "Medium-High",
     "aadtCounter": "Southgate Shopping Centre",
     "actual": {
@@ -456,7 +480,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -465,15 +489,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 133517,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "the_rhu_glenn_hotel",
     "name": "The Rhu Glenn Hotel",
     "address": "X91 E395, Slieverue, Luffany, Kilkenny",
-    "aadt": 2967.0,
+    "aadt": 2967,
     "aadtConfidence": "High",
     "aadtCounter": "The Rhu Glenn Hotel",
     "actual": {
@@ -495,7 +521,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -504,15 +530,16 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 2 DC chargers / 4 fast plugs."
   },
   {
     "id": "ahern_s_centra_castlemartyr",
     "name": "Ahern's Centra - Castlemartyr",
     "address": "P25 R762, Main Street, Castlemartyr, Cork",
-    "aadt": 15882.0,
+    "aadt": 15882,
     "aadtConfidence": "High",
     "aadtCounter": "Ahern's Centra - Castlemartyr",
     "actual": {
@@ -534,7 +561,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -543,7 +570,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
   },
@@ -551,7 +578,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "id": "aherns_centra_carrigtwohill",
     "name": "Aherns Centra - Carrigtwohill",
     "address": "T45 VK22, Main Street, Carrigtwohill, Cork",
-    "aadt": 40885.0,
+    "aadt": 40885,
     "aadtConfidence": "High",
     "aadtCounter": "Aherns Centra - Carrigtwohill",
     "actual": {
@@ -573,7 +600,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -582,7 +609,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
   },
@@ -590,7 +617,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "id": "charleville_park_hotel",
     "name": "Charleville Park Hotel",
     "address": "P56 V268, Limerick Road, Charleville, Cork",
-    "aadt": 11173.0,
+    "aadt": 11173,
     "aadtConfidence": "High",
     "aadtCounter": "Charleville Park Hotel",
     "actual": {
@@ -629,7 +656,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "id": "castletroy_park_hotel",
     "name": "Castletroy Park Hotel",
     "address": "V94 Y0AN, Dublin Road, Castletroy, Limerick",
-    "aadt": 17639.0,
+    "aadt": 17639,
     "aadtConfidence": "High",
     "aadtCounter": "Castletroy Park Hotel",
     "actual": {
@@ -662,13 +689,15 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
     "modelEquivalentPlugs": 8,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 113416,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "mallow_plaza",
     "name": "Mallow Plaza",
     "address": "P51 NX3F, Limerick Road, Mallow, Cork",
-    "aadt": 17537.0,
+    "aadt": 17537,
     "aadtConfidence": "High",
     "aadtCounter": "Mallow Plaza",
     "actual": {
@@ -707,7 +736,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "id": "leopardstown_retail_park",
     "name": "Leopardstown Retail Park",
     "address": "D18 CC94, Arena Road, Dublin",
-    "aadt": 14086.0,
+    "aadt": 14086,
     "aadtConfidence": "High",
     "aadtCounter": "Leopardstown Retail Park",
     "actual": {
@@ -729,7 +758,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -738,15 +767,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 171779,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "finline_furniture_dublin",
     "name": "Finline Furniture - Dublin",
     "address": "D12 DX0P, Long Mile Retail Centre, Long Mile Rd, Dublin",
-    "aadt": 132535.0,
+    "aadt": 132535,
     "aadtConfidence": "Medium",
     "aadtCounter": "Long Mile Road - Finline Furniture - Dublin",
     "actual": {
@@ -768,7 +799,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -777,15 +808,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 164525,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "axis_retail_park",
     "name": "Axis Retail Park",
     "address": "N39 X7W0, N4 Axis Centre, Battery Rd, Longford",
-    "aadt": 13286.0,
+    "aadt": 13286,
     "aadtConfidence": "High",
     "aadtCounter": "Axis Retail Park",
     "actual": {
@@ -824,7 +857,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "id": "tullamore_retail_park",
     "name": "Tullamore Retail Park",
     "address": "R35 VN23, Tullamore Retail Park, Cloncollog, Tullamore",
-    "aadt": 11266.0,
+    "aadt": 11266,
     "aadtConfidence": "Medium-High",
     "aadtCounter": "Tullamore Retail Park",
     "actual": {
@@ -846,7 +879,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 700,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH480 — 320 kW",
       "chargerCount": 5,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -855,9 +888,11 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 700,
-    "modelEquivalentSummary": "5 \u00d7 DH240 / 240 kW standalone equivalent (10 plugs)",
+    "modelEquivalentSummary": "5 × Autel DH480 / 320 kW standalone equivalent (10 plugs)",
     "modelEquivalentPlugs": 10,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery. Tullamore maps to 5 × Autel DH480; actual 700 kVA maps to 800 kVA model MIC on load.",
+    "actualCapexExVat": 642662,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "supervalu_tipperary",
@@ -902,11 +937,11 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "id": "newtown_park_hotel",
     "name": "Newtown Park Hotel",
     "address": "Y35 E8KT, Ballindinas, Barntown, Wexford",
-    "aadt": 8395.0,
+    "aadt": 8395,
     "aadtConfidence": "Medium-High",
     "aadtCounter": "Newtown Park Hotel",
     "actual": {
-      "rolling30NetRevenue": 6471.0,
+      "rolling30NetRevenue": 6471,
       "rolling30Kwh": 9824.858677341774,
       "rolling30Sessions": 322.92953643831055,
       "dailyKwh": 327.49528924472577,
@@ -941,7 +976,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "id": "newbridge_retail_park",
     "name": "Newbridge Retail Park",
     "address": "W12 N728, Athgarvan Rd, Moorfield, Newbridge, Kildare",
-    "aadt": 51324.0,
+    "aadt": 51324,
     "aadtConfidence": "High",
     "aadtCounter": "Newbridge Retail Park",
     "actual": {
@@ -974,13 +1009,15 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 199,
     "modelEquivalentSummary": "Autel Single Cabinet + 2 dual dispensers (DS480 4-connector equivalent)",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 132300,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "circle_k_aherns_service_station",
     "name": "Circle K - Aherns Service Station",
     "address": "",
-    "aadt": 9663.0,
+    "aadt": 9663,
     "aadtConfidence": "High",
     "aadtCounter": "Circle K - Aherne's Service Station",
     "actual": {
@@ -1002,7 +1039,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -1011,15 +1048,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 73617,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "euro_business_park",
     "name": "Euro Business Park",
     "address": "T45 Y261, Euro Business Park, Little Island, Cork",
-    "aadt": 58056.0,
+    "aadt": 58056,
     "aadtConfidence": "High",
     "aadtCounter": "Euro Business Park",
     "actual": {
@@ -1041,7 +1080,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -1050,15 +1089,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 171522,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "castleknock_hotel",
     "name": "Castleknock Hotel",
     "address": "D15 WNR7, Porterstown Road, Dublin",
-    "aadt": 155138.0,
+    "aadt": 155138,
     "aadtConfidence": "High",
     "aadtCounter": "Castleknock Hotel",
     "actual": {
@@ -1080,7 +1121,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -1089,15 +1130,18 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 133072,
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 1 DC charger / 2 fast plugs."
   },
   {
     "id": "corrib_oil_swinford",
     "name": "Corrib Oil - Swinford",
     "address": "F12 C6E8, Kilbride, Swinford, Mayo",
-    "aadt": 8902.0,
+    "aadt": 8902,
     "aadtConfidence": "Medium-High",
     "aadtCounter": "Corrib Oil - Swinford",
     "actual": {
@@ -1136,7 +1180,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "id": "o_brien_s_larkin_s_cross",
     "name": "O'Brien's Larkin's Cross",
     "address": "Y35 TR2A, Londis, Larkin's Cross, Barntown, Wexford",
-    "aadt": 8395.0,
+    "aadt": 8395,
     "aadtConfidence": "Medium-High",
     "aadtCounter": "O'Brien's Larkin's Cross",
     "actual": {
@@ -1175,7 +1219,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "id": "corrib_oil_fermoy",
     "name": "Corrib Oil - Fermoy",
     "address": "P61 YD71, Cork Road, Fermoy, Cork",
-    "aadt": 20164.0,
+    "aadt": 20164,
     "aadtConfidence": "Medium-High",
     "aadtCounter": "Corrib Oil - Fermoy",
     "actual": {
@@ -1197,7 +1241,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -1206,15 +1250,17 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 158644,
+    "capexSource": "Actual project CAPEX provided by model owner"
   },
   {
     "id": "malahide_afc",
     "name": "Malahide AFC",
     "address": "K36 YA97, Malahide United AFC, Gannon Road, Malahide, Dublin",
-    "aadt": 102700.0,
+    "aadt": 102700,
     "aadtConfidence": "Medium-Low",
     "aadtCounter": "Malahide AFC",
     "actual": {
@@ -1236,7 +1282,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 \u2014 240 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
@@ -1245,25 +1291,274 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "batteryWarrantyYears": 0
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 \u00d7 DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
     "modelEquivalentPlugs": 4,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery."
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "actualCapexExVat": 141297,
+    "capexSource": "Actual project CAPEX provided by model owner"
+  },
+  {
+    "id": "aldi_donabate",
+    "name": "Aldi Donabate",
+    "address": "Turvey Avenue, Donabate, Dublin, K36 D2T2, Ireland",
+    "aadt": 63013,
+    "aadtConfidence": "Medium",
+    "aadtCounter": "TMU M01 020.0 N / Donabate corridor",
+    "actual": {
+      "rolling30NetRevenue": 0,
+      "rolling30Kwh": 0,
+      "rolling30Sessions": 0,
+      "dailyKwh": 0,
+      "dailySessions": 0,
+      "sessionsPer1000Aadt": 0
+    },
+    "maturity": {
+      "label": "Uploaded live validation",
+      "tier": "early",
+      "dataDays": 0,
+      "comparisonYearIndex": 1
+    },
+    "modelConfig": {
+      "batteryStrategy": "Grid only",
+      "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
+      "platform": "Autel Standalone",
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH240 — 240 kW",
+      "chargerCount": 2,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A"
+    },
+    "realMicKva": 199,
+    "modelEquivalentSummary": "2 × Autel DH240 / 240 kW standalone equivalent",
+    "modelEquivalentPlugs": 4,
+    "categoryKey": "retail",
+    "sourceNote": "Added static setup in CAPEX/live calibration revision. Actual CAPEX not provided; use calibrated/model estimate.",
+    "capexCalibrationNote": "Actual CAPEX not provided; use calibrated/model estimate.",
+    "benchmarkEligible": false,
+    "displayInPortfolio": true
+  },
+  {
+    "id": "scg_cobh_golf_club",
+    "name": "SCG Cobh Golf Club",
+    "address": "Cobh Golf Club, Cobh, Cork, P24 Y226, Ireland",
+    "aadt": 31338,
+    "aadtConfidence": "Medium-Low",
+    "aadtCounter": "Cobh / Cork broad TII text match",
+    "actual": {
+      "rolling30NetRevenue": 0,
+      "rolling30Kwh": 0,
+      "rolling30Sessions": 0,
+      "dailyKwh": 0,
+      "dailySessions": 0,
+      "sessionsPer1000Aadt": 0
+    },
+    "maturity": {
+      "label": "Uploaded live validation",
+      "tier": "early",
+      "dataDays": 0,
+      "comparisonYearIndex": 1
+    },
+    "modelConfig": {
+      "batteryStrategy": "Grid only",
+      "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
+      "platform": "Autel Standalone",
+      "selectedMicKva": 50,
+      "chargerModel": "Autel DC Compact 50 — 50 kW",
+      "chargerCount": 1,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A"
+    },
+    "realMicKva": 50,
+    "modelEquivalentSummary": "1 × Autel DC Compact 50 / 50 kW standalone",
+    "modelEquivalentPlugs": 2,
+    "categoryKey": "local_community",
+    "sourceNote": "Added static setup in CAPEX/live calibration revision. Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
+    "capexCalibrationNote": "Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
+    "benchmarkEligible": false,
+    "displayInPortfolio": true
+  },
+  {
+    "id": "scg_dundalk_golf_club",
+    "name": "SCG Dundalk Golf Club",
+    "address": "Dundalk Golf Club, Dundalk, Louth, A91 Y7YD, Ireland",
+    "aadt": 11555,
+    "aadtConfidence": "Medium",
+    "aadtCounter": "TMU N52 Dundalk averaged text match",
+    "actual": {
+      "rolling30NetRevenue": 0,
+      "rolling30Kwh": 0,
+      "rolling30Sessions": 0,
+      "dailyKwh": 0,
+      "dailySessions": 0,
+      "sessionsPer1000Aadt": 0
+    },
+    "maturity": {
+      "label": "Uploaded live validation",
+      "tier": "early",
+      "dataDays": 0,
+      "comparisonYearIndex": 1
+    },
+    "modelConfig": {
+      "batteryStrategy": "Grid only",
+      "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
+      "platform": "Autel Standalone",
+      "selectedMicKva": 50,
+      "chargerModel": "Autel DC Compact 50 — 50 kW",
+      "chargerCount": 1,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A"
+    },
+    "realMicKva": 50,
+    "modelEquivalentSummary": "1 × Autel DC Compact 50 / 50 kW standalone",
+    "modelEquivalentPlugs": 2,
+    "categoryKey": "local_community",
+    "sourceNote": "Added static setup in CAPEX/live calibration revision. Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
+    "capexCalibrationNote": "Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
+    "benchmarkEligible": false,
+    "displayInPortfolio": true
+  },
+  {
+    "id": "douglas_court",
+    "name": "Douglas Court",
+    "address": "DOUGLAS COURT SHOPPING CENTRE, Cork, Cork, T12 V597, Ireland",
+    "aadt": 24000,
+    "aadtConfidence": "Validation",
+    "aadtCounter": "Curated Douglas / local road-class estimate",
+    "actual": {
+      "rolling30NetRevenue": 0,
+      "rolling30Kwh": 0,
+      "rolling30Sessions": 0,
+      "dailyKwh": 0,
+      "dailySessions": 0,
+      "sessionsPer1000Aadt": 0
+    },
+    "maturity": {
+      "label": "Uploaded live validation",
+      "tier": "early",
+      "dataDays": 0,
+      "comparisonYearIndex": 1
+    },
+    "modelConfig": {
+      "batteryStrategy": "Grid only",
+      "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
+      "platform": "Autel Distributed",
+      "selectedMicKva": 199,
+      "chargerModel": "N/A",
+      "chargerCount": "N/A",
+      "cabinetType": "Autel Single Cabinet",
+      "dispenserCount": 4
+    },
+    "realMicKva": 199,
+    "modelEquivalentSummary": "1 × Autel DS480 + 4 dual dispensers (4 active DC points)",
+    "modelEquivalentPlugs": 4,
+    "categoryKey": "retail",
+    "sourceNote": "Added static setup in CAPEX/live calibration revision. 1 DS480 + 4 dual dispensers; actual CAPEX provided.",
+    "actualCapexExVat": 201933,
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "capexCalibrationNote": "1 DS480 + 4 dual dispensers; actual CAPEX provided.",
+    "benchmarkEligible": false,
+    "displayInPortfolio": true
+  },
+  {
+    "id": "banner_plaza_ennis_junction_12",
+    "name": "Banner Plaza Ennis Junction 12",
+    "address": "V95 TXA3, Texaco, Kilbreckan, Clarecastle, Ennis, Clare, V95 TXA3, Ireland",
+    "aadt": 17350,
+    "aadtConfidence": "Medium",
+    "aadtCounter": "TII Ennis / Clare averaged text match",
+    "actual": {
+      "rolling30NetRevenue": 0,
+      "rolling30Kwh": 0,
+      "rolling30Sessions": 0,
+      "dailyKwh": 0,
+      "dailySessions": 0,
+      "sessionsPer1000Aadt": 0
+    },
+    "maturity": {
+      "label": "Uploaded live validation",
+      "tier": "early",
+      "dataDays": 0,
+      "comparisonYearIndex": 1
+    },
+    "modelConfig": {
+      "platform": "Kempower Distributed",
+      "batteryStrategy": "Grid + battery",
+      "batterySize": "Polarium L-600kVA/1120kWh (With skid)",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 150,
+      "chargerModel": "N/A",
+      "chargerCount": "N/A",
+      "cabinetType": "Kempower Triple Cabinet",
+      "dispenserCount": 4
+    },
+    "realMicKva": 150,
+    "modelEquivalentSummary": "Kempower 2 triple cabinets + 4 dual dispensers + Polarium large skid battery",
+    "modelEquivalentPlugs": 8,
+    "categoryKey": "motorway_plaza",
+    "sourceNote": "Added static setup in CAPEX/live calibration revision. Large skid battery + major infrastructure benchmark; do not mix into normal works benchmark.",
+    "actualCapexExVat": 865368,
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "capexCalibrationNote": "Large skid battery + major infrastructure benchmark; do not mix into normal works benchmark.",
+    "benchmarkEligible": false,
+    "displayInPortfolio": true
+  },
+  {
+    "id": "texaco_newcastle",
+    "name": "Texaco Newcastle",
+    "address": "D22 E7N6, Main St, Ballynakelly, Dublin, Dublin, D22 E7N6, Ireland",
+    "aadt": 83379,
+    "aadtConfidence": "Medium-Low",
+    "aadtCounter": "Dublin broad TII text match",
+    "actual": {
+      "rolling30NetRevenue": 0,
+      "rolling30Kwh": 0,
+      "rolling30Sessions": 0,
+      "dailyKwh": 0,
+      "dailySessions": 0,
+      "sessionsPer1000Aadt": 0
+    },
+    "maturity": {
+      "label": "Uploaded live validation",
+      "tier": "early",
+      "dataDays": 0,
+      "comparisonYearIndex": 1
+    },
+    "modelConfig": {
+      "batteryStrategy": "Grid only",
+      "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
+      "platform": "Autel Standalone",
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH240 — 240 kW",
+      "chargerCount": 2,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A"
+    },
+    "realMicKva": 199,
+    "modelEquivalentSummary": "2 × Autel DH240 / 240 kW standalone equivalent",
+    "modelEquivalentPlugs": 4,
+    "categoryKey": "urban_service",
+    "sourceNote": "Added static setup in CAPEX/live calibration revision. Actual CAPEX provided.",
+    "actualCapexExVat": 139663,
+    "capexSource": "Actual project CAPEX provided by model owner",
+    "capexCalibrationNote": "Actual CAPEX provided.",
+    "benchmarkEligible": false,
+    "displayInPortfolio": true
   }
 ];
-
-export const PORTFOLIO_CALIBRATION_DEFAULTS = {
-  averageSessionEnergy: 30.4,
-  netSellingPriceExVat: 0.66,
-  grossSellingPriceInclVat: 0.72,
-  baseFleetPlanningPower: 60,
-  plugInOverstayOverheadHours: 0.03,
-  siteRelevanceFactor: 0.30,
-  siteCaptureRate: 0.18,
-  siteLimitationFactor: 0.85,
-  annualBevShareGrowthRate: 0.18,
-  fastChargePropensity: 0.22,
-  peakWindowShare: 0.50,
-  peakHourShareWithinPeakWindow: 0.25,
-  rampUpYear1: 0.60,
-  rampUpYear2: 0.80
-};

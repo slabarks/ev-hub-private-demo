@@ -14,7 +14,8 @@ const factory = new Function('DEFAULT_INPUTS', 'DEFAULT_SELECTED_CONFIG', 'calcu
 const { portfolioBenchmarksByCategory, portfolioSiteResults } = factory(DEFAULT_INPUTS, DEFAULT_SELECTED_CONFIG, calculateDemand, calculateYearByYear, summariseFinancials, PORTFOLIO_CALIBRATION_SITES);
 const benchmarks = portfolioBenchmarksByCategory(PORTFOLIO_CALIBRATION_SITES);
 const rows = PORTFOLIO_CALIBRATION_SITES.map(site => portfolioSiteResults(site, benchmarks));
-assert.equal(rows.length, 32, 'Portfolio smoke should cover 32 clean ROI sites');
+assert.equal(rows.length, 38, 'Portfolio smoke should cover 32 clean ROI sites plus 6 added mapped/live sites');
+assert.equal(PORTFOLIO_CALIBRATION_SITES.filter(s => s.benchmarkEligible !== false).length, 32, 'Benchmark peer pool should preserve the original 32 clean sites');
 for (const row of rows) {
   assert.ok(row.assessment?.band, `${row.site.name} should have a performance band`);
   assert.ok(row.assessment?.action, `${row.site.name} should have a recommended action`);

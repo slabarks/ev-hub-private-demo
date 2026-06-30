@@ -2691,6 +2691,7 @@ def _header_index(headers: list[object], *candidates: str):
 def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
+    supporting_files: list[str] = []
     parsed_sources: list[str] = []
     site_days: dict[str, dict] = {}
     total_rows = 0
@@ -2699,6 +2700,15 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         lower = filename.lower()
         if not lower.endswith((".xlsx", ".xlsm", ".csv")):
             warnings.append(f"Ignored unsupported file type: {filename}")
+            continue
+        # Running-total / cumulative dashboard exports can contain the same
+        # column names as the daily charger export, but their kWh values are
+        # cumulative. They must not be added into the rolling 30-day actuals.
+        # Keep them as supporting files only so a full dashboard pack can be
+        # uploaded without inflating live performance by orders of magnitude.
+        if re.search(r"running[_\s-]*total|cumulative", lower):
+            supporting_files.append(filename)
+            warnings.append(f"{filename}: treated as supporting cumulative file and excluded from rolling 30-day actuals.")
             continue
         try:
             matrix = _dashboard_matrix_from_upload(filename, raw)
@@ -2715,7 +2725,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         net_idx = _header_index(headers, "Total net")
         sessions_idx = _header_index(headers, "transaction_id Count")
         if cp_idx is None or kwh_idx is None or date_idx is None:
-            warnings.append(f"{filename}: not a charger-level daily actuals export; kept as supporting file only")
+            supporting_files.append(filename)
             continue
         parsed_sources.append(filename)
         for row in matrix[1:]:
@@ -2802,6 +2812,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         "siteCount": len(actuals),
         "rowCount": total_rows,
         "parsedFiles": parsed_sources,
+        "supportingFiles": supporting_files[:25],
         "warnings": warnings[:25],
         "errors": [],
         "message": f"Uploaded live calibration actuals loaded successfully. Latest actuals date: {latest_date.isoformat()}."

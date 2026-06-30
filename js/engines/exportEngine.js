@@ -452,14 +452,14 @@ function pdfPortfolioResult(site) {
   if (tier !== "early" && variance < -0.20 && status !== "Capacity pressure") status = "Outperforming";
   return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, annualVariance: variance, status, triggerYear: doNothing.firstActionYear || "Monitor" };
 }
-function portfolioExportRows(limit = 32) {
+function portfolioExportRows(limit = 80) {
   return PORTFOLIO_CALIBRATION_SITES.map(pdfPortfolioResult).sort((a,b) => String(a.site.name).localeCompare(String(b.site.name))).slice(0, limit);
 }
-function portfolioPdfTableRows(limit = 32) {
+function portfolioPdfTableRows(limit = 80) {
   return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.status)]);
 }
 function portfolioXlsxRows() {
-  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual kWh/yr", "Model kWh/yr", "Variance", "Status", "Action year"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.status, r.triggerYear])];
+  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual kWh/yr", "Model kWh/yr", "Variance", "Status", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.status, r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
 }
 
 export function exportDemandCsv(demand) {
@@ -629,7 +629,7 @@ export async function exportInvestorPdf(state, results) {
   ]);
 
   const scenarioTableRows = scenarioRows(results.compare);
-  const portfolioTableRows = portfolioPdfTableRows(32);
+  const portfolioTableRows = portfolioPdfTableRows(80);
   const capexRows = (f.capexEvents || []).map(e => [e.year, currency(e.amount, 0), esc(e.reason)]);
   const technicalStatus = results.yearByYear.technical.feasible
     ? "Configuration is technically feasible under the model checks."

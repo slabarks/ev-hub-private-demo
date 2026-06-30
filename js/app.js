@@ -173,11 +173,26 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v1";
+const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v35_35";
+const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = ["evHub.portfolio.liveActuals.v1"];
+function portfolioSnapshotLooksSafe(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.siteActuals)) return false;
+  const parsed = [...(snapshot.parsedFiles || []), ...(snapshot.siteActuals || []).flatMap(item => [item?.actual?.sourceFile, item?.sourceFile].filter(Boolean))]
+    .join(" ")
+    .toLowerCase();
+  if (/running[_\s-]*total|cumulative/.test(parsed)) return false;
+  return true;
+}
 let portfolioLiveActualsSnapshot = (() => {
   try {
+    PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => sessionStorage.removeItem(key));
     const raw = sessionStorage.getItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!portfolioSnapshotLooksSafe(parsed)) {
+      sessionStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
+      return null;
+    }
+    return parsed;
   } catch (_) { return null; }
 })();
 let portfolioLiveUploadError = null;
@@ -292,14 +307,21 @@ function portfolioLiveActualStatus(sites = portfolioMappedSites()) {
   return { matchedCleanSites, additional, uploadedSiteCount: actuals.length, hasLive: !!portfolioLiveActualsSnapshot, liveIndexSize: liveIndex.size };
 }
 function savePortfolioLiveActuals(snapshot) {
-  portfolioLiveActualsSnapshot = snapshot;
+  PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => { try { sessionStorage.removeItem(key); } catch (_) {} });
+  portfolioLiveActualsSnapshot = portfolioSnapshotLooksSafe(snapshot) ? snapshot : null;
   portfolioLiveUploadError = null;
-  try { sessionStorage.setItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY, JSON.stringify(snapshot)); } catch (_) {}
+  try {
+    if (portfolioLiveActualsSnapshot) sessionStorage.setItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY, JSON.stringify(portfolioLiveActualsSnapshot));
+    else sessionStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
+  } catch (_) {}
 }
 function clearPortfolioLiveActuals() {
   portfolioLiveActualsSnapshot = null;
   portfolioLiveUploadError = null;
-  try { sessionStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY); } catch (_) {}
+  try {
+    sessionStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
+    PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => sessionStorage.removeItem(key));
+  } catch (_) {}
 }
 function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {
   const status = portfolioLiveActualStatus(sites);

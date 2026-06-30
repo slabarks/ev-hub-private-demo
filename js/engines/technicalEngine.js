@@ -119,6 +119,11 @@ export function deriveConfiguration(config, inputs) {
   };
 }
 
+function actualInitialCapexOverride(config) {
+  const value = Number(config?.actualInitialCapexOverride || 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 export function initialCapexDetail(config, inputs) {
   const charger = platformItem(config.chargerModel);
   const cabinet = platformItem(config.cabinetType);
@@ -148,9 +153,14 @@ export function initialCapexDetail(config, inputs) {
     ? (charger ? charger.commissioning || 0 : 0) * chargerCount
     : (cabinet ? cabinet.commissioning || 0 : 0);
 
-  const total = cabinetHw + dispenserHw + standaloneHw + batteryHw + batteryInstall + install + gridConnection + substation + batteryLogistics + batteryInstallCommissioning + commissioning;
+  const calculatedTotal = cabinetHw + dispenserHw + standaloneHw + batteryHw + batteryInstall + install + gridConnection + substation + batteryLogistics + batteryInstallCommissioning + commissioning;
+  const overrideTotal = actualInitialCapexOverride(config);
+  const total = overrideTotal || calculatedTotal;
   return {
     total,
+    calculatedTotal,
+    actualInitialCapexOverride: overrideTotal || null,
+    capexSource: overrideTotal ? (config.capexSourceLabel || "Actual project CAPEX") : (config.capexSourceLabel || "Model estimate"),
     cabinetHw,
     dispenserHw,
     standaloneHw,

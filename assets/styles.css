@@ -2219,3 +2219,38 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 @media (max-width: 900px) {
   .live-file-guidance { grid-template-columns: 1fr; }
 }
+
+
+/* v35.41 portfolio table readability fix
+   Keep the 10-column comparison table from compressing on laptops and show a concise
+   model-basis label in the grid while preserving the full basis in the tooltip. */
+@media (min-width: 721px) {
+  .portfolio-comparison-table.portfolio-annual-table {
+    table-layout: fixed;
+    min-width: 1180px;
+    width: 100%;
+  }
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(1),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(1) { width: 21%; text-align: left; }
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(2),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(2) { width: 8%; text-align: center; }
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(3),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(3) { width: 12%; text-align: left; }
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(4),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(4) { width: 6%; text-align: right; white-space: nowrap; }
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(5),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(5) { width: 7%; text-align: right; white-space: nowrap; }
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(6),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(6),
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(7),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(7) { width: 11%; text-align: right; white-space: nowrap; font-weight: 800; }
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(8),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(8) { width: 10%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(9),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(9) { width: 6%; text-align: center; white-space: nowrap; }
+  .portfolio-comparison-table.portfolio-annual-table th:nth-child(10),
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(10) { width: 8%; text-align: center; white-space: nowrap; overflow: visible; }
+  .portfolio-model-basis { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+  .portfolio-comparison-table.portfolio-annual-table .portfolio-status-trigger,
+  .portfolio-comparison-table.portfolio-annual-table .portfolio-maturity-trigger { max-width: 100%; }
+}

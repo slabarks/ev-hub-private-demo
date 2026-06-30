@@ -1,6 +1,6 @@
-# EV Hub Investment Tool — v35.40 matched portfolio benchmark fix
+# EV Hub Investment Tool — v35.41 portfolio table readability fix
 
-This build keeps the v35.39 curated AADT relevance engine and adds the Portfolio Calibration fixes agreed in review:
+This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, and adds a v35.41 table readability fix:
 
 - Portfolio comparison now matches actual/live performance to the relevant model year or weighted model-year basis before calculating variance.
 - Static rolling-30D actuals are annualised and matched to the configured comparison year; uploaded trailing-365 actuals are matched to the equivalent operating window where first-active/latest dates are available.
@@ -183,3 +183,9 @@ See `DEPLOY_TO_RENDER.md` for step-by-step deployment and deletion instructions.
 - Fixed AADT info popover behaviour.
 - Highlighted Product Configuration as an interactive configuration area and added unit suffixes to editable numeric fields.
 - Emphasised Investment Case summary windows using the existing design palette.
+
+
+## v35.41 UI fix
+- Portfolio Comparison table now uses a concise model-basis label in the table.
+- Full model basis is preserved as a tooltip and in the selected-site detail card.
+- The 10-column table now has a protected desktop/tablet minimum width to prevent Model basis, Variance and Status from overlapping.

@@ -1569,6 +1569,18 @@ function portfolioMatchedAnnualModel(site, inputs, annualActual) {
   return { modelKwh, modelSessions, modelRevenue, basis, period, profile };
 }
 
+function portfolioModelBasisShortLabel(basis = "") {
+  const text = String(basis || "Model year");
+  const yearMatch = text.match(/Model Year\s*(\d+)/i);
+  const weightedMatch = text.match(/Weighted\s+([^·]+)/i);
+  const yearPart = weightedMatch ? weightedMatch[1].trim().replace(/\s*\/\s*/g, "/") : yearMatch ? `Y${yearMatch[1]}` : "Model year";
+  let periodPart = "basis";
+  if (/trailing\s*365/i.test(text) || /trailing/i.test(text)) periodPart = "trailing 365D";
+  else if (/rolling\s*30/i.test(text) || /run-rate/i.test(text)) periodPart = "rolling 30D";
+  else if (/configured/i.test(text)) periodPart = "configured year";
+  return `${yearPart} · ${periodPart}`;
+}
+
 function portfolioQuantile(values, q) {
   const vals = values.map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
   if (!vals.length) return null;
@@ -2243,7 +2255,7 @@ function renderPortfolioCalibration() {
     number(r.site.aadt,0),
     kwh(r.actualAnnualKwh,0),
     kwh(r.modelledAnnualKwh,0),
-    `<span class="muted small">${h(r.modelComparisonBasis || "Model year")}</span>`,
+    `<span class="muted small portfolio-model-basis" title="${h(r.modelComparisonBasis || "Model year")}">${h(portfolioModelBasisShortLabel(r.modelComparisonBasis))}</span>`,
     portfolioVarianceBadge(r.annualKwhVariance),
     portfolioStatusButton(r)
   ];

@@ -1,12 +1,14 @@
-# EV Hub Investment Tool — v35.8 validator, lease and capex scaling fix
+# EV Hub Investment Tool — v35.40 matched portfolio benchmark fix
 
-This build keeps the deploy-ready password-protected app and includes:
+This build keeps the v35.39 curated AADT relevance engine and adds the Portfolio Calibration fixes agreed in review:
 
-- Dynamic dispenser/satellite limits for Autel and Kempower distributed cabinets.
-- Auto-clamping of invalid dispenser counts to the selected cabinet maximum.
-- Visible lease-term risk flag in Investment Case.
-- Hidden scaled civils/electrical capex logic retained and validated across configurations.
-- Existing address search, map recenter, manual map point, AADT fallback and password deployment improvements retained.
+- Portfolio comparison now matches actual/live performance to the relevant model year or weighted model-year basis before calculating variance.
+- Static rolling-30D actuals are annualised and matched to the configured comparison year; uploaded trailing-365 actuals are matched to the equivalent operating window where first-active/latest dates are available.
+- The visible table now shows `Matched model kWh/yr` and a `Model basis` column so the actual and model periods are auditable.
+- `In benchmark` now means mature/near-mature, good setup confidence, no overriding capacity pressure, and matched variance within ±15%.
+- Early sites remain `Ramp-up`; they can show a secondary variance/capacity signal, but are not treated as mature in-benchmark evidence.
+- Status logic is unified around matched variance first, then capacity, AADT/category review and peer-productivity diagnostics.
+- Export/PDF portfolio tables now use the same ±15% and matched-model-basis rules.
 
 Run locally with `python3 local_site_location_server.py`.
 
@@ -131,7 +133,7 @@ This v33 package runs on **http://localhost:10314/** to avoid browser cache or o
 
 ## v33 AADT Excel multi-tag lookup engine
 
-This package includes a local JSON database generated from `AADT Summary Report Public sites 04-2025 2019 to 2026.xlsx`.
+This package includes a local JSON database generated from `aadt_2019_2026.xlsx`.
 
 When a site is searched, the server first protects the Excel/Ballincollig golden reference case. For other addresses, it searches the uploaded TII AADT Summary data by Site Name and Description. If several relevant TII rows match the address, the latest available AADT values are averaged and the matched records are shown in Site Screening.
 

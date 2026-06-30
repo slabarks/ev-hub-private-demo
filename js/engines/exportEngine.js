@@ -336,7 +336,34 @@ function pdfPortfolioCategoryKey(site) {
   return "review";
 }
 function pdfPortfolioMaturityLabel(tier) { return tier === "mature" ? "Mature" : tier === "near" ? "Near-mature" : tier === "early" ? "Early" : "Review"; }
-function pdfPortfolioMaturityRamp(site) { return site?.maturity?.tier === "early" ? 0.60 : site?.maturity?.tier === "near" ? 0.90 : 1; }
+const PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE = 0.15;
+const PDF_PORTFOLIO_DAY_MS = 24 * 60 * 60 * 1000;
+function pdfPortfolioParseDate(value) {
+  if (!value) return null;
+  const text = String(value).slice(0, 10);
+  const m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  const d = new Date(value);
+  return Number.isFinite(d.getTime()) ? new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) : null;
+}
+function pdfPortfolioDateAddDays(date, days) { return new Date(date.getTime() + Number(days || 0) * PDF_PORTFOLIO_DAY_MS); }
+function pdfPortfolioDateDiffDays(start, end) { return Math.round((end.getTime() - start.getTime()) / PDF_PORTFOLIO_DAY_MS); }
+function pdfPortfolioYearRamp(inputs, yearIndex) {
+  const y = Math.max(1, Math.round(Number(yearIndex || 1)));
+  if (y === 1) return Number(inputs?.rampUpYear1 ?? DEFAULT_INPUTS.rampUpYear1 ?? 0.60);
+  if (y === 2) return Number(inputs?.rampUpYear2 ?? DEFAULT_INPUTS.rampUpYear2 ?? 0.80);
+  return 1;
+}
+function pdfPortfolioGrowthFactor(inputs, yearIndex) {
+  const y = Math.max(1, Math.round(Number(yearIndex || 1)));
+  const growthYears = Math.max(0, y - 3);
+  const trafficGrowth = Number(inputs?.annualTrafficGrowthRate ?? DEFAULT_INPUTS.annualTrafficGrowthRate ?? 0.01);
+  const bevGrowth = Number(inputs?.annualBevShareGrowthRate ?? DEFAULT_INPUTS.annualBevShareGrowthRate ?? 0.18);
+  const bevStart = Math.max(0.0001, Number(inputs?.onRoadBevShareAtCod ?? DEFAULT_INPUTS.onRoadBevShareAtCod ?? 0.04));
+  const bevCap = Math.max(bevStart, Number(inputs?.bevShareCap ?? DEFAULT_INPUTS.bevShareCap ?? 0.25));
+  const bevFactor = Math.min(bevCap / bevStart, Math.pow(1 + bevGrowth, growthYears));
+  return Math.pow(1 + trafficGrowth, growthYears) * bevFactor;
+}
 function pdfPortfolioProfile(site) {
   const categoryKey = pdfPortfolioCategoryKey(site);
   const category = PDF_PORTFOLIO_CATEGORY_FACTORS[categoryKey] || PDF_PORTFOLIO_CATEGORY_FACTORS.review;
@@ -345,21 +372,70 @@ function pdfPortfolioProfile(site) {
   const rawAadt = Number(site?.aadt || 0);
   const effectiveAadtCap = Number(category.effectiveAadtCap || rawAadt || 0);
   const effectiveAadt = effectiveAadtCap > 0 ? Math.min(rawAadt, effectiveAadtCap) : rawAadt;
-  return { categoryKey, category, targetSessionsPer1000Aadt, rawAadt, effectiveAadt, maturityRamp: pdfPortfolioMaturityRamp(site) };
+  return { categoryKey, category, targetSessionsPer1000Aadt, rawAadt, effectiveAadt, effectiveAadtCap };
 }
-function pdfPortfolioCalibratedMonthly(site, inputs = DEFAULT_INPUTS) {
+function pdfPortfolioCalibratedAnnual(site, inputs = DEFAULT_INPUTS, yearIndex = 1) {
   const profile = pdfPortfolioProfile(site);
   const sessionEnergy = Number(inputs.averageSessionEnergy || DEFAULT_INPUTS.averageSessionEnergy || 30.4);
-  const targetDailySessions = profile.effectiveAadt > 0 ? (profile.effectiveAadt / 1000) * profile.targetSessionsPer1000Aadt * profile.maturityRamp : 0;
-  let modelSessions = Math.max(0, targetDailySessions * 30);
+  const rampFactor = pdfPortfolioYearRamp(inputs, yearIndex);
+  const growthFactor = pdfPortfolioGrowthFactor(inputs, yearIndex);
+  const targetDailySessions = profile.effectiveAadt > 0 ? (profile.effectiveAadt / 1000) * profile.targetSessionsPer1000Aadt * rampFactor * growthFactor : 0;
+  let modelSessions = Math.max(0, targetDailySessions * 365);
   let modelKwh = Math.max(0, modelSessions * sessionEnergy);
-  const destinationFloorKwh = Number(profile.category.destinationMonthlyFloorKwh || 0);
+  const destinationMonthlyFloorKwh = Number(profile.category.destinationMonthlyFloorKwh || 0);
   const destinationFloorMaxAadt = Number(profile.category.destinationFloorMaxAadt || Infinity);
-  if (destinationFloorKwh > 0 && profile.rawAadt <= destinationFloorMaxAadt && modelKwh < destinationFloorKwh) {
-    modelKwh = destinationFloorKwh;
+  const floorAnnualKwh = destinationMonthlyFloorKwh * 12 * rampFactor * growthFactor;
+  if (floorAnnualKwh > 0 && profile.rawAadt <= destinationFloorMaxAadt && modelKwh < floorAnnualKwh) {
+    modelKwh = floorAnnualKwh;
     modelSessions = sessionEnergy > 0 ? modelKwh / sessionEnergy : modelSessions;
   }
-  return { ...profile, modelKwh, modelSessions };
+  return { ...profile, yearIndex: Math.max(1, Math.round(Number(yearIndex || 1))), rampFactor, growthFactor, modelKwh, modelSessions };
+}
+function pdfPortfolioAnnualValues(site, metrics = pdfPortfolioMetrics(site)) {
+  const actual = site?.actual || {};
+  const annualKwh = Number(actual.annualKwh || 0) > 0 ? Number(actual.annualKwh) : Number(metrics.annualisedKwh || 0);
+  const hasExplicitAnnual = Number(actual.annualKwh || 0) > 0;
+  const diagnostics = site?.liveActuals?.diagnostics || {};
+  const firstActiveDate = pdfPortfolioParseDate(diagnostics.firstActiveDate || actual.firstActiveDate);
+  const latestDate = pdfPortfolioParseDate(diagnostics.latestDate || actual.asOfDate || site?.liveActuals?.asOfDate);
+  const periodEnd = latestDate;
+  const periodStart = hasExplicitAnnual && periodEnd ? pdfPortfolioDateAddDays(periodEnd, -364) : periodEnd ? pdfPortfolioDateAddDays(periodEnd, -29) : null;
+  return { annualKwh, hasExplicitAnnual, periodStart, periodEnd, firstActiveDate, dataDays: Number(site?.maturity?.dataDays || 0) };
+}
+function pdfPortfolioFallbackYear(site, actual) {
+  const explicit = Number(site?.maturity?.comparisonYearIndex || 0);
+  if (explicit > 0) return Math.max(1, Math.min(20, Math.round(explicit)));
+  const days = Number(actual?.dataDays || site?.maturity?.dataDays || 0);
+  if (days >= 730) return 3;
+  if (days >= 365) return 2;
+  return 1;
+}
+function pdfPortfolioModelWeights(site, actual) {
+  const fallbackYear = pdfPortfolioFallbackYear(site, actual);
+  const first = actual?.firstActiveDate, start = actual?.periodStart, end = actual?.periodEnd;
+  if (actual?.hasExplicitAnnual && first && start && end) {
+    const weights = [];
+    for (let y = 1; y <= 20; y += 1) {
+      const ys = pdfPortfolioDateAddDays(first, (y - 1) * 365);
+      const ye = pdfPortfolioDateAddDays(first, y * 365 - 1);
+      const os = start.getTime() > ys.getTime() ? start : ys;
+      const oe = end.getTime() < ye.getTime() ? end : ye;
+      const overlapDays = pdfPortfolioDateDiffDays(os, oe);
+      if (Number.isFinite(overlapDays) && overlapDays >= 0) weights.push({ yearIndex: y, days: overlapDays + 1 });
+    }
+    const total = weights.reduce((a,w)=>a+w.days,0);
+    if (total > 0) {
+      const weighted = weights.map(w => ({ ...w, weight: w.days / total }));
+      return { weights: weighted, label: weighted.length === 1 ? `Model Year ${weighted[0].yearIndex}` : `Weighted ${weighted.map(w => `Y${w.yearIndex} ${Math.round(w.weight * 100)}%`).join(" / ")}` };
+    }
+  }
+  return { weights: [{ yearIndex: fallbackYear, weight: 1 }], label: `Model Year ${fallbackYear}` };
+}
+function pdfPortfolioMatchedAnnualModel(site, inputs, actual) {
+  const period = pdfPortfolioModelWeights(site, actual);
+  const parts = period.weights.map(w => ({ ...w, estimate: pdfPortfolioCalibratedAnnual(site, inputs, w.yearIndex) }));
+  const modelKwh = parts.reduce((a,p)=>a+p.estimate.modelKwh*p.weight,0);
+  return { modelKwh, basis: period.label };
 }
 function pdfPortfolioScenario(site) {
   const key = pdfPortfolioCategoryKey(site);
@@ -376,11 +452,6 @@ function pdfPortfolioMetrics(site) {
   const plugs = Number(site?.modelEquivalentPlugs || 0);
   const micKva = Number(site?.realMicKva || 0);
   return { dailyKwh, dailySessions, annualisedKwh: dailyKwh * 365, avgKwhSession: actualSessions > 0 ? actualKwh / actualSessions : Number(DEFAULT_INPUTS.averageSessionEnergy || 30.4), sessionsPer1000Aadt: aadt > 0 ? dailySessions / (aadt / 1000) : null, kwhPerPlugDay: plugs > 0 ? dailyKwh / plugs : null, kwhPerKvaDay: micKva > 0 ? dailyKwh / micKva : null };
-}
-function pdfPortfolioAnnualValues(site, metrics = pdfPortfolioMetrics(site)) {
-  const actual = site?.actual || {};
-  const annualKwh = Number(actual.annualKwh || 0) > 0 ? Number(actual.annualKwh) : Number(metrics.annualisedKwh || 0);
-  return { annualKwh };
 }
 function pdfPortfolioDoNothing(site, metrics, derived, inputs) {
   const startYear = Number(inputs?.modelStartYear || 2025);
@@ -437,29 +508,29 @@ function pdfPortfolioResult(site) {
   const yy = calculateYearByYear(inputs, config, demand);
   const metrics = pdfPortfolioMetrics(site);
   const actual = pdfPortfolioAnnualValues(site, metrics);
-  const cal = pdfPortfolioCalibratedMonthly(site, inputs);
-  const annualScale = 365 / 30;
-  const modelAnnual = Number(cal.modelKwh || 0) * annualScale;
+  const matched = pdfPortfolioMatchedAnnualModel(site, inputs, actual);
+  const modelAnnual = matched.modelKwh;
   const variance = actual.annualKwh > 0 ? (modelAnnual - actual.annualKwh) / actual.annualKwh : null;
   const doNothing = pdfPortfolioDoNothing(site, metrics, yy.derived, inputs);
   const tier = site.maturity?.tier || "review";
-  const aadtReview = ["medium_low", "review"].includes(pdfPortfolioToken(site.aadtConfidence));
+  const aadtReview = ["medium_low", "review", "setup_required"].includes(pdfPortfolioToken(site.aadtConfidence));
   let status = "In benchmark";
+  const capacityPressure = doNothing.firstActionYear && doNothing.firstActionYear <= doNothing.startYear + 5;
   if (tier === "early") status = "Ramp-up";
   else if (aadtReview || pdfPortfolioCategoryKey(site) === "review") status = "Review";
-  else if (doNothing.firstActionYear && doNothing.firstActionYear <= doNothing.startYear + 5) status = "Capacity pressure";
-  else if (variance > 0.20) status = "Under-capturing";
-  else if (variance < -0.20) status = "Outperforming";
-  return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, annualVariance: variance, status, triggerYear: doNothing.firstActionYear || "Monitor" };
+  else if (capacityPressure && !(Number.isFinite(variance) && variance > PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE)) status = "Capacity pressure";
+  else if (Number.isFinite(variance) && variance > PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) status = "Under-capturing";
+  else if (Number.isFinite(variance) && variance < -PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) status = capacityPressure ? "Capacity pressure" : "Outperforming";
+  return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, modelBasis: matched.basis, annualVariance: variance, status, triggerYear: doNothing.firstActionYear || "Monitor" };
 }
 function portfolioExportRows(limit = 80) {
   return PORTFOLIO_CALIBRATION_SITES.map(pdfPortfolioResult).sort((a,b) => String(a.site.name).localeCompare(String(b.site.name))).slice(0, limit);
 }
 function portfolioPdfTableRows(limit = 80) {
-  return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.status)]);
+  return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), esc(r.modelBasis), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.status)]);
 }
 function portfolioXlsxRows() {
-  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual / annualised kWh/yr", "Model kWh/yr", "Variance", "Status", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.status, r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
+  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Model basis", "Variance", "Status", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, r.modelBasis, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.status, r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
 }
 
 export function exportDemandCsv(demand) {
@@ -767,10 +838,10 @@ export async function exportInvestorPdf(state, results) {
 
   <section class="print-page portfolio-page">
     <h2>6. Portfolio Calibration Benchmark</h2>
-    <p class="report-caption">Annual actual performance is compared with the portfolio-calibrated model using each operating site's MIC, AADT, maturity and site category. Mature sites carry the highest benchmark confidence; early sites are directional.</p>
+    <p class="report-caption">Annual actual performance is compared with the matched portfolio-calibrated model year/basis using each operating site's MIC, AADT, maturity and site category. In benchmark means within ±15%; early sites remain directional ramp-up evidence.</p>
     <div class="panel">
       <h3>Operating hub benchmark table</h3>
-      ${htmlTable(["Site", "Maturity", "Category", "MIC", "AADT", "Actual / annualised kWh/yr", "Model kWh/yr", "Variance", "Status"], portfolioTableRows)}
+      ${htmlTable(["Site", "Maturity", "Category", "MIC", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Model basis", "Variance", "Status"], portfolioTableRows)}
     </div>
   </section>
 

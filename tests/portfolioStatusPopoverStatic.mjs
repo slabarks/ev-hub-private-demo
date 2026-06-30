@@ -8,7 +8,7 @@ const requiredAppTokens = [
   'data-portfolio-status-trigger',
   'showPortfolioStatusPopover',
   'closePortfolioStatusPopover',
-  'Click any status pill for the action year and recommendation',
+  'The main table now matches actual performance to the relevant model year/basis before calculating variance',
   'portfolioSortHeader("category", "Category")',
   'portfolioSortHeader("performance", "Status")',
   'data-portfolio-maturity-trigger',

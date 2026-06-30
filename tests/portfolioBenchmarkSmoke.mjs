@@ -23,6 +23,11 @@ for (const row of rows) {
   assert.ok(Number.isFinite(row.benchmarkRange?.median), `${row.site.name} should have benchmark median`);
   assert.ok(row.doNothing?.rows?.length === 20, `${row.site.name} should have a 20-year do-nothing path`);
   assert.ok(!Object.values(row.doNothing.year20 || {}).some(v => typeof v === 'number' && !Number.isFinite(v)), `${row.site.name} year20 should not contain NaN/Infinity`);
+  assert.ok(row.modelComparisonBasis, `${row.site.name} should expose the matched model comparison basis`);
+  if (row.assessment?.band === 'normal') {
+    assert.ok(Math.abs(row.annualKwhVariance) <= 0.1500001, `${row.site.name} marked in benchmark must be within ±15%`);
+  }
+
 }
 const bandCounts = rows.reduce((acc, r) => { acc[r.assessment.band] = (acc[r.assessment.band] || 0) + 1; return acc; }, {});
 assert.ok(Object.keys(bandCounts).length >= 2, 'Benchmark classifications should produce multiple performance bands');

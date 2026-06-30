@@ -1,14 +1,14 @@
-# EV Hub Investment Tool — v35.41 portfolio table readability fix
+# EV Hub Investment Tool — v35.43 ZEVI grant auto-population
 
-This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, and adds a v35.41 table readability fix:
+This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, and adds v35.43 ZEVI grant auto-population:
 
 - Portfolio comparison now matches actual/live performance to the relevant model year or weighted model-year basis before calculating variance.
 - Static rolling-30D actuals are annualised and matched to the configured comparison year; uploaded trailing-365 actuals are matched to the equivalent operating window where first-active/latest dates are available.
-- The visible table now shows `Matched model kWh/yr` and a `Model basis` column so the actual and model periods are auditable.
+- The visible Portfolio Comparison table hides `Model basis` to reduce noise; the full basis remains in selected-site detail, status popovers and XLSX audit export.
 - `In benchmark` now means mature/near-mature, good setup confidence, no overriding capacity pressure, and matched variance within ±15%.
 - Early sites remain `Ramp-up`; they can show a secondary variance/capacity signal, but are not treated as mature in-benchmark evidence.
 - Status logic is unified around matched variance first, then capacity, AADT/category review and peer-productivity diagnostics.
-- Export/PDF portfolio tables now use the same ±15% and matched-model-basis rules.
+- Export/PDF portfolio tables now use the same ±15% matched-variance rules; the investor PDF also hides the noisy Model basis column.
 
 Run locally with `python3 local_site_location_server.py`.
 
@@ -185,7 +185,11 @@ See `DEPLOY_TO_RENDER.md` for step-by-step deployment and deletion instructions.
 - Emphasised Investment Case summary windows using the existing design palette.
 
 
-## v35.41 UI fix
-- Portfolio Comparison table now uses a concise model-basis label in the table.
-- Full model basis is preserved as a tooltip and in the selected-site detail card.
-- The 10-column table now has a protected desktop/tablet minimum width to prevent Model basis, Variance and Status from overlapping.
+## v35.42 UI fix
+- Portfolio Comparison table now hides the Model basis column to reduce noise.
+- Full model basis is preserved in the status popover, selected-site detail card and XLSX audit export.
+- The 9-column table now has protected desktop/tablet widths for Actual, Matched model, Variance and Status.
+
+## v35.43 ZEVI funding database
+
+This build embeds a ZEVI funding database from the matched site funding file and the wider ZEVI allocation reference file. Confirmed portfolio-site matches auto-populate Product Configuration → Grant support. Safe exact allocation matches can also auto-populate for future sites, while generic, duplicate or fuzzy allocation matches are shown as review suggestions only. Manual grant entries are preserved until a portfolio site is explicitly loaded or the grant is cleared.

@@ -527,7 +527,7 @@ function portfolioExportRows(limit = 80) {
   return PORTFOLIO_CALIBRATION_SITES.map(pdfPortfolioResult).sort((a,b) => String(a.site.name).localeCompare(String(b.site.name))).slice(0, limit);
 }
 function portfolioPdfTableRows(limit = 80) {
-  return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), esc(r.modelBasis), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.status)]);
+  return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.status)]);
 }
 function portfolioXlsxRows() {
   return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Model basis", "Variance", "Status", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, r.modelBasis, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.status, r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
@@ -841,7 +841,7 @@ export async function exportInvestorPdf(state, results) {
     <p class="report-caption">Annual actual performance is compared with the matched portfolio-calibrated model year/basis using each operating site's MIC, AADT, maturity and site category. In benchmark means within ±15%; early sites remain directional ramp-up evidence.</p>
     <div class="panel">
       <h3>Operating hub benchmark table</h3>
-      ${htmlTable(["Site", "Maturity", "Category", "MIC", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Model basis", "Variance", "Status"], portfolioTableRows)}
+      ${htmlTable(["Site", "Maturity", "Category", "MIC", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Variance", "Status"], portfolioTableRows)}
     </div>
   </section>
 

@@ -12,6 +12,7 @@ import { currency, number, pct, kw, kwh, kva } from "./utils.js";
 import { exportDemandCsv, exportYearByYearCsv, exportScenarioCsv, exportAssumptionsJson, exportAuditJson, exportAnnualFinancialsExcel, exportInvestorPdf } from "./engines/exportEngine.js";
 import { PORTFOLIO_CALIBRATION_SITES } from "./data/operatingHubCalibrationLibrary.js";
 import { actualCapexForSite, capexStatusForSite, capexNoteForSite } from "./data/capexCalibrationLibrary.js";
+import { zeviFundingForSite, zeviFundingSuggestionsForSite, zeviFundingShortLabel } from "./data/zeviFundingLibrary.js";
 
 const VALID_TABS = ["site", "demand", "setup", "investment", "annuals", "scenario", "portfolio", "advanced", "report"];
 const TAB_ALIASES = { simulation: "setup", yearbyyear: "annuals", export: "report" };
@@ -42,6 +43,116 @@ function results() {
 
 function el(id) { return document.getElementById(id); }
 function h(v) { return String(v ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
+
+
+const GRANT_METADATA_KEYS = [
+  "grantSupportSourceLabel",
+  "grantSupportScheme",
+  "grantSupportMatchConfidence",
+  "grantSupportSourceType",
+  "grantSupportChargersFunded",
+  "grantSupportEvSpacesFunded",
+  "grantSupportMatchNotes",
+  "grantSupportAutoApplied",
+  "grantSupportMatchKey",
+  "grantSupportMatchedSiteName",
+  "grantSupportReviewRequired"
+];
+let grantSupportManualOverride = false;
+
+function clearGrantSupportMetadata() {
+  GRANT_METADATA_KEYS.forEach(key => { delete state.inputs[key]; });
+  delete state.inputs.grantSupportSuggestion;
+}
+
+function grantFundingContextFromSite(site = {}) {
+  return {
+    portfolioSiteId: site.id || site.portfolioSiteId,
+    name: site.name || site.siteName,
+    siteName: site.liveActuals?.siteName || site.name || site.siteName,
+    address: site.address,
+    aliases: [site.modelEquivalentSummary, site.aadtCounter, site.liveActuals?.siteName].filter(Boolean),
+    site
+  };
+}
+
+function grantFundingContextFromCurrent(extra = {}) {
+  const site = state.siteContext?.site || {};
+  return {
+    name: site.name || state.inputs.siteAddress,
+    siteName: site.name || state.inputs.siteAddress,
+    address: site.display_address || state.inputs.siteAddress,
+    searchText: state.inputs.siteAddress,
+    aliases: [state.inputs.siteAddress, state.siteContext?.traffic?.source, state.siteContext?.traffic?.method_note].filter(Boolean),
+    site,
+    ...extra
+  };
+}
+
+function applyZeviFundingMatch(match, options = {}) {
+  if (!match) return false;
+  const force = !!options.force;
+  if (!force && grantSupportManualOverride && Number(state.inputs.grantSupport || 0) !== 0) {
+    state.inputs.grantSupportSuggestion = match;
+    return false;
+  }
+  if (!force && match.autoApply === false) {
+    state.inputs.grantSupportSuggestion = match;
+    return false;
+  }
+  const amount = Number(match.grantAmount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return false;
+  setInput("grantSupport", amount);
+  state.inputs.grantSupportSourceLabel = match.sourceLabel || "ZEVI funding database";
+  state.inputs.grantSupportScheme = match.scheme || "";
+  state.inputs.grantSupportMatchConfidence = match.confidenceLabel || match.confidence || "";
+  state.inputs.grantSupportSourceType = match.sourceType || "";
+  state.inputs.grantSupportChargersFunded = Number(match.chargersFunded || 0);
+  state.inputs.grantSupportEvSpacesFunded = Number(match.evSpacesFunded || 0);
+  state.inputs.grantSupportMatchNotes = match.matchNotes || match.matchType || "";
+  state.inputs.grantSupportAutoApplied = true;
+  state.inputs.grantSupportMatchKey = match.id || match.siteName || "";
+  state.inputs.grantSupportMatchedSiteName = match.siteName || "";
+  state.inputs.grantSupportReviewRequired = !!match.reviewRequired || match.confidence === "medium";
+  delete state.inputs.grantSupportSuggestion;
+  grantSupportManualOverride = false;
+  return true;
+}
+
+function autoApplyZeviFundingForContext(context = {}, options = {}) {
+  const match = zeviFundingForSite(context, { allowAllocationExact: true });
+  if (match) {
+    if (match.autoApply || options.force) return applyZeviFundingMatch(match, options);
+    state.inputs.grantSupportSuggestion = match;
+    return false;
+  }
+  const suggestions = zeviFundingSuggestionsForSite(context, { includeAllocation: true });
+  if (suggestions.length) state.inputs.grantSupportSuggestion = suggestions[0];
+  else if (!options.keepExistingSuggestion) delete state.inputs.grantSupportSuggestion;
+  return false;
+}
+
+function grantSupportStatusHtml() {
+  const amount = Number(state.inputs.grantSupport || 0);
+  const applied = amount > 0 && state.inputs.grantSupportAutoApplied;
+  const suggestion = state.inputs.grantSupportSuggestion;
+  if (applied) {
+    const tone = state.inputs.grantSupportReviewRequired ? "warn" : "good";
+    const parts = [state.inputs.grantSupportScheme, currency(amount, 0), state.inputs.grantSupportMatchedSiteName].filter(Boolean).join(" · ");
+    const funded = `${number(state.inputs.grantSupportChargersFunded || 0,0)} charger${Number(state.inputs.grantSupportChargersFunded) === 1 ? "" : "s"} / ${number(state.inputs.grantSupportEvSpacesFunded || 0,0)} EV spaces funded`;
+    return `<div class="grant-support-card ${tone}"><div><strong>ZEVI grant auto-applied</strong><p>${h(parts)}<br><span>${h(funded)} · ${h(state.inputs.grantSupportMatchConfidence || "")}</span></p>${state.inputs.grantSupportMatchNotes ? `<small>${h(state.inputs.grantSupportMatchNotes)}</small>` : ""}</div><button type="button" class="secondary small" id="clearZeviGrant">Clear</button></div>`;
+  }
+  if (suggestion) {
+    const canApply = suggestion.autoApply || suggestion.sourceType === "confirmed-matched";
+    return `<div class="grant-support-card warn"><div><strong>Possible ZEVI funding match</strong><p>${h(zeviFundingShortLabel(suggestion))}<br><span>${h(suggestion.siteName || "")} · ${h(suggestion.confidenceLabel || "review required")}</span></p><small>${canApply ? "Click Apply if this is the correct funding record." : "Not auto-applied because this allocation is generic, duplicate or not confirmed."}</small></div>${canApply ? `<button type="button" class="secondary small" id="applyZeviGrantSuggestion">Apply</button>` : ""}</div>`;
+  }
+  if (amount > 0) return `<div class="grant-support-card neutral"><div><strong>Manual grant support</strong><p>${h(currency(amount, 0))} is applied manually. ZEVI auto-matching will not overwrite this unless a portfolio site is loaded.</p></div><button type="button" class="secondary small" id="clearZeviGrant">Clear</button></div>`;
+  return `<small class="grant-support-muted">If this site has a safe ZEVI funding match, the grant is auto-populated here. Fuzzy or generic matches are shown as review suggestions only.</small>`;
+}
+
+function grantSupportField() {
+  return `${grantSupportField()}${grantSupportStatusHtml()}`;
+}
 function safePct(v, digits = 1) { return Number.isFinite(v) ? pct(v, digits) : "—"; }
 function resetMapState(reason = "map reset") {
   try { if (siteMarker) siteMarker.remove(); } catch (_) {}
@@ -132,6 +243,7 @@ function applyPortfolioSiteModelConfig(site) {
     delete state.config.actualInitialCapexOverride;
     state.config.capexSourceLabel = "Calibrated/model CAPEX estimate — actual project CAPEX not provided";
   }
+  autoApplyZeviFundingForContext(grantFundingContextFromSite(site), { force: true });
   return true;
 }
 function dualUnitLabel() { return state.config.platform === "Autel Standalone" ? "charger" : "dual dispenser / satellite"; }
@@ -261,7 +373,9 @@ function portfolioMappedSites() {
       .map(normalisePortfolioLiveKey)
       .filter(Boolean);
     const liveItem = candidateKeys.map(key => liveIndex.get(key)).find(Boolean);
-    return liveItem ? portfolioMergeLiveActual(site, liveItem) : site;
+    const merged = liveItem ? portfolioMergeLiveActual(site, liveItem) : site;
+    const zeviFunding = zeviFundingForSite(grantFundingContextFromSite(merged), { allowAllocationExact: true });
+    return zeviFunding ? { ...merged, zeviFunding } : merged;
   });
 }
 function portfolioAdditionalLiveSites(mappedSites = portfolioMappedSites()) {
@@ -288,6 +402,7 @@ function portfolioAdditionalLiveSites(mappedSites = portfolioMappedSites()) {
         ...(capex > 0 ? { actualCapexExVat: capex } : {}),
         capexStatus: capexStatusForSite(a.siteName),
         capexCalibrationNote: capexNoteForSite(a.siteName),
+        zeviFunding: zeviFundingForSite({ siteName: a.siteName, name: a.siteName }, { allowAllocationExact: true }),
         actual: { ...actual },
         maturity: { ...(a.maturity || {}), tier: a.maturity?.tier || "review" },
         liveActuals: { source: "uploaded", siteName: a.siteName, asOfDate: actual.asOfDate || portfolioLiveActualsSnapshot?.latestDate, diagnostics: a.diagnostics || {} },
@@ -573,6 +688,8 @@ function resetPage(tab) {
   if (tab === "setup") {
     assignDefaults(SETUP_INPUT_KEYS);
     Object.assign(state.config, DEFAULT_SELECTED_CONFIG);
+    clearGrantSupportMetadata();
+    grantSupportManualOverride = false;
   }
   if (tab === "investment") assignDefaults(["investmentHorizon", "modelStartYear", "codYear"]);
   if (tab === "advanced") {
@@ -963,7 +1080,7 @@ function renderScenarioSetup(r) {
       <div class="input-grid">
         <div class="field"><label for="netSellingPriceExVat">Net selling price excluding VAT</label><div class="unit-input-wrap"><input id="netSellingPriceExVat" data-input="netSellingPriceExVat" type="number" step="0.01" value="${h(priceDisplay)}" /><span class="input-unit">€/kWh</span></div><small>Displayed to two decimals for clarity; used to calculate charging revenue from delivered energy.</small></div>
         ${inputField("electricityCost", "Electricity cost", { step: 0.01, unit: "€/kWh", help: "Applied to delivered energy to calculate energy purchase cost." })}
-        ${inputField("grantSupport", "Grant support", { step: 1000, unit: "€", help: "One-off funding support that reduces the net initial investment." })}
+        ${grantSupportField()}
       </div>
     </div>` },
     { id: "landlord", title: "Landlord inputs", html: `<div class="panel">
@@ -2255,7 +2372,6 @@ function renderPortfolioCalibration() {
     number(r.site.aadt,0),
     kwh(r.actualAnnualKwh,0),
     kwh(r.modelledAnnualKwh,0),
-    `<span class="muted small portfolio-model-basis" title="${h(r.modelComparisonBasis || "Model year")}">${h(portfolioModelBasisShortLabel(r.modelComparisonBasis))}</span>`,
     portfolioVarianceBadge(r.annualKwhVariance),
     portfolioStatusButton(r)
   ];
@@ -2267,7 +2383,6 @@ function renderPortfolioCalibration() {
     portfolioSortHeader("aadt", "AADT"),
     portfolioSortHeader("actualAnnualKwh", "Actual / annualised kWh/yr"),
     portfolioSortHeader("modelledAnnualKwh", "Matched model kWh/yr"),
-    "Model basis",
     portfolioSortHeader("annualVariance", "Variance"),
     portfolioSortHeader("performance", "Status")
   ];
@@ -2607,6 +2722,15 @@ function wirePage(r) {
       const raw = e.target.value;
       const numericKeys = Object.keys(DEFAULT_INPUTS).filter(k => typeof DEFAULT_INPUTS[k] === "number");
       setInput(key, numericKeys.includes(key) ? Number(raw) : raw);
+      if (key === "grantSupport") {
+        grantSupportManualOverride = true;
+        clearGrantSupportMetadata();
+        const manualAmount = Number(raw || 0);
+        if (Number.isFinite(manualAmount) && manualAmount > 0) {
+          state.inputs.grantSupportSourceLabel = "Manual entry";
+          state.inputs.grantSupportMatchConfidence = "Manual";
+        }
+      }
       if (key === "investmentHorizon") setInput(key, Math.max(1, Math.min(20, Number(raw))));
       preserveScrollRender();
     });
@@ -2650,6 +2774,20 @@ function wirePage(r) {
       enforceConfigCompatibility();
       preserveScrollRender();
     });
+  });
+
+  const clearZeviGrant = el("clearZeviGrant");
+  if (clearZeviGrant) clearZeviGrant.addEventListener("click", () => {
+    setInput("grantSupport", 0);
+    clearGrantSupportMetadata();
+    grantSupportManualOverride = true;
+    preserveScrollRender();
+  });
+  const applyZeviGrantSuggestion = el("applyZeviGrantSuggestion");
+  if (applyZeviGrantSuggestion) applyZeviGrantSuggestion.addEventListener("click", () => {
+    const suggestion = state.inputs.grantSupportSuggestion;
+    if (suggestion) applyZeviFundingMatch(suggestion, { force: true });
+    preserveScrollRender();
   });
 
 
@@ -2797,6 +2935,7 @@ function wirePage(r) {
       const nextCtx = portfolioSite ? portfolioSearchContext(ctx, portfolioSite) : ctx;
       setSiteContext(nextCtx);
       state.inputs.siteAddress = address;
+      autoApplyZeviFundingForContext(portfolioSite ? grantFundingContextFromSite(portfolioSite) : grantFundingContextFromCurrent({ searchText: address }), { force: !!portfolioSite });
       if (portfolioSite) {
         state.inputs.rawCorridorTrafficAadt = Number(portfolioSite.aadt || nextCtx?.traffic?.aadt || state.inputs.rawCorridorTrafficAadt || 0);
         state.filters.manualAadtOverride = true;
@@ -2815,6 +2954,8 @@ function wirePage(r) {
       };
       setSiteContext(portfolioSite ? portfolioSearchContext(fallbackCtx, portfolioSite) : fallbackCtx);
       state.inputs.siteAddress = address;
+      if (portfolioSite) autoApplyZeviFundingForContext(grantFundingContextFromSite(portfolioSite), { force: true });
+      else autoApplyZeviFundingForContext(grantFundingContextFromCurrent({ searchText: address }), { keepExistingSuggestion: true });
       if (portfolioSite) {
         state.inputs.rawCorridorTrafficAadt = Number(portfolioSite.aadt || state.inputs.rawCorridorTrafficAadt || 0);
         state.filters.manualAadtOverride = true;
@@ -2865,6 +3006,7 @@ function wirePage(r) {
       const ctx = await searchCoordinates(lat, lon, state.filters.radiusKm, label, { timeoutMs: 18000 });
       setSiteContext(ctx);
       state.inputs.siteAddress = label;
+      autoApplyZeviFundingForContext(grantFundingContextFromCurrent({ searchText: label }), { keepExistingSuggestion: true });
       if (!state.filters.manualAadtOverride && ctx?.traffic?.aadt) {
         state.inputs.rawCorridorTrafficAadt = Number(ctx.traffic.aadt);
         const sourceYear = latestYearFromText(ctx.traffic.aadt_year || ctx.traffic.source || ctx.traffic.reference || "");

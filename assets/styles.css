@@ -2221,36 +2221,59 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 }
 
 
-/* v35.41 portfolio table readability fix
-   Keep the 10-column comparison table from compressing on laptops and show a concise
-   model-basis label in the grid while preserving the full basis in the tooltip. */
+/* v35.42 portfolio table clarity fix
+   Hide the Model basis column from the main grid/PDF view and allocate space to the
+   columns an investor actually reads: actual, matched model, variance and status.
+   The full model basis remains available in the selected-hub detail and status popover. */
 @media (min-width: 721px) {
   .portfolio-comparison-table.portfolio-annual-table {
     table-layout: fixed;
-    min-width: 1180px;
+    min-width: 1060px;
     width: 100%;
   }
   .portfolio-comparison-table.portfolio-annual-table th:nth-child(1),
-  .portfolio-comparison-table.portfolio-annual-table td:nth-child(1) { width: 21%; text-align: left; }
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(1) { width: 23%; text-align: left; }
   .portfolio-comparison-table.portfolio-annual-table th:nth-child(2),
   .portfolio-comparison-table.portfolio-annual-table td:nth-child(2) { width: 8%; text-align: center; }
   .portfolio-comparison-table.portfolio-annual-table th:nth-child(3),
-  .portfolio-comparison-table.portfolio-annual-table td:nth-child(3) { width: 12%; text-align: left; }
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(3) { width: 13%; text-align: left; }
   .portfolio-comparison-table.portfolio-annual-table th:nth-child(4),
-  .portfolio-comparison-table.portfolio-annual-table td:nth-child(4) { width: 6%; text-align: right; white-space: nowrap; }
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(4) { width: 7%; text-align: right; white-space: nowrap; }
   .portfolio-comparison-table.portfolio-annual-table th:nth-child(5),
-  .portfolio-comparison-table.portfolio-annual-table td:nth-child(5) { width: 7%; text-align: right; white-space: nowrap; }
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(5) { width: 8%; text-align: right; white-space: nowrap; }
   .portfolio-comparison-table.portfolio-annual-table th:nth-child(6),
   .portfolio-comparison-table.portfolio-annual-table td:nth-child(6),
   .portfolio-comparison-table.portfolio-annual-table th:nth-child(7),
-  .portfolio-comparison-table.portfolio-annual-table td:nth-child(7) { width: 11%; text-align: right; white-space: nowrap; font-weight: 800; }
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(7) { width: 13%; text-align: right; white-space: nowrap; font-weight: 800; }
   .portfolio-comparison-table.portfolio-annual-table th:nth-child(8),
-  .portfolio-comparison-table.portfolio-annual-table td:nth-child(8) { width: 10%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(8) { width: 7%; text-align: center; white-space: nowrap; font-weight: 800; }
   .portfolio-comparison-table.portfolio-annual-table th:nth-child(9),
-  .portfolio-comparison-table.portfolio-annual-table td:nth-child(9) { width: 6%; text-align: center; white-space: nowrap; }
-  .portfolio-comparison-table.portfolio-annual-table th:nth-child(10),
-  .portfolio-comparison-table.portfolio-annual-table td:nth-child(10) { width: 8%; text-align: center; white-space: nowrap; overflow: visible; }
-  .portfolio-model-basis { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+  .portfolio-comparison-table.portfolio-annual-table td:nth-child(9) { width: 8%; text-align: center; white-space: nowrap; overflow: visible; }
   .portfolio-comparison-table.portfolio-annual-table .portfolio-status-trigger,
   .portfolio-comparison-table.portfolio-annual-table .portfolio-maturity-trigger { max-width: 100%; }
+}
+
+/* v35.43 ZEVI grant auto-population */
+.grant-support-card {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid #d9e4df;
+  background: #f7fbf8;
+}
+.grant-support-card strong { display: block; font-size: 12.5px; margin-bottom: 3px; color: #1f3b31; }
+.grant-support-card p { margin: 0; font-size: 12px; line-height: 1.4; color: #344054; }
+.grant-support-card span, .grant-support-card small, .grant-support-muted { font-size: 11px; color: #667085; line-height: 1.35; }
+.grant-support-card.good { background: #ecfdf3; border-color: #b7e4c7; }
+.grant-support-card.warn { background: #fff8e6; border-color: #efd38e; }
+.grant-support-card.neutral { background: #f6f8f7; border-color: #d9e4df; }
+.grant-support-card .secondary.small { padding: 6px 9px; font-size: 11.5px; white-space: nowrap; }
+.grant-support-muted { display: block; margin-top: 8px; }
+@media (max-width: 720px) {
+  .grant-support-card { flex-direction: column; }
+  .grant-support-card .secondary.small { width: fit-content; }
 }

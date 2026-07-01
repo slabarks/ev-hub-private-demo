@@ -3195,6 +3195,21 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         trailing_net = sum(v["net"] for v in trailing_vals)
         trailing_sessions = sum(v["sessions"] for v in trailing_vals)
         tier = "mature" if data_days >= 365 else "near" if data_days >= 300 else "early"
+        # --- Accurate annualisation from daily cumulative data ---
+        # Use total kWh from firstActiveDate to lastDataDate divided by daysLive,
+        # then multiply by 365. This is more accurate than rolling30 / 30 * 365
+        # because it uses the exact operating window rather than a fixed 30-day
+        # denominator that understates new sites and overstates sites with recent spikes.
+        cumulative_vals = [vals for d, vals in daily.items() if first_active and d >= first_active and d <= latest_date]
+        cumulative_kwh = sum(v["kwh"] for v in cumulative_vals)
+        cumulative_sessions = sum(v["sessions"] for v in cumulative_vals)
+        cumulative_net = sum(v["net"] for v in cumulative_vals)
+        # annualised = total / daysLive * 365 (correct operating window)
+        annualised_kwh = round(cumulative_kwh / data_days * 365, 3) if data_days > 0 else 0.0
+        annualised_sessions = round(cumulative_sessions / data_days * 365, 3) if data_days > 0 else 0.0
+        annualised_net = round(cumulative_net / data_days * 365, 2) if data_days > 0 else 0.0
+        daily_kwh_avg = round(cumulative_kwh / data_days, 4) if data_days > 0 else 0.0
+        daily_sessions_avg = round(cumulative_sessions / data_days, 4) if data_days > 0 else 0.0
         actual = {
             "siteName": site["siteName"],
             "siteKey": site["siteKey"],
@@ -3202,11 +3217,15 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "rolling30Kwh": round(rolling_kwh, 3),
                 "rolling30Sessions": round(rolling_sessions, 3),
                 "rolling30NetRevenue": round(rolling_net, 2),
-                "dailyKwh": round(rolling_kwh / 30, 4),
-                "dailySessions": round(rolling_sessions / 30, 4),
+                "dailyKwh": daily_kwh_avg,
+                "dailySessions": daily_sessions_avg,
+                "annualKwh": annualised_kwh,
+                "annualSessions": annualised_sessions,
+                "annualNetRevenue": annualised_net,
                 "asOfDate": latest_date.isoformat(),
                 "sourceFile": ", ".join(sorted(site["sourceFiles"])),
                 "source": "Uploaded live calibration files",
+                "annualisationBasis": f"cumulative {round(cumulative_kwh, 1)} kWh over {data_days} days live ({first_active.isoformat() if first_active else '?'} to {latest_date.isoformat()})",
             },
             "maturity": {"dataDays": int(data_days), "tier": tier},
             "diagnostics": {
@@ -3214,14 +3233,10 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "latestDate": latest_date.isoformat(),
                 "chargerCount": len(site["chargerNames"]),
                 "chargerNames": sorted(site["chargerNames"]),
+                "cumulativeKwh": round(cumulative_kwh, 1),
+                "daysLive": data_days,
             }
         }
-        if data_days >= 365:
-            actual["actual"].update({
-                "annualKwh": round(trailing_kwh, 3),
-                "annualSessions": round(trailing_sessions, 3),
-                "annualNetRevenue": round(trailing_net, 2),
-            })
         actuals.append(actual)
 
     actuals.sort(key=lambda x: x["siteName"].lower())

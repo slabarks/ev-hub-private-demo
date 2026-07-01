@@ -1,4 +1,4 @@
-# EV Hub Investment Tool — v35.46 Banner full-configuration consistency fix
+# EV Hub Investment Tool — v35.48 trailing 12-month actual comparison fix
 
 This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, the v35.44 grant render fix, and the v35.45 mapping/upload/Kempower update:
 
@@ -191,7 +191,7 @@ See `DEPLOY_TO_RENDER.md` for step-by-step deployment and deletion instructions.
 - The 9-column table now has protected desktop/tablet widths for Actual, Matched model, Variance and Status.
 
 
-## v35.46 Banner full-configuration consistency update
+## v35.45 mapping/upload/Kempower update
 
 - Corrects verified hardware mappings from ePower_Site_Data_Mapping.xlsx and user-confirmed overrides.
 - Keeps Douglas Court as 4 active plugs.
@@ -203,3 +203,20 @@ See `DEPLOY_TO_RENDER.md` for step-by-step deployment and deletion instructions.
 ## v35.43 ZEVI funding database
 
 This build embeds a ZEVI funding database from the matched site funding file and the wider ZEVI allocation reference file. Confirmed portfolio-site matches auto-populate Product Configuration → Grant support. Safe exact allocation matches can also auto-populate for future sites, while generic, duplicate or fuzzy allocation matches are shown as review suggestions only. Manual grant entries are preserved until a portfolio site is explicitly loaded or the grant is cleared.
+
+
+## v35.47 Low-data and mixed-site exclusion update
+
+- Portfolio variance badges now show **Low data** when actual kWh exists but operating volume is below the confidence threshold, instead of incorrectly showing **No actual**.
+- Killashee House Hotel is kept out of active portfolio calibration/live-data promotion because it is a mixed AC/DC site and should not be modelled in the DC-only portfolio view.
+- Killashee remains only as an excluded reference record for audit purposes.
+
+
+## v35.48 trailing 12-month actual comparison fix
+
+- Updated the live-data server annualisation basis for Portfolio Calibration uploads.
+- Mature sites now use true trailing 365-day actual kWh/sessions/net revenue instead of rolling 30-day annualised run-rate.
+- Near-mature sites now use partial-year cumulative annualisation across all available live days instead of rolling 30-day annualised run-rate.
+- Early/ramp-up sites continue to use cumulative daily annualisation.
+- Added trailing365 actual fields to the live upload response for auditability.
+- No demand target recalibration or AADT override changes were included in this build.

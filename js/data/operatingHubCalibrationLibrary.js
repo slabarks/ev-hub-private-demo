@@ -2139,8 +2139,11 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "actualCapexExVat": 128154,
     "capexSource": "Verified hardware/CAPEX mapping dataset",
     "displayInPortfolio": false,
-    "includeWhenLiveUploaded": true,
+    "includeWhenLiveUploaded": false,
+    "excludeFromPortfolio": true,
+    "excludeFromLiveUploads": true,
+    "exclusionReason": "Excluded mixed AC/DC site; not suitable for DC-only portfolio calibration.",
     "uploadedNeedsSetup": true,
-    "loadBlockReason": "Future-only verified hardware record. Add/review AADT before loading as an investment scenario."
+    "loadBlockReason": "Excluded mixed AC/DC site; do not load into the DC-only portfolio calibration model."
   }
 ];

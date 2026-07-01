@@ -3197,33 +3197,43 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         tier = "mature" if data_days >= 365 else "near" if data_days >= 300 else "early"
         # --- Annualisation strategy by maturity tier ---
         # early (ramp-up): cumulative method — sum all kWh from firstActiveDate to
-        #   lastDataDate divided by daysLive × 365. More accurate than rolling30/30×365
-        #   because the 30-day denominator understates sites with fewer than 30 active
-        #   days and overstates sites whose recent window is above their operating average.
-        # near / mature: rolling30 method — current run rate × 365. These sites have
-        #   stabilised; their recent 30-day performance is the best forward-looking
-        #   indicator and should not be diluted by ramp-up months.
+        #   lastDataDate divided by daysLive × 365. This avoids volatile rolling30
+        #   annualisation while the site is still building a normal operating pattern.
+        # near: partial-year cumulative annualised across all available live days.
+        #   A near-mature site does not yet have a full trailing year, so using the full
+        #   live period is less seasonally biased than a June/summer rolling30 snapshot.
+        # mature: true trailing 365-day actual. This is the clean annual comparison
+        #   basis and must not be replaced by rolling30×365 for benchmark validation.
         cumulative_vals = [vals for d, vals in daily.items() if first_active and d >= first_active and d <= latest_date]
         cumulative_kwh = sum(v["kwh"] for v in cumulative_vals)
         cumulative_sessions = sum(v["sessions"] for v in cumulative_vals)
         cumulative_net = sum(v["net"] for v in cumulative_vals)
 
-        use_cumulative = (tier == "early")
-        if use_cumulative and data_days > 0:
+        if tier == "mature" and data_days >= 365:
+            annualised_kwh = round(trailing_kwh, 3)
+            annualised_sessions = round(trailing_sessions, 3)
+            annualised_net = round(trailing_net, 2)
+            daily_kwh_avg = round(trailing_kwh / 365, 4)
+            daily_sessions_avg = round(trailing_sessions / 365, 4)
+            annualisation_method = "trailing365"
+            annualisation_basis = f"trailing 365-day actual — {round(trailing_kwh, 1)} kWh from {trailing_start.isoformat()} to {latest_date.isoformat()}"
+        elif data_days > 0:
             annualised_kwh = round(cumulative_kwh / data_days * 365, 3)
             annualised_sessions = round(cumulative_sessions / data_days * 365, 3)
             annualised_net = round(cumulative_net / data_days * 365, 2)
             daily_kwh_avg = round(cumulative_kwh / data_days, 4)
             daily_sessions_avg = round(cumulative_sessions / data_days, 4)
-            annualisation_basis = f"daily cumulative — {round(cumulative_kwh, 1)} kWh over {data_days} days live ({first_active.isoformat() if first_active else '?'} to {latest_date.isoformat()})"
+            annualisation_method = "partial_cumulative" if tier == "near" else "daily_cumulative"
+            label = "partial-year cumulative annualised" if tier == "near" else "daily cumulative"
+            annualisation_basis = f"{label} — {round(cumulative_kwh, 1)} kWh over {data_days} days live ({first_active.isoformat() if first_active else '?'} to {latest_date.isoformat()})"
         else:
-            # near / mature: rolling30 current run rate
-            annualised_kwh = round(rolling_kwh / 30 * 365, 3)
-            annualised_sessions = round(rolling_sessions / 30 * 365, 3)
-            annualised_net = round(rolling_net / 30 * 365, 2)
-            daily_kwh_avg = round(rolling_kwh / 30, 4)
-            daily_sessions_avg = round(rolling_sessions / 30, 4)
-            annualisation_basis = f"rolling 30-day run rate — {round(rolling_kwh, 1)} kWh over last 30 days to {latest_date.isoformat()}"
+            annualised_kwh = 0
+            annualised_sessions = 0
+            annualised_net = 0
+            daily_kwh_avg = 0
+            daily_sessions_avg = 0
+            annualisation_method = "no_actual"
+            annualisation_basis = "no usable live actuals"
 
         actual = {
             "siteName": site["siteName"],
@@ -3232,6 +3242,9 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "rolling30Kwh": round(rolling_kwh, 3),
                 "rolling30Sessions": round(rolling_sessions, 3),
                 "rolling30NetRevenue": round(rolling_net, 2),
+                "trailing365Kwh": round(trailing_kwh, 3),
+                "trailing365Sessions": round(trailing_sessions, 3),
+                "trailing365NetRevenue": round(trailing_net, 2),
                 "dailyKwh": daily_kwh_avg,
                 "dailySessions": daily_sessions_avg,
                 "annualKwh": annualised_kwh,
@@ -3241,7 +3254,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "sourceFile": ", ".join(sorted(site["sourceFiles"])),
                 "source": "Uploaded live calibration files",
                 "annualisationBasis": annualisation_basis,
-                "annualisationMethod": "daily_cumulative" if use_cumulative else "rolling30",
+                "annualisationMethod": annualisation_method,
             },
             "maturity": {"dataDays": int(data_days), "tier": tier},
             "diagnostics": {

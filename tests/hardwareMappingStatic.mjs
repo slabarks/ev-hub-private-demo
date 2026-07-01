@@ -33,5 +33,7 @@ assert.equal(deriveConfiguration(byId.banner_plaza_ennis_junction_12.modelConfig
 assert.equal(deriveConfiguration(byId.banner_plaza_ennis_junction_12.modelConfig, DEFAULT_INPUTS).installedOutputs, 8, 'Banner derived full design plugs');
 assert.equal(byId.banner_plaza_ennis_junction_12.fullBuildConfig.kempowerTripleCabinetCount, 2, 'Banner full design metadata keeps two triple cabinets');
 assert.equal(byId.anner_hotel_120_kw_dc.retiredFromPortfolio, true, 'Anner must be retired from active portfolio');
-assert.equal(byId.killashee_house_hotel.displayInPortfolio, false, 'Killashee must be future-only');
+assert.equal(byId.killashee_house_hotel.displayInPortfolio, false, 'Killashee must be hidden');
+assert.equal(byId.killashee_house_hotel.includeWhenLiveUploaded, false, 'Killashee must not reappear when live data is uploaded');
+assert.equal(byId.killashee_house_hotel.excludeFromLiveUploads, true, 'Killashee must be excluded from DC-only live uploads');
 console.log('Hardware mapping static regression passed.');

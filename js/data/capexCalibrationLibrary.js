@@ -52,7 +52,7 @@ export const KNOWN_SITE_CAPEX = [
   { key: "ashbourne high street", aliases: ["Ashbourne High Street", "Ashbourne Town Centre"], actualCapexExVat: 117121, treatment: "mixed_reference_blocked", note: "Mixed site; shown for reference but blocked from clean model loading." },
   { key: "west point retail park ennis", aliases: ["West Point Retail Park Ennis", "West Point Retail Park - Ennis", "Westpoint Ennis"], actualCapexExVat: 143652, treatment: "mixed_reference_blocked", note: "Mixed DC/AC site; shown for reference but blocked from clean model loading." },
   { key: "fota island resort", aliases: ["Fota Island Resort", "Fota Island Resort 180 kW DC"], actualCapexExVat: 99829, treatment: "review_reference_blocked", note: "MIC not confirmed; shown for reference but blocked from model loading." },
-  { key: "killashee house hotel", aliases: ["Killashee House Hotel"], actualCapexExVat: 128154, treatment: "future_hardware_record", note: "Future-only verified hardware record; do not show in active portfolio until live data and AADT mapping are available." },
+  { key: "killashee house hotel", aliases: ["Killashee House Hotel"], actualCapexExVat: 128154, treatment: "future_hardware_record", note: "Excluded mixed AC/DC site; kept as a reference record only and hidden from DC-only portfolio calibration." },
   { key: "centra a1 banbridge", aliases: ["Centra A1 Banbridge"], actualCapexExVat: 117230, treatment: "outside_roi_reference_blocked", note: "Outside ROI/TII scope; shown for reference but blocked from model loading." }
 ];
 

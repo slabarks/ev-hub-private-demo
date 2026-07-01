@@ -1651,8 +1651,20 @@ function portfolioOperatingMetrics(site) {
   const aadt = Number(site?.aadt || 0);
   const plugs = Number(site?.modelEquivalentPlugs || 0);
   const micKva = Number(site?.realMicKva || 0);
-  const dailyKwh = Number(actual.dailyKwh || (actualKwh > 0 ? actualKwh / 30 : 0));
-  const dailySessions = Number(actual.dailySessions || (actualSessions > 0 ? actualSessions / 30 : 0));
+  // Client-side annualisation fix: when the server returns rolling30Kwh but no
+  // dailyKwh computed from the correct divisor, use maturity.dataDays as the
+  // denominator for early-tier sites with < 30 days of data. This means the
+  // daily rate is computed as rolling30Kwh / daysLive rather than / 30, giving
+  // the correct annualisation even when server.py hasn't been restarted yet.
+  const maturityDays = Number(site?.maturity?.dataDays || 0);
+  const maturityTier = site?.maturity?.tier || "early";
+  const rollDivisor = (maturityTier === "early" && maturityDays > 0 && maturityDays < 30) ? maturityDays : 30;
+  const dailyKwh = Number(actual.dailyKwh && rollDivisor === 30
+    ? actual.dailyKwh
+    : (actualKwh > 0 ? actualKwh / rollDivisor : actual.dailyKwh || 0));
+  const dailySessions = Number(actual.dailySessions && rollDivisor === 30
+    ? actual.dailySessions
+    : (actualSessions > 0 ? actualSessions / rollDivisor : actual.dailySessions || 0));
   const avgKwhSession = actualSessions > 0 ? actualKwh / actualSessions : Number(DEFAULT_INPUTS.averageSessionEnergy || 30.4);
   return {
     actualKwh,

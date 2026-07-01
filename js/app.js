@@ -1745,6 +1745,26 @@ function portfolioModelPeriodWeights(site, annualActual) {
       return { weights: weighted, label, method: "Matched trailing 365-day operating window", comparisonYearIndex: weighted[Math.floor(weighted.length / 2)]?.yearIndex || fallbackYear };
     }
   }
+  // For rolling 30-day data where firstActiveDate is known: determine which model year
+  // the current 30-day window falls in, and compare the 30-day actual against the
+  // model's 30-day equivalent for that year. This avoids the apples-vs-oranges problem
+  // of comparing a current run-rate snapshot against a full-year-1 annualised model.
+  if (!annualActual?.hasExplicitAnnual && first && end) {
+    const daysLive = portfolioDateDiffDays(first, end);
+    if (Number.isFinite(daysLive) && daysLive > 0) {
+      const yearIndex = daysLive >= 730 ? 3 : daysLive >= 365 ? 2 : 1;
+      const dayInYear = daysLive >= 730 ? daysLive - 730 : daysLive >= 365 ? daysLive - 365 : daysLive;
+      const yearLabel = `Model Year ${yearIndex} (day ${daysLive} live)`;
+      return {
+        weights: [{ yearIndex, days: 30, weight: 1 }],
+        label: yearLabel,
+        method: "Rolling 30-day window matched to operating day via go-live date",
+        comparisonYearIndex: yearIndex,
+        daysLive,
+        dayInYear
+      };
+    }
+  }
   return { weights: [{ yearIndex: fallbackYear, days: 365, weight: 1 }], label: `Model Year ${fallbackYear}`, method: annualActual?.hasExplicitAnnual ? "Configured comparison year" : "Rolling 30-day run-rate matched to configured model year", comparisonYearIndex: fallbackYear };
 }
 function portfolioMatchedAnnualModel(site, inputs, annualActual) {

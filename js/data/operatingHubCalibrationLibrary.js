@@ -12,9 +12,9 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtCounter": "TII 2026 · 000000001251/000000020255",
     "actual": {
       "rolling30NetRevenue": 1136.16,
-      "rolling30Kwh": 1725.0210840439854,
+      "rolling30Kwh": 1792.701,
       "rolling30Sessions": 56.69906075100462,
-      "dailyKwh": 57.50070280146618,
+      "dailyKwh": 59.7567,
       "dailySessions": 1.8899686917001541,
       "sessionsPer1000Aadt": 0.16539500233658477
     },
@@ -66,9 +66,9 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtCounter": "TII 2026 · 000000020016/000000020018",
     "actual": {
       "rolling30NetRevenue": 6455.76,
-      "rolling30Kwh": 9801.71992811558,
+      "rolling30Kwh": 8858.024,
       "rolling30Sessions": 322.16899770622587,
-      "dailyKwh": 326.7239976038527,
+      "dailyKwh": 295.2675,
       "dailySessions": 10.738966590207529,
       "sessionsPer1000Aadt": 0.349575735358318
     },
@@ -171,9 +171,9 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtCounter": "TII 2026 · 000000020562",
     "actual": {
       "rolling30NetRevenue": 3035.89,
-      "rolling30Kwh": 4609.363345689247,
+      "rolling30Kwh": 5352.168,
       "rolling30Sessions": 151.50340756879962,
-      "dailyKwh": 153.64544485630822,
+      "dailyKwh": 178.4056,
       "dailySessions": 5.050113585626654,
       "sessionsPer1000Aadt": 1.4322500242843603
     },
@@ -225,9 +225,9 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtCounter": "TII 2026 · 000000001602/000000020611",
     "actual": {
       "rolling30NetRevenue": 1812.24,
-      "rolling30Kwh": 2751.507014283087,
+      "rolling30Kwh": 2844.311,
       "rolling30Sessions": 90.43823568458721,
-      "dailyKwh": 91.7169004761029,
+      "dailyKwh": 94.8104,
       "dailySessions": 3.014607856152907,
       "sessionsPer1000Aadt": 0.44581600948726813
     },
@@ -275,9 +275,9 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtCounter": "TII 2026 · 000000001221/000000020222",
     "actual": {
       "rolling30NetRevenue": 11962.04,
-      "rolling30Kwh": 18161.853267301714,
+      "rolling30Kwh": 19284.384,
       "rolling30Sessions": 596.9550350883216,
-      "dailyKwh": 605.3951089100572,
+      "dailyKwh": 642.8128,
       "dailySessions": 19.898501169610718,
       "sessionsPer1000Aadt": 0.37629540789732824
     },
@@ -329,9 +329,9 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtCounter": "TII 2026 · 000000003181/000000003182",
     "actual": {
       "rolling30NetRevenue": 7108.99,
-      "rolling30Kwh": 10793.51291742171,
+      "rolling30Kwh": 9998.076,
       "rolling30Sessions": 354.76786358284426,
-      "dailyKwh": 359.78376391405703,
+      "dailyKwh": 333.2692,
       "dailySessions": 11.825595452761474,
       "sessionsPer1000Aadt": 0.8508846922407163
     },
@@ -383,9 +383,9 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtCounter": "TII 2026 · 000000001065/000000020065",
     "actual": {
       "rolling30NetRevenue": 7030.93,
-      "rolling30Kwh": 10674.9951507159,
+      "rolling30Kwh": 12165.813,
       "rolling30Sessions": 350.8723482661429,
-      "dailyKwh": 355.83317169053004,
+      "dailyKwh": 405.5271,
       "dailySessions": 11.695744942204763,
       "sessionsPer1000Aadt": 0.3002604472736898
     },
@@ -437,11 +437,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001225/000000001703",
     "actual": {
+      "annualisationMethod": "daily_cumulative (257 days live, 46891.9 kWh total)",
       "firstActiveDate": "2025-10-01",
       "rolling30NetRevenue": 4725.43,
-      "rolling30Kwh": 7174.576099470119,
+      "rolling30Kwh": 8505.27,
       "rolling30Sessions": 235.81840818601233,
-      "dailyKwh": 239.15253664900396,
+      "dailyKwh": 283.509,
       "dailySessions": 7.8606136062004115,
       "sessionsPer1000Aadt": 0.9673410787842004
     },
@@ -493,9 +494,9 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtCounter": "TII 2026 · 000000001222/000000001223",
     "actual": {
       "rolling30NetRevenue": 2126.38,
-      "rolling30Kwh": 3228.4628333064443,
+      "rolling30Kwh": 4496.4,
       "rolling30Sessions": 106.11511477232186,
-      "dailyKwh": 107.61542777688148,
+      "dailyKwh": 149.88,
       "dailySessions": 3.537170492410729,
       "sessionsPer1000Aadt": 4.051741686610228
     },
@@ -548,9 +549,9 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtCounter": "TII 2026 · 000000030189/000000030201",
     "actual": {
       "rolling30NetRevenue": 2244.57,
-      "rolling30Kwh": 3407.909603059964,
+      "rolling30Kwh": 4157.318,
       "rolling30Sessions": 112.01328227528028,
-      "dailyKwh": 113.59698676866546,
+      "dailyKwh": 138.5773,
       "dailySessions": 3.733776075842676,
       "sessionsPer1000Aadt": 0.0901464563568091
     },
@@ -597,11 +598,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001019",
     "actual": {
+      "annualisationMethod": "daily_cumulative (285 days live, 80710.7 kWh total)",
       "firstActiveDate": "2025-09-01",
       "rolling30NetRevenue": 7245.48,
-      "rolling30Kwh": 11000.74440573424,
+      "rolling30Kwh": 11463.231,
       "rolling30Sessions": 361.5792764136996,
-      "dailyKwh": 366.69148019114135,
+      "dailyKwh": 382.1077,
       "dailySessions": 12.05264254712332,
       "sessionsPer1000Aadt": 0.22976671014037134
     },
@@ -651,11 +653,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000032502/000000001243",
     "actual": {
+      "annualisationMethod": "daily_cumulative (264 days live, 21535.6 kWh total)",
       "firstActiveDate": "2025-10-01",
       "rolling30NetRevenue": 2224.87,
-      "rolling30Kwh": 3377.9992776166573,
+      "rolling30Kwh": 2660.053,
       "rolling30Sessions": 111.0301711845934,
-      "dailyKwh": 112.59997592055524,
+      "dailyKwh": 88.6684,
       "dailySessions": 3.701005706153113,
       "sessionsPer1000Aadt": 1.2473898571463138
     },
@@ -708,11 +711,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001252",
     "actual": {
+      "annualisationMethod": "daily_cumulative (227 days live, 38894.1 kWh total)",
       "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 4405.62,
-      "rolling30Kwh": 6689.011572565362,
+      "rolling30Kwh": 7763.991,
       "rolling30Sessions": 219.85857275897845,
-      "dailyKwh": 222.9670524188454,
+      "dailyKwh": 258.7997,
       "dailySessions": 7.328619091965948,
       "sessionsPer1000Aadt": 0.4614418267199313
     },
@@ -762,11 +766,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020256",
     "actual": {
+      "annualisationMethod": "daily_cumulative (263 days live, 58097.4 kWh total)",
       "firstActiveDate": "2025-10-01",
       "rolling30NetRevenue": 3459.36,
-      "rolling30Kwh": 5252.313879469794,
+      "rolling30Kwh": 8009.48,
       "rolling30Sessions": 172.63630368926502,
-      "dailyKwh": 175.07712931565982,
+      "dailyKwh": 266.9827,
       "dailySessions": 5.754543456308834,
       "sessionsPer1000Aadt": 0.14074950363969266
     },
@@ -817,11 +822,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001201",
     "actual": {
+      "annualisationMethod": "daily_cumulative (210 days live, 29528.4 kWh total)",
       "firstActiveDate": "2025-11-01",
       "rolling30NetRevenue": 4154.99,
-      "rolling30Kwh": 6308.482391557455,
+      "rolling30Kwh": 5794.995,
       "rolling30Sessions": 207.35110409609268,
-      "dailyKwh": 210.28274638524852,
+      "dailyKwh": 193.1665,
       "dailySessions": 6.911703469869757,
       "sessionsPer1000Aadt": 0.6186076675798583
     },
@@ -872,11 +878,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000200722",
     "actual": {
+      "annualisationMethod": "daily_cumulative (210 days live, 57840.6 kWh total)",
       "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 5143.05,
-      "rolling30Kwh": 7808.644633055572,
+      "rolling30Kwh": 10185.099,
       "rolling30Sessions": 256.6593652262483,
-      "dailyKwh": 260.28815443518573,
+      "dailyKwh": 339.5033,
       "dailySessions": 8.555312174208277,
       "sessionsPer1000Aadt": 0.4850225168211507
     },
@@ -927,11 +934,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020204",
     "actual": {
+      "annualisationMethod": "daily_cumulative (220 days live, 106954.0 kWh total)",
       "firstActiveDate": "2025-11-01",
       "rolling30NetRevenue": 12005.31,
-      "rolling30Kwh": 18227.54970293277,
+      "rolling30Kwh": 17390.999,
       "rolling30Sessions": 599.1143861996931,
-      "dailyKwh": 607.584990097759,
+      "dailyKwh": 579.7,
       "dailySessions": 19.970479539989768,
       "sessionsPer1000Aadt": 1.1387625899520881
     },
@@ -981,11 +989,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001312",
     "actual": {
+      "annualisationMethod": "daily_cumulative (160 days live, 34940.3 kWh total)",
       "firstActiveDate": "2026-01-01",
       "rolling30NetRevenue": 4484.29,
-      "rolling30Kwh": 6808.455496556474,
+      "rolling30Kwh": 8586.614,
       "rolling30Sessions": 223.78452958660975,
-      "dailyKwh": 226.94851655188248,
+      "dailyKwh": 286.2205,
       "dailySessions": 7.459484319553658,
       "sessionsPer1000Aadt": 0.5295672525595384
     },
@@ -1036,11 +1045,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001072",
     "actual": {
+      "annualisationMethod": "daily_cumulative (164 days live, 18307.3 kWh total)",
       "firstActiveDate": "2026-01-01",
       "rolling30NetRevenue": 1827.4,
-      "rolling30Kwh": 2774.5243002587476,
+      "rolling30Kwh": 4540.513,
       "rolling30Sessions": 91.1947820873696,
-      "dailyKwh": 92.48414334195826,
+      "dailyKwh": 151.3504,
       "dailySessions": 3.0398260695789867,
       "sessionsPer1000Aadt": 0.02293602497135841
     },
@@ -1090,11 +1100,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020045/000000001057",
     "actual": {
+      "annualisationMethod": "daily_cumulative (194 days live, 49390.0 kWh total)",
       "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 6389.82,
-      "rolling30Kwh": 9701.603843865247,
+      "rolling30Kwh": 10120.617,
       "rolling30Sessions": 318.8783202788202,
-      "dailyKwh": 323.38679479550825,
+      "dailyKwh": 337.3539,
       "dailySessions": 10.62927734262734,
       "sessionsPer1000Aadt": 0.8000359282423107
     },
@@ -1146,11 +1157,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020801",
     "actual": {
+      "annualisationMethod": "daily_cumulative (150 days live, 44527.9 kWh total)",
       "firstActiveDate": "2026-01-01",
       "rolling30NetRevenue": 5744.37,
-      "rolling30Kwh": 8721.623155673275,
+      "rolling30Kwh": 13001.075,
       "rolling30Sessions": 286.66770842684866,
-      "dailyKwh": 290.7207718557758,
+      "dailyKwh": 433.3692,
       "dailySessions": 9.555590280894956,
       "sessionsPer1000Aadt": 0.848179503008606
     },
@@ -1200,11 +1212,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001241",
     "actual": {
+      "annualisationMethod": "daily_cumulative (95 days live, 2688.5 kWh total)",
       "firstActiveDate": "2026-03-01",
       "rolling30NetRevenue": 0,
-      "rolling30Kwh": 0,
+      "rolling30Kwh": 1051.22,
       "rolling30Sessions": 0,
-      "dailyKwh": 0,
+      "dailyKwh": 35.0407,
       "dailySessions": 0,
       "sessionsPer1000Aadt": 0
     },
@@ -1255,11 +1268,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020252",
     "actual": {
+      "annualisationMethod": "daily_cumulative (117 days live, 37323.7 kWh total)",
       "firstActiveDate": "2026-03-01",
       "rolling30NetRevenue": 6471,
-      "rolling30Kwh": 9824.858677341774,
+      "rolling30Kwh": 12393.111,
       "rolling30Sessions": 322.92953643831055,
-      "dailyKwh": 327.49528924472577,
+      "dailyKwh": 413.1037,
       "dailySessions": 10.764317881277018,
       "sessionsPer1000Aadt": 1.2822296463701035
     },
@@ -1309,11 +1323,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020074/000000020075",
     "actual": {
+      "annualisationMethod": "daily_cumulative (255 days live, 66169.9 kWh total)",
       "firstActiveDate": "2025-10-01",
       "rolling30NetRevenue": 6273.26,
-      "rolling30Kwh": 9524.6318878413,
+      "rolling30Kwh": 10224.219,
       "rolling30Sessions": 313.06149648539576,
-      "dailyKwh": 317.48772959471,
+      "dailyKwh": 340.8073,
       "dailySessions": 10.435383216179858,
       "sessionsPer1000Aadt": 0.2033236539665626
     },
@@ -1359,11 +1374,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020087/000000020088",
     "actual": {
+      "annualisationMethod": "daily_cumulative (224 days live, 19637.7 kWh total)",
       "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 2538.26,
-      "rolling30Kwh": 3853.8163786662853,
+      "rolling30Kwh": 3750.769,
       "rolling30Sessions": 126.66962218511918,
-      "dailyKwh": 128.46054595554284,
+      "dailyKwh": 125.0256,
       "dailySessions": 4.222320739503973,
       "sessionsPer1000Aadt": 0.436957543154711
     },
@@ -1414,11 +1430,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020257/000000020258",
     "actual": {
+      "annualisationMethod": "daily_cumulative (217 days live, 89870.7 kWh total)",
       "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 10558.06,
-      "rolling30Kwh": 16030.203586291931,
+      "rolling30Kwh": 12709.114,
       "rolling30Sessions": 526.8906539156033,
-      "dailyKwh": 534.3401195430644,
+      "dailyKwh": 423.6371,
       "dailySessions": 17.563021797186774,
       "sessionsPer1000Aadt": 0.3025186336844904
     },
@@ -1469,11 +1486,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001508",
     "actual": {
+      "annualisationMethod": "daily_cumulative (67 days live, 7474.9 kWh total)",
       "firstActiveDate": "2026-04-01",
       "rolling30NetRevenue": 236.21,
-      "rolling30Kwh": 358.6354300996601,
+      "rolling30Kwh": 4072.263,
       "rolling30Sessions": 11.787851306149486,
-      "dailyKwh": 11.954514336655336,
+      "dailyKwh": 135.7421,
       "dailySessions": 0.39292837687164955,
       "sessionsPer1000Aadt": 0.002532766806789114
     },
@@ -1525,11 +1543,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001053/000000001058",
     "actual": {
+      "annualisationMethod": "daily_cumulative (354 days live, 12565.8 kWh total)",
       "firstActiveDate": "2026-02-01",
       "rolling30NetRevenue": 2284.81,
-      "rolling30Kwh": 3469.005618077153,
+      "rolling30Kwh": 4583.156,
       "rolling30Sessions": 114.02142391432795,
-      "dailyKwh": 115.63352060257176,
+      "dailyKwh": 152.7719,
       "dailySessions": 3.8007141304775987,
       "sessionsPer1000Aadt": 0.4269505875620758
     },
@@ -1580,11 +1599,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020252",
     "actual": {
+      "annualisationMethod": "daily_cumulative (74 days live, 8645.5 kWh total)",
       "firstActiveDate": "2026-04-01",
       "rolling30NetRevenue": 580.46,
-      "rolling30Kwh": 881.3069800416946,
+      "rolling30Kwh": 4947.19,
       "rolling30Sessions": 28.9673433350304,
-      "dailyKwh": 29.376899334723152,
+      "dailyKwh": 164.9063,
       "dailySessions": 0.96557811116768,
       "sessionsPer1000Aadt": 0.11501823837613818
     },
@@ -1634,11 +1654,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020086",
     "actual": {
+      "annualisationMethod": "daily_cumulative (98 days live, 14703.5 kWh total)",
       "firstActiveDate": "2026-03-01",
       "rolling30NetRevenue": 2659.71,
-      "rolling30Kwh": 4038.21277587895,
+      "rolling30Kwh": 5872.263,
       "rolling30Sessions": 132.73047710714556,
-      "dailyKwh": 134.60709252929834,
+      "dailyKwh": 195.7421,
       "dailySessions": 4.424349236904852,
       "sessionsPer1000Aadt": 0.21941823234005411
     },
@@ -1688,11 +1709,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "Medium",
     "aadtCounter": "TII 2026 · 000000020011",
     "actual": {
+      "annualisationMethod": "daily_cumulative (129 days live, 23100.3 kWh total)",
       "firstActiveDate": "2026-02-01",
       "rolling30NetRevenue": 3889.49,
-      "rolling30Kwh": 5905.376228857062,
+      "rolling30Kwh": 7226.822,
       "rolling30Sessions": 194.10156122414529,
-      "dailyKwh": 196.8458742952354,
+      "dailyKwh": 240.8941,
       "dailySessions": 6.470052040804843,
       "sessionsPer1000Aadt": 0.06299953301660022
     },
@@ -1742,11 +1764,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001015",
     "actual": {
+      "annualisationMethod": "daily_cumulative (4 days live, 91.5 kWh total)",
       "firstActiveDate": "2026-06-01",
       "rolling30NetRevenue": 0,
-      "rolling30Kwh": 0,
+      "rolling30Kwh": 91.469,
       "rolling30Sessions": 0,
-      "dailyKwh": 0,
+      "dailyKwh": 3.049,
       "dailySessions": 0,
       "sessionsPer1000Aadt": 0
     },
@@ -1793,10 +1816,11 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001282",
     "actual": {
+      "annualisationMethod": "daily_cumulative (5 days live, 62.6 kWh total)",
       "rolling30NetRevenue": 0,
-      "rolling30Kwh": 0,
+      "rolling30Kwh": 62.608,
       "rolling30Sessions": 0,
-      "dailyKwh": 0,
+      "dailyKwh": 2.0869,
       "dailySessions": 0,
       "sessionsPer1000Aadt": 0
     },
@@ -1848,10 +1872,11 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020525",
     "actual": {
+      "annualisationMethod": "daily_cumulative (17 days live, 116.5 kWh total)",
       "rolling30NetRevenue": 0,
-      "rolling30Kwh": 0,
+      "rolling30Kwh": 116.486,
       "rolling30Sessions": 0,
-      "dailyKwh": 0,
+      "dailyKwh": 3.8829,
       "dailySessions": 0,
       "sessionsPer1000Aadt": 0
     },
@@ -1903,11 +1928,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001283",
     "actual": {
+      "annualisationMethod": "daily_cumulative (59 days live, 36305.9 kWh total)",
       "firstActiveDate": "2026-05-01",
       "rolling30NetRevenue": 0,
-      "rolling30Kwh": 0,
+      "rolling30Kwh": 24747.111,
       "rolling30Sessions": 0,
-      "dailyKwh": 0,
+      "dailyKwh": 824.9037,
       "dailySessions": 0,
       "sessionsPer1000Aadt": 0
     },
@@ -1961,11 +1987,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020182",
     "actual": {
+      "annualisationMethod": "daily_cumulative (150 days live, 99767.1 kWh total)",
       "firstActiveDate": "2026-01-01",
       "rolling30NetRevenue": 0,
-      "rolling30Kwh": 0,
+      "rolling30Kwh": 26412.431,
       "rolling30Sessions": 0,
-      "dailyKwh": 0,
+      "dailyKwh": 880.4144,
       "dailySessions": 0,
       "sessionsPer1000Aadt": 0
     },
@@ -2026,11 +2053,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "Medium",
     "aadtCounter": "TII 2026 · 000000200723",
     "actual": {
+      "annualisationMethod": "daily_cumulative (61 days live, 5558.8 kWh total)",
       "firstActiveDate": "2026-04-01",
       "rolling30NetRevenue": 0,
-      "rolling30Kwh": 0,
+      "rolling30Kwh": 2700.603,
       "rolling30Sessions": 0,
-      "dailyKwh": 0,
+      "dailyKwh": 90.0201,
       "dailySessions": 0,
       "sessionsPer1000Aadt": 0
     },

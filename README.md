@@ -1,4 +1,4 @@
-# EV Hub Investment Tool — v35.52 simple portfolio status
+# EV Hub Investment Tool — v35.53 portfolio curator foundation
 
 This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, the v35.44 grant render fix, and the v35.45 mapping/upload/Kempower update:
 
@@ -14,13 +14,13 @@ Run locally with `python3 server.py`.
 
 # EV Charging Hub Investment Tool
 
-Current review build: **v35.52 Simple Portfolio Status** — v34.2 Design Verified
+Current review build: **v35.53 Portfolio Curator Foundation** — v34.2 Design Verified
 
 This clean build includes the agreed design refinements, cache-busted CSS/JS, the redesigned workflow guide, refreshed icons, and Scenario Ranking layout polish.
 
 # EV Charging Hub Investment Tool
 
-Current review build: **v35.52 Simple Portfolio Status** — HTML/JavaScript Demo v33
+Current review build: **v35.53 Portfolio Curator Foundation** — HTML/JavaScript Demo v33
 
 This package is a local-first browser demo built from the uploaded **Financial Modelling - EV Hub - DUT . V13.xlsx** workbook and the uploaded Site Location Dashboard package.
 
@@ -216,7 +216,7 @@ This build embeds a ZEVI funding database from the matched site funding file and
 - Killashee remains only as an excluded reference record for audit purposes.
 
 
-## v35.52 simple portfolio status
+## v35.53 portfolio curator foundation
 
 - Main Portfolio Comparison table now shows **Variance** and **Status** only.
 - Variance always shows the mathematical matched model vs actual percentage whenever actual kWh exists.
@@ -233,3 +233,11 @@ This build embeds a ZEVI funding database from the matched site funding file and
 - Early/ramp-up sites continue to use cumulative daily annualisation.
 - Added trailing365 actual fields to the live upload response for auditability.
 - No demand target recalibration or AADT override changes were included in this build.
+
+
+## v35.53 portfolio curator foundation
+
+- Removed the visible Status column from Portfolio Calibration so the table focuses on maturity and matched annual variance.
+- Added a neutral curator framework audit with catchment, competition, destination and access/visibility modifiers defaulting to 1.00x. No demand output changes until a modifier is explicitly reviewed.
+- Variance popover now shows the curator audit trail.
+- Fixed stale actual-installed-power override behavior: changing charger hardware clears verified-site output overrides and recalculates from the selected hardware library.

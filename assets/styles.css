@@ -2280,7 +2280,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 
 /* v35.44 grant render fix: no layout change; setup render recursion fixed in JS. */
 
-/* v35.52 portfolio comparison: simple Status labels with accuracy available from clickable Variance badges. */
+/* v35.53 portfolio calibration: status removed and neutral curator framework added. */
 .portfolio-annual-table th:nth-child(1),
 .portfolio-annual-table td:nth-child(1) { width: 24%; text-align: left; }
 .portfolio-annual-table th:nth-child(2),

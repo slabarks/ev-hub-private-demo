@@ -8,7 +8,7 @@ const requiredAppTokens = [
   'function portfolioCategoryCompactLabel',
   'function portfolioCategoryCell',
   'function portfolioMaturityBadgeCompact',
-  'function portfolioPerformanceCompactLabel',
+  'function portfolioCuratorProfile',
   'portfolioCategoryCell(r)',
   'portfolioMaturityBadgeCompact(r.site.maturity?.tier)',
   'data-portfolio-variance-trigger'
@@ -18,7 +18,7 @@ for (const token of requiredAppTokens) {
 }
 
 const requiredCssTokens = [
-  'v35.52 portfolio comparison: simple Status labels',
+  'v35.53 portfolio calibration: status removed and neutral curator framework',
   'min-width: 1180px',
   '.portfolio-category-label',
   'text-overflow: ellipsis',
@@ -28,5 +28,5 @@ for (const token of requiredCssTokens) {
   if (!css.includes(token)) throw new Error(`Missing compact portfolio rendering CSS token: ${token}`);
 }
 
-if (!html.includes('35.52-simple-status')) throw new Error('Compact rendering cache-busting version tag missing.');
+if (!html.includes('35.53-curator-framework')) throw new Error('Compact rendering cache-busting version tag missing.');
 console.log('Portfolio compact rendering static regression passed.');

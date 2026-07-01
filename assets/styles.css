@@ -2277,3 +2277,5 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   .grant-support-card { flex-direction: column; }
   .grant-support-card .secondary.small { width: fit-content; }
 }
+
+/* v35.44 grant render fix: no layout change; setup render recursion fixed in JS. */

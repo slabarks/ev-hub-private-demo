@@ -1,6 +1,6 @@
-# EV Hub Investment Tool — v35.43 ZEVI grant auto-population
+# EV Hub Investment Tool — v35.44 grant render fix
 
-This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, and adds v35.43 ZEVI grant auto-population:
+This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, and adds v35.44 grant render fix:
 
 - Portfolio comparison now matches actual/live performance to the relevant model year or weighted model-year basis before calculating variance.
 - Static rolling-30D actuals are annualised and matched to the configured comparison year; uploaded trailing-365 actuals are matched to the equivalent operating window where first-active/latest dates are available.

@@ -151,7 +151,8 @@ function grantSupportStatusHtml() {
 }
 
 function grantSupportField() {
-  return `${grantSupportField()}${grantSupportStatusHtml()}`;
+  const baseField = inputField("grantSupport", "Grant support", { step: 1000, unit: "€", help: "One-off funding support that reduces the net initial investment. Safe ZEVI funding matches are auto-populated; uncertain matches are shown for review only." });
+  return `${baseField}${grantSupportStatusHtml()}`;
 }
 function safePct(v, digits = 1) { return Number.isFinite(v) ? pct(v, digits) : "—"; }
 function resetMapState(reason = "map reset") {

@@ -501,6 +501,36 @@ function pdfPortfolioDoNothing(site, metrics, derived, inputs) {
   const triggerDrivers = [firstPlugYear === firstActionYear ? "plug utilisation" : "", firstMicYear === firstActionYear ? "MIC/grid power" : "", firstChargerYear === firstActionYear ? "charger output" : ""].filter(Boolean);
   return { startYear, firstActionYear, triggerDrivers };
 }
+
+function pdfPortfolioAccuracyLabel(variance) {
+  if (!Number.isFinite(variance)) return "No actual";
+  const abs = Math.abs(variance);
+  if (abs <= 0.10) return "Excellent fit";
+  if (abs <= PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) return "In benchmark";
+  if (abs <= 0.25) return "Moderate variance";
+  if (abs <= 0.50) return "High variance";
+  return "Major variance";
+}
+function pdfPortfolioOperationalStatus(site, variance, doNothing) {
+  const tier = site.maturity?.tier || "review";
+  const aadtReview = ["medium_low", "review", "setup_required"].includes(pdfPortfolioToken(site.aadtConfidence));
+  const categoryReview = pdfPortfolioCategoryKey(site) === "review";
+  const capacityPressure = doNothing.firstActionYear && doNothing.firstActionYear <= doNothing.startYear + 5;
+  const modelAboveActual = Number.isFinite(variance) && variance > PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE;
+  const actualAboveModel = Number.isFinite(variance) && variance < -PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE;
+  if (tier === "early") {
+    if (capacityPressure && actualAboveModel) return "Ramp-up + pressure";
+    if (modelAboveActual) return "Ramp-up under";
+    if (actualAboveModel) return "Ramp-up outperform";
+    return "Ramp-up";
+  }
+  if (aadtReview || categoryReview) return "Review";
+  if (capacityPressure && !modelAboveActual) return actualAboveModel ? "Capacity pressure / outperforming" : "Capacity pressure";
+  if (modelAboveActual) return "Under-capturing";
+  if (actualAboveModel) return "Outperforming";
+  return "Monitor";
+}
+
 function pdfPortfolioResult(site) {
   const inputs = pdfPortfolioScenario(site);
   const config = { ...DEFAULT_SELECTED_CONFIG, ...site.modelConfig };
@@ -513,24 +543,18 @@ function pdfPortfolioResult(site) {
   const variance = actual.annualKwh > 0 ? (modelAnnual - actual.annualKwh) / actual.annualKwh : null;
   const doNothing = pdfPortfolioDoNothing(site, metrics, yy.derived, inputs);
   const tier = site.maturity?.tier || "review";
-  const aadtReview = ["medium_low", "review", "setup_required"].includes(pdfPortfolioToken(site.aadtConfidence));
-  let status = "In benchmark";
-  const capacityPressure = doNothing.firstActionYear && doNothing.firstActionYear <= doNothing.startYear + 5;
-  if (tier === "early") status = "Ramp-up";
-  else if (aadtReview || pdfPortfolioCategoryKey(site) === "review") status = "Review";
-  else if (capacityPressure && !(Number.isFinite(variance) && variance > PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE)) status = "Capacity pressure";
-  else if (Number.isFinite(variance) && variance > PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) status = "Under-capturing";
-  else if (Number.isFinite(variance) && variance < -PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) status = capacityPressure ? "Capacity pressure" : "Outperforming";
-  return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, modelBasis: matched.basis, annualVariance: variance, status, triggerYear: doNothing.firstActionYear || "Monitor" };
+  const accuracy = pdfPortfolioAccuracyLabel(variance);
+  const status = pdfPortfolioOperationalStatus(site, variance, doNothing);
+  return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, modelBasis: matched.basis, annualVariance: variance, accuracy, status, triggerYear: doNothing.firstActionYear || "Monitor" };
 }
 function portfolioExportRows(limit = 80) {
   return PORTFOLIO_CALIBRATION_SITES.filter(site => site.displayInPortfolio !== false && !site.retiredFromPortfolio).map(pdfPortfolioResult).sort((a,b) => String(a.site.name).localeCompare(String(b.site.name))).slice(0, limit);
 }
 function portfolioPdfTableRows(limit = 80) {
-  return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.status)]);
+  return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.accuracy), esc(r.status)]);
 }
 function portfolioXlsxRows() {
-  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Model basis", "Variance", "Status", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, r.modelBasis, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.status, r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
+  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Model basis", "Variance", "Model Accuracy", "Status", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, r.modelBasis, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.accuracy, r.status, r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
 }
 
 export function exportDemandCsv(demand) {
@@ -838,10 +862,10 @@ export async function exportInvestorPdf(state, results) {
 
   <section class="print-page portfolio-page">
     <h2>6. Portfolio Calibration Benchmark</h2>
-    <p class="report-caption">Annual actual performance is compared with the matched portfolio-calibrated model year/basis using each operating site's MIC, AADT, maturity and site category. In benchmark means within ±15%; early sites remain directional ramp-up evidence.</p>
+    <p class="report-caption">Annual actual performance is compared with the matched portfolio-calibrated model year/basis using each operating site's MIC, AADT, maturity and site category. Variance shows the hard model-vs-actual result; Model Accuracy judges the fit; Status shows operational signals such as ramp-up, pressure or under-capture.</p>
     <div class="panel">
       <h3>Operating hub benchmark table</h3>
-      ${htmlTable(["Site", "Maturity", "Category", "MIC", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Variance", "Status"], portfolioTableRows)}
+      ${htmlTable(["Site", "Maturity", "Category", "MIC", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Variance", "Model Accuracy", "Status"], portfolioTableRows)}
     </div>
   </section>
 

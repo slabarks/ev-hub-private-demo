@@ -24,7 +24,7 @@ if (!server.includes('"trailing365Kwh": round(trailing_kwh, 3)')) {
 
 const readme = fs.readFileSync('README.md', 'utf8');
 if (!readme.includes('No demand target recalibration or AADT override changes')) {
-  throw new Error('README must state that v35.48 only implements the actual-basis change.');
+  throw new Error('README must retain the v35.48 actual-basis change note.');
 }
 
 console.log('Trailing actual basis static regression passed.');

@@ -2279,3 +2279,29 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 }
 
 /* v35.44 grant render fix: no layout change; setup render recursion fixed in JS. */
+
+/* v35.49 portfolio comparison: separate Variance, Model Accuracy and Status columns */
+.portfolio-annual-table th:nth-child(1),
+.portfolio-annual-table td:nth-child(1) { width: 22%; text-align: left; }
+.portfolio-annual-table th:nth-child(2),
+.portfolio-annual-table td:nth-child(2) { width: 8%; text-align: center; }
+.portfolio-annual-table th:nth-child(3),
+.portfolio-annual-table td:nth-child(3) { width: 13%; text-align: left; }
+.portfolio-annual-table th:nth-child(4),
+.portfolio-annual-table td:nth-child(4) { width: 7%; text-align: right; white-space: nowrap; }
+.portfolio-annual-table th:nth-child(5),
+.portfolio-annual-table td:nth-child(5) { width: 8%; text-align: right; white-space: nowrap; }
+.portfolio-annual-table th:nth-child(6),
+.portfolio-annual-table td:nth-child(6),
+.portfolio-annual-table th:nth-child(7),
+.portfolio-annual-table td:nth-child(7) { width: 10%; text-align: right; white-space: nowrap; font-weight: 800; }
+.portfolio-annual-table th:nth-child(8),
+.portfolio-annual-table td:nth-child(8) { width: 7%; text-align: center; }
+.portfolio-annual-table th:nth-child(9),
+.portfolio-annual-table td:nth-child(9) { width: 9%; text-align: center; }
+.portfolio-annual-table th:nth-child(10),
+.portfolio-annual-table td:nth-child(10) { width: 12%; text-align: center; }
+.portfolio-annual-table th:nth-child(9) .sort-header,
+.portfolio-annual-table td:nth-child(9) .badge,
+.portfolio-annual-table th:nth-child(10) .sort-header,
+.portfolio-annual-table td:nth-child(10) .badge { white-space: normal; }

@@ -15,6 +15,7 @@ assert.ok(!/actual:\s*\{\s*\.\.\.\(site\.actual \|\| \{\}\),\s*\.\.\.liveActual\
 
 assert.ok(app.includes('portfolioExcludedFromActivePortfolio'), 'Portfolio upload flow must include explicit exclusion logic');
 assert.ok(app.includes('excludeFromLiveUploads'), 'Portfolio upload flow must ignore excluded mixed AC/DC sites');
-assert.ok(app.includes('Low data'), 'Variance badge must show Low data when actual exists but is below the confidence threshold');
-assert.ok(app.includes('annualVarianceSuppressedReason'), 'Portfolio results must track why variance was suppressed');
+assert.ok(app.includes('annualVarianceSuppressedReason'), 'Portfolio results must track low-data/no-actual reasons for audit');
+assert.ok(app.includes('portfolioModelAccuracyBadge'), 'Portfolio table must separate Model Accuracy from the hard variance number');
+assert.ok(!app.includes('return `<span class=\"badge warn\" title=\"Actual data exists, but volume/history is below the confidence threshold for benchmark variance.\">Low data</span>`;'), 'Variance badge must not replace a calculated variance with Low data');
 console.log('Live upload merge-safety static regression passed.');

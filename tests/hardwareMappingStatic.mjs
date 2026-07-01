@@ -26,9 +26,12 @@ for (const [id, plugs, model, count] of [
 }
 assert.equal(byId.douglas_court.modelEquivalentPlugs, 4, 'Douglas Court must remain 4 active plugs');
 assert.equal(deriveConfiguration(byId.douglas_court.modelConfig, DEFAULT_INPUTS).installedOutputs, 4, 'Douglas Court derived active plugs');
-assert.equal(byId.banner_plaza_ennis_junction_12.modelConfig.kempowerTripleCabinetCount, 1, 'Banner current live state uses one active triple cabinet');
-assert.equal(byId.banner_plaza_ennis_junction_12.modelEquivalentPlugs, 4, 'Banner current live state uses four active plugs');
-assert.equal(byId.banner_plaza_ennis_junction_12.fullBuildConfig.kempowerTripleCabinetCount, 2, 'Banner full design keeps two triple cabinets');
+assert.equal(byId.banner_plaza_ennis_junction_12.modelConfig.kempowerTripleCabinetCount, 2, 'Banner canonical model uses two triple cabinets');
+assert.equal(byId.banner_plaza_ennis_junction_12.modelConfig.dispenserCount, 4, 'Banner canonical model uses four dual satellites');
+assert.equal(byId.banner_plaza_ennis_junction_12.modelEquivalentPlugs, 8, 'Banner canonical model uses eight plugs');
+assert.equal(deriveConfiguration(byId.banner_plaza_ennis_junction_12.modelConfig, DEFAULT_INPUTS).installedChargerPowerKw, 1200, 'Banner derived full design power');
+assert.equal(deriveConfiguration(byId.banner_plaza_ennis_junction_12.modelConfig, DEFAULT_INPUTS).installedOutputs, 8, 'Banner derived full design plugs');
+assert.equal(byId.banner_plaza_ennis_junction_12.fullBuildConfig.kempowerTripleCabinetCount, 2, 'Banner full design metadata keeps two triple cabinets');
 assert.equal(byId.anner_hotel_120_kw_dc.retiredFromPortfolio, true, 'Anner must be retired from active portfolio');
 assert.equal(byId.killashee_house_hotel.displayInPortfolio, false, 'Killashee must be future-only');
 console.log('Hardware mapping static regression passed.');

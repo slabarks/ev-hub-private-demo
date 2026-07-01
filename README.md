@@ -1,4 +1,4 @@
-# EV Hub Investment Tool — v35.45 mapping, upload safety and Kempower triple-cabinet fix
+# EV Hub Investment Tool — v35.46 Banner full-configuration consistency fix
 
 This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, the v35.44 grant render fix, and the v35.45 mapping/upload/Kempower update:
 
@@ -191,7 +191,7 @@ See `DEPLOY_TO_RENDER.md` for step-by-step deployment and deletion instructions.
 - The 9-column table now has protected desktop/tablet widths for Actual, Matched model, Variance and Status.
 
 
-## v35.45 mapping, upload safety and Kempower triple-cabinet update
+## v35.46 Banner full-configuration consistency update
 
 - Corrects verified hardware mappings from ePower_Site_Data_Mapping.xlsx and user-confirmed overrides.
 - Keeps Douglas Court as 4 active plugs.

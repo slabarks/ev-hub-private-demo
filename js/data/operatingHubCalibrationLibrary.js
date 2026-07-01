@@ -1,4 +1,4 @@
-// Auto-generated portfolio calibration library for v35.45.
+// Auto-generated portfolio calibration library for v35.46.
 // Each site is mapped to active model configuration plus verified actual-hardware metadata where available.
 export const PORTFOLIO_CALIBRATION_SITES = [
   {
@@ -1878,13 +1878,13 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "chargerModel": "N/A",
       "chargerCount": "N/A",
       "cabinetType": "Kempower Triple Cabinet",
-      "kempowerTripleCabinetCount": 1,
-      "dispenserCount": 2,
-      "actualInstalledPowerKwOverride": 600
+      "kempowerTripleCabinetCount": 2,
+      "dispenserCount": 4,
+      "actualInstalledPowerKwOverride": 1200
     },
     "realMicKva": 150,
-    "modelEquivalentSummary": "Current active: 1 × Kempower triple cabinet + 2 dual satellites / 4 plugs; full design retained as 2 triple cabinets + 8 plugs",
-    "modelEquivalentPlugs": 4,
+    "modelEquivalentSummary": "Full installed/project design: 2 × Kempower triple cabinets + 4 dual satellites / 8 plugs + Polarium large skid battery. Current live data may reflect partial activation only.",
+    "modelEquivalentPlugs": 8,
     "categoryKey": "motorway_plaza",
     "sourceNote": "Added static setup in CAPEX/live calibration revision. Large skid battery + major infrastructure benchmark; do not mix into normal works benchmark.",
     "actualCapexExVat": 865368,
@@ -1897,15 +1897,16 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     ],
     "aadtAggregationMethod": "selected_junction_counter_special",
     "aadtBasisNote": "Uses Ennis South/Junction 12 M18 counter because the site is Junction 12 / Clarecastle side; special battery/major infrastructure class.",
-    "activeDcPlugs": 4,
-    "actualInstalledPowerKw": 600,
-    "actualHardwareSummary": "Current active live state: 1 × Kempower triple power cabinet + 2 dual satellites / 4 plugs. Full installed design: 2 × triple cabinets + 4 dual satellites / 8 plugs + Polarium large skid battery.",
+    "activeDcPlugs": 8,
+    "actualInstalledPowerKw": 1200,
+    "actualHardwareSummary": "Full installed/project design: 2 × Kempower triple power cabinets + 4 dual satellites / 8 plugs + Polarium large skid battery. Operational note: some uploaded live data periods may reflect partial activation only (1 cabinet / 4 active plugs).",
     "fullBuildConfig": {
       "kempowerTripleCabinetCount": 2,
       "dispenserCount": 4,
       "plugs": 8,
       "cabinetPowerKw": 1200
-    }
+    },
+    "liveActivationNote": "Full installed model uses 2 triple cabinets / 8 plugs. Uploaded actuals may reflect partial activation only and should be treated as an operational data note, not a different model configuration."
   },
   {
     "id": "texaco_newcastle",

@@ -204,6 +204,13 @@ function portfolioSearchContext(ctx, site) {
   const baseSite = base.site || {};
   const portfolioName = site?.name || baseSite.name || site?.address || "Portfolio site";
   const originalWarning = base.warning ? `${base.warning} ` : "";
+  const libLat = Number(site?.lat || 0);
+  const libLon = Number(site?.lon || 0);
+  const hasLibraryCoords = libLat > 50 && libLat < 56 && libLon > -11 && libLon < -5;
+  // If the library has precise curated coordinates, prefer them over the geocoder result
+  // to ensure the map pin lands on the exact site rather than a general area.
+  const finalLat = hasLibraryCoords ? libLat : (baseSite.lat || libLat);
+  const finalLon = hasLibraryCoords ? libLon : (baseSite.lon || libLon);
   return {
     ...base,
     ok: true,
@@ -211,8 +218,10 @@ function portfolioSearchContext(ctx, site) {
       ...baseSite,
       name: portfolioName,
       display_address: site?.address || baseSite.display_address || baseSite.name || portfolioName,
-      source: baseSite.source ? `${baseSite.source} + portfolio calibration load` : "Portfolio calibration load",
-      confidence: baseSite.confidence || "portfolio search"
+      lat: finalLat,
+      lon: finalLon,
+      source: hasLibraryCoords ? "Portfolio calibration — precise curated coordinates" : (baseSite.source ? `${baseSite.source} + portfolio calibration load` : "Portfolio calibration load"),
+      confidence: hasLibraryCoords ? "portfolio curated" : (baseSite.confidence || "portfolio search")
     },
     traffic: portfolioSiteTraffic(site, base.traffic || {}),
     chargers: Array.isArray(base.chargers) ? base.chargers : [],
@@ -2982,12 +2991,24 @@ function wirePage(r) {
     setInput("rawCorridorTrafficAadt", Number(site.aadt || 0));
     state.filters.manualAadtOverride = true;
     pendingPortfolioSiteSearch = { siteId: site.id };
+    const siteLat = Number(site.lat || 0);
+    const siteLon = Number(site.lon || 0);
+    const hasPreciseCoords = siteLat > 50 && siteLat < 56 && siteLon > -11 && siteLon < -5;
     setSiteContext({
       ok: true,
-      site: { name: site.name, lat: 53.35, lon: -7.70, source: "Portfolio calibration pending map search", confidence: "pending site screening search" },
+      site: {
+        name: site.name,
+        display_address: site.address || site.name,
+        lat: hasPreciseCoords ? siteLat : 53.35,
+        lon: hasPreciseCoords ? siteLon : -7.70,
+        source: hasPreciseCoords ? "Portfolio calibration — precise curated coordinates" : "Portfolio calibration pending map search",
+        confidence: hasPreciseCoords ? "portfolio curated" : "pending site screening search"
+      },
       traffic: portfolioSiteTraffic(site, {}),
       chargers: [],
-      warning: "Opening this operating hub in Site Screening and running the normal map / nearby charger search. Portfolio MIC, AADT and charger configuration are preserved."
+      warning: hasPreciseCoords
+        ? "Portfolio site loaded with curated coordinates. Running nearby charger search to refresh local data. Portfolio MIC, AADT and charger configuration are preserved."
+        : "Opening this operating hub in Site Screening and running the normal map / nearby charger search. Portfolio MIC, AADT and charger configuration are preserved."
     });
     goTab("site");
   });

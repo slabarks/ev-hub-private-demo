@@ -310,11 +310,11 @@ function portfolioSnapshotLooksSafe(snapshot) {
 }
 let portfolioLiveActualsSnapshot = (() => {
   try {
-    PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => sessionStorage.removeItem(key));
-    const raw = sessionStorage.getItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
+    PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => localStorage.removeItem(key));
+    const raw = localStorage.getItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
     if (!portfolioSnapshotLooksSafe(parsed)) {
-      sessionStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
+      localStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
       return null;
     }
     return parsed;
@@ -484,20 +484,20 @@ function portfolioLiveActualStatus(sites = portfolioMappedSites()) {
   return { matchedCleanSites, retainedMissing, additional, uploadedSiteCount: actuals.length, hasLive: !!portfolioLiveActualsSnapshot, liveIndexSize: liveIndex.size, activeSiteCount: sites.length };
 }
 function savePortfolioLiveActuals(snapshot) {
-  PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => { try { sessionStorage.removeItem(key); } catch (_) {} });
+  PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => { try { localStorage.removeItem(key); } catch (_) {} });
   portfolioLiveActualsSnapshot = portfolioSnapshotLooksSafe(snapshot) ? snapshot : null;
   portfolioLiveUploadError = null;
   try {
-    if (portfolioLiveActualsSnapshot) sessionStorage.setItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY, JSON.stringify(portfolioLiveActualsSnapshot));
-    else sessionStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
+    if (portfolioLiveActualsSnapshot) localStorage.setItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY, JSON.stringify(portfolioLiveActualsSnapshot));
+    else localStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
   } catch (_) {}
 }
 function clearPortfolioLiveActuals() {
   portfolioLiveActualsSnapshot = null;
   portfolioLiveUploadError = null;
   try {
-    sessionStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
-    PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => sessionStorage.removeItem(key));
+    localStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY);
+    PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => localStorage.removeItem(key));
   } catch (_) {}
 }
 function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {

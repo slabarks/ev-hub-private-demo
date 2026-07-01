@@ -8,16 +8,15 @@ const requiredAppTokens = [
   'data-portfolio-status-trigger',
   'showPortfolioStatusPopover',
   'closePortfolioStatusPopover',
-  'The main table now matches actual performance to the relevant model year/basis before calculating variance',
+  'The main table matches actual performance to the relevant model year/basis before calculating variance',
   'portfolioSortHeader("category", "Category")',
   'portfolioSortHeader("annualVariance", "Variance")',
-  'portfolioSortHeader("modelAccuracy", "Model Accuracy")',
   'portfolioSortHeader("performance", "Status")',
   'data-portfolio-maturity-trigger',
   'showPortfolioMaturityPopover',
   'portfolioMaturityDescription',
   'Secondary signal:',
-  'data-accuracy='
+  'data-portfolio-variance-trigger'
 ];
 for (const token of requiredAppTokens) {
   if (!app.includes(token)) throw new Error(`Missing portfolio status popover token: ${token}`);

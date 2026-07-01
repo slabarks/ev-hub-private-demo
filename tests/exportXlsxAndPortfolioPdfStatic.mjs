@@ -10,7 +10,7 @@ assert.ok(exportEngine.includes("Portfolio Calibration Benchmark"), "Investor PD
 assert.ok(exportEngine.includes("portfolioPdfTableRows"), "Investor PDF portfolio section should be populated from portfolio rows");
 assert.ok(exportEngine.includes('{ name: "Portfolio Calibration", rows: portfolioXlsxRows() }'), "XLSX export should include a Portfolio Calibration sheet");
 
-assert.ok(exportEngine.includes('"Model Accuracy"'), "Portfolio exports should separate Model Accuracy from Status");
-assert.ok(exportEngine.includes('pdfPortfolioAccuracyLabel'), "Portfolio PDF/XLSX should calculate model accuracy separately from operational status");
+assert.ok(!exportEngine.includes('"Model Accuracy"'), "Portfolio exports should not show Model Accuracy as a separate column");
+assert.ok(exportEngine.includes('pdfPortfolioAccuracyLabel'), "Portfolio exports may still calculate accuracy internally for audit/variance explanation logic");
 
 console.log("Export XLSX and Portfolio PDF static regression passed.");

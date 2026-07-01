@@ -1,4 +1,4 @@
-# EV Hub Investment Tool — v35.50 portfolio accuracy/status separation
+# EV Hub Investment Tool — v35.52 simple portfolio status
 
 This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, the v35.44 grant render fix, and the v35.45 mapping/upload/Kempower update:
 
@@ -14,13 +14,13 @@ Run locally with `python3 server.py`.
 
 # EV Charging Hub Investment Tool
 
-Current review build: **v35.50 Portfolio Compact Rendering Fix** — v34.2 Design Verified
+Current review build: **v35.52 Simple Portfolio Status** — v34.2 Design Verified
 
 This clean build includes the agreed design refinements, cache-busted CSS/JS, the redesigned workflow guide, refreshed icons, and Scenario Ranking layout polish.
 
 # EV Charging Hub Investment Tool
 
-Current review build: **v35.50 Portfolio Compact Rendering Fix** — HTML/JavaScript Demo v33
+Current review build: **v35.52 Simple Portfolio Status** — HTML/JavaScript Demo v33
 
 This package is a local-first browser demo built from the uploaded **Financial Modelling - EV Hub - DUT . V13.xlsx** workbook and the uploaded Site Location Dashboard package.
 
@@ -216,14 +216,14 @@ This build embeds a ZEVI funding database from the matched site funding file and
 - Killashee remains only as an excluded reference record for audit purposes.
 
 
-## v35.50 portfolio accuracy/status separation
+## v35.52 simple portfolio status
 
-- Main Portfolio Comparison table now separates **Variance**, **Model Accuracy** and **Status**.
+- Main Portfolio Comparison table now shows **Variance** and **Status** only.
 - Variance always shows the mathematical matched model vs actual percentage whenever actual kWh exists.
-- Model Accuracy classifies fit as Excellent, In benchmark, Moderate, High or Major variance.
+- Variance badge colour carries the accuracy signal: green is within ±15%, amber is moderate, red is major.
+- Clicking the variance badge opens the accuracy detail: Excellent, In benchmark, Moderate, High or Major variance, with actual/model values and model basis.
 - Status remains the operational signal: ramp-up, pressure, under-capture, outperforming, review or monitor.
-- Low-data context is retained as a tooltip/status note, not as a replacement for the variance number.
-- Portfolio XLSX/PDF export now includes Model Accuracy as a separate column.
+- Portfolio XLSX/PDF exports no longer show Model Accuracy as a separate column.
 
 ## v35.48 trailing 12-month actual comparison fix
 

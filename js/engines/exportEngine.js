@@ -516,18 +516,12 @@ function pdfPortfolioOperationalStatus(site, variance, doNothing) {
   const aadtReview = ["medium_low", "review", "setup_required"].includes(pdfPortfolioToken(site.aadtConfidence));
   const categoryReview = pdfPortfolioCategoryKey(site) === "review";
   const capacityPressure = doNothing.firstActionYear && doNothing.firstActionYear <= doNothing.startYear + 5;
-  const modelAboveActual = Number.isFinite(variance) && variance > PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE;
-  const actualAboveModel = Number.isFinite(variance) && variance < -PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE;
-  if (tier === "early") {
-    if (capacityPressure && actualAboveModel) return "Ramp-up + pressure";
-    if (modelAboveActual) return "Ramp-up under";
-    if (actualAboveModel) return "Ramp-up outperform";
-    return "Ramp-up";
-  }
+  const materialVariance = Number.isFinite(variance) && Math.abs(variance) > PDF_PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE;
+  if (!Number.isFinite(variance)) return "No actual";
+  if (tier === "early") return aadtReview || categoryReview ? "Review" : "Ramp-up";
   if (aadtReview || categoryReview) return "Review";
-  if (capacityPressure && !modelAboveActual) return actualAboveModel ? "Capacity pressure / outperforming" : "Capacity pressure";
-  if (modelAboveActual) return "Under-capturing";
-  if (actualAboveModel) return "Outperforming";
+  if (capacityPressure) return "Pressure";
+  if (materialVariance) return "Review";
   return "Monitor";
 }
 

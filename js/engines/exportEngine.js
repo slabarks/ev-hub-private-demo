@@ -324,6 +324,35 @@ const PDF_PORTFOLIO_CATEGORY_FACTORS = {
   review: { label: "Review", relevance: 0.24, capture: 0.16, targetSessionsPer1000Aadt: 0.80, effectiveAadtCap: 20000 }
 };
 
+const PDF_PORTFOLIO_CURATOR_MODIFIER_CAPS = { min: 0.70, max: 1.50 };
+const PDF_PORTFOLIO_CURATED_SITE_PROFILES = {
+  "the_cope_shopping_centre": { active: true, confidence: "Medium", source: "Curated known-site review", modifiers: { catchment: { value: 1.00, label: "Normal", reason: "Selected AADT retained." }, competition: { value: 1.00, label: "Not yet quantified", reason: "No competition uplift applied yet." }, destination: { value: 1.30, label: "Strong retail destination", reason: "Strong retail/shopping destination behaviour." }, access: { value: 1.00, label: "Normal", reason: "No access modifier." } }, note: "Reviewed retail destination-strength modifier applied." },
+  "greenhills_hotel": { active: true, confidence: "Medium", source: "Curated known-site review", modifiers: { catchment: { value: 1.00, label: "Normal", reason: "Base hotel catchment retained." }, competition: { value: 1.00, label: "Not yet quantified", reason: "No competition uplift applied yet." }, destination: { value: 1.25, label: "Strong hotel destination", reason: "Stronger hotel/public destination behaviour." }, access: { value: 1.00, label: "Normal", reason: "No access modifier." } }, note: "Reviewed hotel destination-strength modifier applied." },
+  "walsh_s_centra_service_station_roscommon": { active: true, confidence: "Medium", source: "Curated known-site review", modifiers: { catchment: { value: 1.25, label: "Strong town catchment", reason: "Town/local catchment stronger than single AADT counter." }, competition: { value: 1.00, label: "Not yet quantified", reason: "No competition uplift applied yet." }, destination: { value: 1.00, label: "Normal", reason: "No destination modifier." }, access: { value: 1.00, label: "Normal", reason: "No access modifier." } }, note: "Reviewed town-catchment modifier applied." },
+  "corrib_oil_cork_city": { active: true, confidence: "Medium-low", source: "Curated known-site review", modifiers: { catchment: { value: 1.50, label: "Multi-corridor urban catchment", reason: "Selected AADT likely captures only part of accessible Cork catchment." }, competition: { value: 1.00, label: "Not yet quantified", reason: "No competition uplift applied yet." }, destination: { value: 1.00, label: "Normal", reason: "No destination modifier." }, access: { value: 1.00, label: "Normal", reason: "No access modifier." } }, note: "Conservative multi-corridor catchment modifier applied and capped." },
+  "corrib_oil_swinford": { active: true, confidence: "Medium-low", source: "Curated known-site review", modifiers: { catchment: { value: 1.50, label: "Strong town catchment", reason: "Town catchment stronger than selected approach-counter average." }, competition: { value: 1.00, label: "Not yet quantified", reason: "No competition uplift applied yet." }, destination: { value: 1.00, label: "Normal", reason: "No destination modifier." }, access: { value: 1.00, label: "Normal", reason: "No access modifier." } }, note: "Conservative strong-town-catchment modifier applied and capped." }
+};
+function pdfPortfolioCuratorKey(site) { return pdfPortfolioToken(site?.name || ""); }
+function pdfPortfolioCuratorProfile(site) {
+  const defaults = {
+    catchment: { value: 1.00, label: "Normal", reason: "No curated catchment modifier applied." },
+    competition: { value: 1.00, label: "Not reviewed", reason: "No reviewed competition modifier applied." },
+    destination: { value: 1.00, label: "Normal", reason: "No curated destination modifier applied." },
+    access: { value: 1.00, label: "Normal", reason: "No curated access/visibility modifier applied." }
+  };
+  const reviewed = site?.curatorProfile || PDF_PORTFOLIO_CURATED_SITE_PROFILES[pdfPortfolioCuratorKey(site)] || null;
+  const modifiers = { ...defaults };
+  if (reviewed?.modifiers) Object.entries(reviewed.modifiers).forEach(([name, value]) => { modifiers[name] = { ...(defaults[name] || { value: 1, label: "Normal", reason: "" }), ...value }; });
+  const combinedRaw = Object.values(modifiers).reduce((acc, item) => acc * Number(item.value || 1), 1);
+  const combined = Math.max(PDF_PORTFOLIO_CURATOR_MODIFIER_CAPS.min, Math.min(PDF_PORTFOLIO_CURATOR_MODIFIER_CAPS.max, combinedRaw));
+  const active = Boolean(reviewed?.active) && Math.abs(combined - 1) > 0.0001;
+  return { active, modifiers, combinedRaw, combined: active ? combined : 1, appliedMultiplier: active ? combined : 1, confidence: reviewed?.confidence || "Neutral", source: reviewed?.source || "Curator framework default", note: reviewed?.note || "Neutral curator default; no reviewed modifier applied.", capped: active && Math.abs(combinedRaw - combined) > 0.0001 };
+}
+function pdfPortfolioCuratorNote(curator) {
+  if (!curator?.active) return "Neutral 1.00x curator default.";
+  return `${Number(curator.appliedMultiplier || 1).toFixed(2)}x ${curator.source || "curated"}: ${curator.note || "reviewed modifier applied"}`;
+}
+
 function pdfPortfolioToken(v) { return String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""); }
 function pdfPortfolioCategoryKey(site) {
   const n = String(site?.name || "").toLowerCase();
@@ -389,7 +418,15 @@ function pdfPortfolioCalibratedAnnual(site, inputs = DEFAULT_INPUTS, yearIndex =
     modelKwh = floorAnnualKwh;
     modelSessions = sessionEnergy > 0 ? modelKwh / sessionEnergy : modelSessions;
   }
-  return { ...profile, yearIndex: Math.max(1, Math.round(Number(yearIndex || 1))), rampFactor, growthFactor, modelKwh, modelSessions };
+  const baseModelKwh = modelKwh;
+  const baseModelSessions = modelSessions;
+  const curator = pdfPortfolioCuratorProfile(site);
+  const curatorMultiplier = Number(curator?.appliedMultiplier || 1);
+  if (curator?.active && curatorMultiplier > 0) {
+    modelKwh *= curatorMultiplier;
+    modelSessions *= curatorMultiplier;
+  }
+  return { ...profile, yearIndex: Math.max(1, Math.round(Number(yearIndex || 1))), rampFactor, growthFactor, curator, curatorMultiplier, baseModelKwh, baseModelSessions, modelKwh, modelSessions };
 }
 function pdfPortfolioAnnualValues(site, metrics = pdfPortfolioMetrics(site)) {
   const actual = site?.actual || {};
@@ -435,7 +472,8 @@ function pdfPortfolioMatchedAnnualModel(site, inputs, actual) {
   const period = pdfPortfolioModelWeights(site, actual);
   const parts = period.weights.map(w => ({ ...w, estimate: pdfPortfolioCalibratedAnnual(site, inputs, w.yearIndex) }));
   const modelKwh = parts.reduce((a,p)=>a+p.estimate.modelKwh*p.weight,0);
-  return { modelKwh, basis: period.label };
+  const profile = parts[0]?.estimate || pdfPortfolioCalibratedAnnual(site, inputs, 1);
+  return { modelKwh, basis: period.label, profile, curator: profile.curator };
 }
 function pdfPortfolioScenario(site) {
   const key = pdfPortfolioCategoryKey(site);
@@ -539,7 +577,7 @@ function pdfPortfolioResult(site) {
   const tier = site.maturity?.tier || "review";
   const accuracy = pdfPortfolioAccuracyLabel(variance);
   const status = pdfPortfolioOperationalStatus(site, variance, doNothing);
-  return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, modelBasis: matched.basis, annualVariance: variance, accuracy, status, triggerYear: doNothing.firstActionYear || "Monitor" };
+  return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, modelBasis: matched.basis, annualVariance: variance, accuracy, status, curator: matched.curator || pdfPortfolioCuratorProfile(site), triggerYear: doNothing.firstActionYear || "Monitor" };
 }
 function portfolioExportRows(limit = 80) {
   return PORTFOLIO_CALIBRATION_SITES.filter(site => site.displayInPortfolio !== false && !site.retiredFromPortfolio).map(pdfPortfolioResult).sort((a,b) => String(a.site.name).localeCompare(String(b.site.name))).slice(0, limit);
@@ -548,7 +586,7 @@ function portfolioPdfTableRows(limit = 80) {
   return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—"]);
 }
 function portfolioXlsxRows() {
-  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Model basis", "Variance", "Accuracy label", "Curator modifier", "Curator note", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, r.modelBasis, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.accuracy, 1, "Neutral curator framework default; no reviewed site-quality modifier applied.", r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
+  return [["Site", "Maturity", "Category", "MIC kVA", "AADT", "Actual / annualised kWh/yr", "Matched model kWh/yr", "Model basis", "Variance", "Accuracy label", "Curator modifier", "Curator note", "Action year", "Actual CAPEX ex VAT", "CAPEX note"], ...portfolioExportRows().map(r => [r.site.name, r.maturity, r.category, Number(r.site.realMicKva || 0), Number(r.site.aadt || 0), r.actualAnnualKwh, r.modelledAnnualKwh, r.modelBasis, Number.isFinite(r.annualVariance) ? r.annualVariance : "", r.accuracy, Number(r.curator?.appliedMultiplier || 1), pdfPortfolioCuratorNote(r.curator), r.triggerYear, Number(r.site.actualCapexExVat || 0) || "", r.site.capexCalibrationNote || r.site.capexSource || ""] )];
 }
 
 export function exportDemandCsv(demand) {

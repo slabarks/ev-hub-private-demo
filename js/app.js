@@ -1471,6 +1471,73 @@ const PORTFOLIO_CATEGORY_FACTORS = {
     note: "Manual review category; use only as a holding class until the site is classified."
   }
 };
+
+const PORTFOLIO_CURATOR_MODIFIER_CAPS = { min: 0.70, max: 1.50 };
+const PORTFOLIO_CURATED_SITE_PROFILES = {
+  "the_cope_shopping_centre": {
+    active: true,
+    confidence: "Medium",
+    source: "Curated known-site review",
+    modifiers: {
+      catchment: { value: 1.00, label: "Normal", reason: "Selected AADT is retained as the base traffic input." },
+      competition: { value: 1.00, label: "Not yet quantified", reason: "Competition profile has not yet been batch-scanned; no competition uplift is applied." },
+      destination: { value: 1.30, label: "Strong retail destination", reason: "Strong retail/shopping destination behaviour is expected to capture more demand than a standard retail car park." },
+      access: { value: 1.00, label: "Normal", reason: "No separate access/visibility modifier applied." }
+    },
+    note: "Reviewed retail destination-strength modifier applied. This is a transparent site-quality adjustment, not a hidden category retune."
+  },
+  "greenhills_hotel": {
+    active: true,
+    confidence: "Medium",
+    source: "Curated known-site review",
+    modifiers: {
+      catchment: { value: 1.00, label: "Normal", reason: "AADT/catchment kept at base hotel assumption." },
+      competition: { value: 1.00, label: "Not yet quantified", reason: "Competition profile has not yet been batch-scanned; no competition uplift is applied." },
+      destination: { value: 1.25, label: "Strong hotel destination", reason: "Hotel/public destination behaviour appears stronger than the base hotel assumption." },
+      access: { value: 1.00, label: "Normal", reason: "No separate access/visibility modifier applied." }
+    },
+    note: "Reviewed hotel destination-strength modifier applied."
+  },
+  "walsh_s_centra_service_station_roscommon": {
+    active: true,
+    confidence: "Medium",
+    source: "Curated known-site review",
+    modifiers: {
+      catchment: { value: 1.25, label: "Strong town catchment", reason: "Town forecourt/local catchment appears stronger than a single AADT counter would normally represent." },
+      competition: { value: 1.00, label: "Not yet quantified", reason: "Competition profile has not yet been batch-scanned; no competition uplift is applied." },
+      destination: { value: 1.00, label: "Normal", reason: "No separate destination modifier applied." },
+      access: { value: 1.00, label: "Normal", reason: "No separate access/visibility modifier applied." }
+    },
+    note: "Reviewed town-catchment modifier applied."
+  },
+  "corrib_oil_cork_city": {
+    active: true,
+    confidence: "Medium-low",
+    source: "Curated known-site review",
+    modifiers: {
+      catchment: { value: 1.50, label: "Multi-corridor urban catchment", reason: "Selected AADT is likely to represent only part of the accessible Cork urban/corridor catchment." },
+      competition: { value: 1.00, label: "Not yet quantified", reason: "Competition profile has not yet been batch-scanned; no competition uplift is applied." },
+      destination: { value: 1.00, label: "Normal", reason: "No separate destination modifier applied." },
+      access: { value: 1.00, label: "Normal", reason: "No separate access/visibility modifier applied." }
+    },
+    note: "Conservative multi-corridor catchment modifier applied and capped. Residual variance should still be treated as AADT/catchment review evidence."
+  },
+  "corrib_oil_swinford": {
+    active: true,
+    confidence: "Medium-low",
+    source: "Curated known-site review",
+    modifiers: {
+      catchment: { value: 1.50, label: "Strong town catchment", reason: "Town forecourt catchment appears stronger than the selected approach-counter average." },
+      competition: { value: 1.00, label: "Not yet quantified", reason: "Competition profile has not yet been batch-scanned; no competition uplift is applied." },
+      destination: { value: 1.00, label: "Normal", reason: "No separate destination modifier applied." },
+      access: { value: 1.00, label: "Normal", reason: "No separate access/visibility modifier applied." }
+    },
+    note: "Conservative strong-town-catchment modifier applied and capped. Residual variance should still be reviewed."
+  }
+};
+function portfolioSiteCuratorKey(site) {
+  return portfolioToken(site?.name || "");
+}
 function portfolioCategoryCompactLabel(key, label) {
   const map = {
     motorway_plaza: "Motorway",
@@ -1618,31 +1685,44 @@ function portfolioCalibrationFlag(r) {
 
 function portfolioCuratorProfile(site) {
   const categoryLabel = PORTFOLIO_CATEGORY_FACTORS[portfolioCategoryKey(site)]?.label || "Review";
-  const modifiers = {
+  const defaults = {
     catchment: { value: 1.00, label: "Normal", reason: "No curated catchment/AADT uplift or reduction has been applied." },
     competition: { value: 1.00, label: "Not reviewed", reason: "Competition profile framework is present, but no reviewed competitor modifier is applied yet." },
     destination: { value: 1.00, label: "Normal", reason: "No curated destination-strength modifier has been applied." },
     access: { value: 1.00, label: "Normal", reason: "No curated access/visibility modifier has been applied." }
   };
+  const key = portfolioSiteCuratorKey(site);
+  const reviewed = site?.curatorProfile || PORTFOLIO_CURATED_SITE_PROFILES[key] || null;
+  const modifiers = { ...defaults };
+  if (reviewed?.modifiers) {
+    Object.entries(reviewed.modifiers).forEach(([name, value]) => {
+      modifiers[name] = { ...(defaults[name] || { value: 1, label: "Normal", reason: "" }), ...value };
+    });
+  }
   const combinedRaw = Object.values(modifiers).reduce((acc, item) => acc * Number(item.value || 1), 1);
-  const combined = Math.max(0.70, Math.min(1.50, combinedRaw));
+  const combined = Math.max(PORTFOLIO_CURATOR_MODIFIER_CAPS.min, Math.min(PORTFOLIO_CURATOR_MODIFIER_CAPS.max, combinedRaw));
+  const active = Boolean(reviewed?.active) && Math.abs(combined - 1) > 0.0001;
   return {
-    active: false,
-    confidence: "Neutral",
-    source: "Curator framework default",
+    active,
+    confidence: reviewed?.confidence || "Neutral",
+    source: reviewed?.source || "Curator framework default",
     baseCategory: categoryLabel,
     modifiers,
     combinedRaw,
-    combined,
-    note: "Curator framework enabled with neutral 1.00× defaults. No demand output changes until a site has a reviewed, auditable modifier."
+    combined: active ? combined : 1,
+    appliedMultiplier: active ? combined : 1,
+    note: reviewed?.note || "Curator framework enabled with neutral 1.00× defaults. No demand output changes until a site has a reviewed, auditable modifier.",
+    capped: active && Math.abs(combinedRaw - combined) > 0.0001
   };
 }
 
 function portfolioCuratorPopoverText(curator) {
   if (!curator) return "Curator framework not available.";
   const items = curator.modifiers || {};
+  const state = curator.active ? `Reviewed modifier active from ${curator.source || "curated review"}` : "Neutral curator default";
+  const capNote = curator.capped ? ` Combined raw modifier ${Number(curator.combinedRaw || 1).toFixed(2)}× was capped to ${Number(curator.combined || 1).toFixed(2)}×.` : "";
   return [
-    `Combined modifier: ${Number(curator.combined || 1).toFixed(2)}×`,
+    `${state}. Combined modifier: ${Number(curator.appliedMultiplier || curator.combined || 1).toFixed(2)}×.${capNote}`,
     `Catchment: ${Number(items.catchment?.value || 1).toFixed(2)}× (${items.catchment?.label || "Normal"})`,
     `Competition: ${Number(items.competition?.value || 1).toFixed(2)}× (${items.competition?.label || "Not reviewed"})`,
     `Destination: ${Number(items.destination?.value || 1).toFixed(2)}× (${items.destination?.label || "Normal"})`,
@@ -1650,6 +1730,7 @@ function portfolioCuratorPopoverText(curator) {
     curator.note || "Neutral framework only."
   ].join(" | ");
 }
+
 function portfolioVarianceBand(v) {
   if (!Number.isFinite(v)) return "no-data";
   const abs = Math.abs(v);
@@ -1731,11 +1812,23 @@ function portfolioCalibratedAnnualEstimate(site, inputs, yearIndex = 1) {
     modelKwh = floorAnnualKwh;
     modelSessions = sessionEnergy > 0 ? modelKwh / sessionEnergy : modelSessions;
   }
+  const baseModelKwh = modelKwh;
+  const baseModelSessions = modelSessions;
+  const curator = portfolioCuratorProfile(site);
+  const curatorMultiplier = Number(curator?.appliedMultiplier || 1);
+  if (curator?.active && curatorMultiplier > 0) {
+    modelKwh *= curatorMultiplier;
+    modelSessions *= curatorMultiplier;
+  }
   return {
     ...profile,
     yearIndex: Math.max(1, Math.round(Number(yearIndex || 1))),
     rampFactor,
     growthFactor,
+    curator,
+    curatorMultiplier,
+    baseModelKwh,
+    baseModelSessions,
     modelKwh,
     modelSessions,
     modelRevenue: modelKwh * Number(inputs.netSellingPriceExVat || 0)
@@ -2734,8 +2827,8 @@ function renderPortfolioCalibration() {
     : `${kpi("CAPEX estimate", selected?.uploadedNeedsSetup ? "Setup required" : currency(selectedCapex.model,0), selected?.uploadedNeedsSetup ? "confirm setup first" : "actual CAPEX not provided")}`;
   return `
     ${sectionTitle("Portfolio Calibration", "Compare live actuals against the matched model year using MIC, AADT, maturity and site category.")}
-    <section class="portfolio-hero panel"><div><span class="eyebrow">Operating intelligence layer</span><h3>Matched actual vs modelled performance</h3><p>The main table matches actual performance to the relevant model year/basis before calculating variance. Variance is the model-fit signal. The previous Status column has been removed so the calibration view stays focused on model accuracy.</p></div><div class="portfolio-summary-grid mature-only-summary">${kpi("Clean benchmark sites", number(benchmarkEligibleCount,0), `${number(results.length,0)} mapped sites shown`)}${kpi("Benchmark basis", `${number(mature.length + near.length,0)} sites`, "mature + near where possible")}${kpi("In benchmark", number(results.filter(r => portfolioIsModelInBenchmark(r)).length,0), "inside ±15%")}${kpi("Curator modifier", "1.00×", "neutral framework default")}</div></section>
-    <section class="panel portfolio-method-note compact"><h3>How to read this page</h3><p class="muted">AADT shows passing traffic opportunity. MIC shows available grid capacity. Annual kWh and variance compare the live actual period against the matched model year/basis. Variance is always the mathematical model-vs-actual result where actual exists. Click a variance badge to see the accuracy label, model basis and neutral curator audit.</p></section>
+    <section class="portfolio-hero panel"><div><span class="eyebrow">Operating intelligence layer</span><h3>Matched actual vs modelled performance</h3><p>The main table matches actual performance to the relevant model year/basis before calculating variance. Variance is the model-fit signal. The previous Status column has been removed so the calibration view stays focused on model accuracy.</p></div><div class="portfolio-summary-grid mature-only-summary">${kpi("Clean benchmark sites", number(benchmarkEligibleCount,0), `${number(results.length,0)} mapped sites shown`)}${kpi("Benchmark basis", `${number(mature.length + near.length,0)} sites`, "mature + near where possible")}${kpi("In benchmark", number(results.filter(r => portfolioIsModelInBenchmark(r)).length,0), "inside ±15%")}${kpi("Curator active", number(results.filter(r => r.curator?.active).length,0), "reviewed site modifiers")}</div></section>
+    <section class="panel portfolio-method-note compact"><h3>How to read this page</h3><p class="muted">AADT shows passing traffic opportunity. MIC shows available grid capacity. Annual kWh and variance compare the live actual period against the matched model year/basis. Variance is always the mathematical model-vs-actual result where actual exists. Click a variance badge to see the accuracy label, model basis and curator audit. Reviewed modifiers are visible and auditable.</p></section>
     ${portfolioLiveCalibrationCard(mappedPortfolioSiteList)}
     <section class="panel portfolio-selector-panel"><div class="field"><label for="portfolioSiteSelect">Select operating hub</label><select id="portfolioSiteSelect">${siteOptions}</select><small>Mapped hubs can load directly into the model. Uploaded-only live sites show actuals but require MIC, AADT and charger setup before model loading.</small></div>${!portfolioCanLoadSite(selected) ? `<button type="button" class="secondary" id="applyPortfolioSite">Cannot load site</button>` : `<button type="button" class="primary" id="applyPortfolioSite">Load site into model + map</button>`}</section>
     <section class="panel selected-backtest-card"><div class="selected-backtest-head"><div><span class="eyebrow">Selected hub</span><h3>${h(selected.name)}</h3><p>${h(selected.address || "Address unavailable")}</p></div>${portfolioMaturityBadge(selected.maturity?.tier)}</div><div class="portfolio-summary-grid selected-hub-overview">${kpi("Actual / annualised kWh/yr", kwh(selectedResult.actualAnnualKwh,0), selectedResult.actualAnnualBasis)}${kpi("Matched model kWh/yr", kwh(selectedResult.modelledAnnualKwh,0), selectedResult.modelComparisonBasis)}${kpi("Variance", portfolioVarianceBadge(selectedResult.annualKwhVariance, portfolioVarianceDisplayOptions(selectedResult)), "matched model vs actual; click for accuracy detail")}${kpi("kWh/plug/day", number(selectedResult.metrics.kwhPerPlugDay,1), "actual productivity")}${kpi("AADT", number(selected.aadt,0), "vehicles/day")}${kpi("MIC", kva(selected.realMicKva,0), "actual connection")}${kpi("Calibration flag", `<span class='badge ${h(portfolioCalibrationFlag(selectedResult).cls)}'>${h(portfolioCalibrationFlag(selectedResult).label)}</span>`, h(portfolioCalibrationFlag(selectedResult).note))}${selectedCapexCards}</div>${!portfolioCanLoadSite(selected) ? `<div class="notice warn"><strong>Site cannot be loaded into the model.</strong> ${h(portfolioLoadBlockReason(selected))}</div>` : ""}${selectedCapex.note ? `<div class="notice"><strong>CAPEX note:</strong> ${h(selectedCapex.note)}</div>` : ""}<div class="notice"><strong>Calibration flag:</strong> ${h(portfolioCalibrationFlag(selectedResult).note)}</div><div class="portfolio-accordion-stack"><details class="portfolio-diagnostic-details"><summary>Traffic and benchmark detail</summary><div class="portfolio-benchmark-grid">${selectedMethodCards}</div><div class="portfolio-config-grid compact"><div><strong>Matched AADT</strong><span>${number(selected.aadt,0)} veh/day · ${h(selected.aadtCounter || "AADT counter")}</span></div><div><strong>AADT method</strong><span>${h(selected.aadtAggregationMethod || "curated / automatic counter selection")}</span></div><div><strong>AADT basis note</strong><span>${h(selected.aadtBasisNote || "AADT mapped from TII counter database")}</span></div><div><strong>Effective benchmark AADT</strong><span>${number(selectedProfile.effectiveAadt,0)} veh/day after site-type cap</span></div><div><strong>Matched model basis</strong><span>${h(selectedResult.modelComparisonBasis || "Model year")}</span></div><div><strong>Model factors applied</strong><span>${h(selectedResult.category.label)} · target ${number(selectedResult.targetSessionsPer1000Aadt,2)} sess/1k AADT · ramp ${pct(selectedResult.modelRampFactor,0)} · growth ${number(selectedResult.modelGrowthFactor,2)}x</span></div><div><strong>Curator framework</strong><span>${h(portfolioCuratorPopoverText(selectedResult.curator))}</span></div><div><strong>Actual sessions / 1k AADT</strong><span>${number(selectedResult.metrics.sessionsPer1000Aadt,2)}</span></div><div><strong>Peer kWh/plug/day median</strong><span>${number(peerMedianPlug,1)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>MIC / grid capacity detail</summary><div class="portfolio-config-grid compact"><div><strong>Current MIC</strong><span>${kva(selected.realMicKva,0)}</span></div><div><strong>Recommended MIC by Year 20</strong><span>${kva(selectedResult.doNothing.year20?.requiredMicKva,0)}</span></div><div><strong>Year 20 MIC gap</strong><span>${kva(Math.max(0, Number(selectedResult.doNothing.year20?.requiredMicKva || 0) - Number(selected.realMicKva || 0)),0)}</span></div><div><strong>First MIC trigger</strong><span>${selectedResult.doNothing.firstMicYear ? h(String(selectedResult.doNothing.firstMicYear)) : "No MIC trigger in 20yr"}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Configuration and 20-year do-nothing path</summary><div class="portfolio-config-grid compact"><div><strong>Model-equivalent configuration</strong><span>${h(selected.modelEquivalentSummary)}</span></div><div><strong>20-year do-nothing trigger</strong><span>${h(portfolioTriggerLabel(selectedResult.doNothing))}</span></div><div><strong>Trigger drivers</strong><span>${h(selectedResult.doNothing.triggerDrivers?.join(" + ") || "No near-term driver")}</span></div><div><strong>20-yr lost revenue risk</strong><span>${currency(selectedResult.doNothing.lostRevenue20yr,0)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Model QA diagnostics</summary><div class="portfolio-summary-grid">${kpi("Actual source", h(portfolioActualSourceLabel(selected)), selected.liveActuals?.sourceFile ? h(selected.liveActuals.sourceFile) : "portfolio baseline")}${kpi("Actual 30D kWh", kwh(selectedResult.actualKwh,0), "latest rolling operating data")}${kpi("Modelled 30D kWh", kwh(selectedResult.calibratedKwh,0), "site-type target")}${kpi("30D variance", portfolioVarianceBadge(selectedResult.calibratedKwhVariance), "QA comparison")}${kpi("Base annual variance", portfolioVarianceBadge(selectedResult.baseAnnualKwhVariance), "uncalibrated QA")}</div><p class="muted small">Technical diagnostics are retained for audit and investment review. The main comparison is matched to the relevant model year/basis before the ±15% benchmark status is applied.</p></details></div></section>

@@ -18,7 +18,7 @@ for (const token of requiredAppTokens) {
 }
 
 const requiredCssTokens = [
-  'v35.53 portfolio calibration: status removed and neutral curator framework',
+  'v35.54 portfolio calibration: active curator profiles',
   'min-width: 1180px',
   '.portfolio-category-label',
   'text-overflow: ellipsis',
@@ -28,5 +28,5 @@ for (const token of requiredCssTokens) {
   if (!css.includes(token)) throw new Error(`Missing compact portfolio rendering CSS token: ${token}`);
 }
 
-if (!html.includes('35.53-curator-framework')) throw new Error('Compact rendering cache-busting version tag missing.');
+if (!html.includes('35.54-active-curator')) throw new Error('Compact rendering cache-busting version tag missing.');
 console.log('Portfolio compact rendering static regression passed.');

@@ -1546,13 +1546,26 @@ function portfolioVarianceBadge(v, options = {}) {
   if (!Number.isFinite(v)) return `<span class="badge warn">No actual</span>`;
   const abs = Math.abs(v);
   const cls = abs <= PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE ? "good" : abs <= PORTFOLIO_MATERIAL_VARIANCE_TOLERANCE ? "warn" : "bad";
-  const title = options.reason === "low_data" || options.lowData
+  const text = `${v >= 0 ? "+" : ""}${pct(v,1)}`;
+  const accuracyInfo = portfolioModelAccuracyInfo(v, options);
+  const direction = v >= 0
+    ? `Model is ${pct(abs,1)} higher than actual.`
+    : `Actual is ${pct(abs,1)} higher than model.`;
+  const lowDataNote = options.reason === "low_data" || options.lowData
     ? "Actual data exists but is low-volume/early, so treat the variance as directional rather than benchmark-grade."
-    : "Matched model annual kWh versus actual / annualised annual kWh.";
-  return `<span class="badge ${cls}" title="${h(title)}">${v >= 0 ? "+" : ""}${pct(v,1)}</span>`;
+    : "";
+  const title = lowDataNote || `${accuracyInfo.label}: ${direction}`;
+  if (options.static) return `<span class="badge ${cls}" title="${h(title)}">${text}</span>`;
+  return `<button type="button" class="portfolio-variance-trigger badge ${cls}" aria-label="Explain variance ${h(text)}" data-portfolio-variance-trigger="1" data-variance="${h(text)}" data-accuracy="${h(accuracyInfo.label)}" data-direction="${h(direction)}" data-low-data-note="${h(lowDataNote)}" data-model-basis="${h(options.modelBasis || options.modelComparisonBasis || "Matched model year")}" data-actual="${h(Number.isFinite(options.actualAnnualKwh) ? kwh(options.actualAnnualKwh,0) : "—")}" data-model="${h(Number.isFinite(options.modelledAnnualKwh) ? kwh(options.modelledAnnualKwh,0) : "—")}">${text}</button>`;
 }
 function portfolioVarianceDisplayOptions(r) {
-  return { reason: r?.annualVarianceSuppressedReason || null, lowData: r?.annualVarianceSuppressedReason === "low_data" };
+  return {
+    reason: r?.annualVarianceSuppressedReason || null,
+    lowData: r?.annualVarianceSuppressedReason === "low_data",
+    actualAnnualKwh: Number(r?.actualAnnualKwh),
+    modelledAnnualKwh: Number(r?.modelledAnnualKwh),
+    modelBasis: r?.modelComparisonBasis || "Matched model year"
+  };
 }
 function portfolioModelAccuracyInfo(v, options = {}) {
   if (!Number.isFinite(v)) return { band: "no_actual", label: "No actual", cls: "warn", title: "No usable actual kWh is available for this comparison." };
@@ -2464,7 +2477,7 @@ function portfolioStatusButton(r) {
 function closePortfolioStatusPopover() {
   const existing = document.getElementById("portfolioStatusPopover");
   if (existing) existing.remove();
-  document.querySelectorAll("[data-portfolio-status-trigger][aria-expanded='true'], [data-portfolio-maturity-trigger][aria-expanded='true']").forEach(btn => btn.setAttribute("aria-expanded", "false"));
+  document.querySelectorAll("[data-portfolio-status-trigger][aria-expanded='true'], [data-portfolio-maturity-trigger][aria-expanded='true'], [data-portfolio-variance-trigger][aria-expanded='true']").forEach(btn => btn.setAttribute("aria-expanded", "false"));
 }
 function closePortfolioFilterMenus(except = null) {
   document.querySelectorAll(".portfolio-multi-filter[open]").forEach(details => {
@@ -2489,7 +2502,7 @@ function showPortfolioStatusPopover(button) {
     </div>
     <div class="portfolio-status-popover-body">
       <p><strong>${h(button.dataset.site || "Selected site")}</strong></p>
-      <div class="portfolio-status-popover-kpis"><span><small>Action year</small><b>${h(button.dataset.year || "Monitor")}</b></span><span><small>Action</small><b>${h(button.dataset.action || "Review")}</b></span><span><small>Variance</small><b>${h(button.dataset.variance || "—")}</b></span><span><small>Accuracy</small><b>${h(button.dataset.accuracy || "—")}</b></span></div>
+      <div class="portfolio-status-popover-kpis"><span><small>Action year</small><b>${h(button.dataset.year || "Monitor")}</b></span><span><small>Action</small><b>${h(button.dataset.action || "Review")}</b></span><span><small>Variance</small><b>${h(button.dataset.variance || "—")}</b></span></div>
       <p><strong>Recommendation:</strong> ${h(button.dataset.recommendation || "Review the site manually.")}</p>
       <p><strong>Why:</strong> ${h(button.dataset.diagnosis || "Benchmark diagnostics unavailable.")}</p>
       ${button.dataset.secondaryStatus ? `<p class="notice small"><strong>Secondary signal:</strong> ${h(button.dataset.secondaryStatus)} — ${h(button.dataset.secondaryDiagnosis || "Confirm with more operating history.")}</p>` : ""}${button.dataset.lowDataNote ? `<p class="notice small"><strong>Low-data note:</strong> ${h(button.dataset.lowDataNote)}</p>` : ""}
@@ -2514,6 +2527,46 @@ function showPortfolioStatusPopover(button) {
   });
 }
 
+function showPortfolioVariancePopover(button) {
+  if (!button) return;
+  const current = document.getElementById("portfolioStatusPopover");
+  const sameButton = current?.dataset?.sourceId && current.dataset.sourceId === button.dataset.popoverSourceId;
+  closePortfolioStatusPopover();
+  if (sameButton) return;
+  if (!button.dataset.popoverSourceId) button.dataset.popoverSourceId = `variance-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const pop = document.createElement("div");
+  pop.id = "portfolioStatusPopover";
+  pop.className = "portfolio-status-popover portfolio-variance-popover";
+  pop.dataset.sourceId = button.dataset.popoverSourceId;
+  pop.innerHTML = `
+    <div class="portfolio-status-popover-head">
+      <div><span class="eyebrow">Model fit detail</span><strong>${h(button.dataset.accuracy || "Variance")}</strong></div>
+      <button type="button" class="portfolio-status-popover-close" aria-label="Close variance detail">×</button>
+    </div>
+    <div class="portfolio-status-popover-body">
+      <div class="portfolio-status-popover-kpis"><span><small>Variance</small><b>${h(button.dataset.variance || "—")}</b></span><span><small>Actual</small><b>${h(button.dataset.actual || "—")}</b></span><span><small>Model</small><b>${h(button.dataset.model || "—")}</b></span></div>
+      <p><strong>Meaning:</strong> ${h(button.dataset.direction || "Matched model annual kWh compared with actual annual kWh.")}</p>
+      ${button.dataset.lowDataNote ? `<p class="notice small"><strong>Low-data note:</strong> ${h(button.dataset.lowDataNote)}</p>` : ""}
+      <p class="muted small"><strong>Model basis:</strong> ${h(button.dataset.modelBasis || "Matched model year")} · Green means inside the agreed ±15% benchmark range.</p>
+    </div>`;
+  document.body.appendChild(pop);
+  button.setAttribute("aria-expanded", "true");
+  const closeBtn = pop.querySelector(".portfolio-status-popover-close");
+  if (closeBtn) closeBtn.addEventListener("click", ev => { ev.stopPropagation(); closePortfolioStatusPopover(); });
+  const rect = button.getBoundingClientRect();
+  const margin = 12;
+  const width = Math.min(360, Math.max(280, window.innerWidth - margin * 2));
+  pop.style.width = `${width}px`;
+  let left = rect.left + rect.width / 2 - width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+  let top = rect.bottom + 8;
+  requestAnimationFrame(() => {
+    const popRect = pop.getBoundingClientRect();
+    if (top + popRect.height > window.innerHeight - margin) top = Math.max(margin, rect.top - popRect.height - 8);
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+  });
+}
 function showPortfolioMaturityPopover(button) {
   if (!button) return;
   const current = document.getElementById("portfolioStatusPopover");
@@ -2597,7 +2650,6 @@ function renderPortfolioCalibration() {
     kwh(r.actualAnnualKwh,0),
     kwh(r.modelledAnnualKwh,0),
     portfolioVarianceBadge(r.annualKwhVariance, portfolioVarianceDisplayOptions(r)),
-    portfolioModelAccuracyBadge(r.annualKwhVariance, { ...portfolioVarianceDisplayOptions(r), compact: true }),
     portfolioStatusButton(r)
   ];
   const headers = [
@@ -2609,7 +2661,6 @@ function renderPortfolioCalibration() {
     portfolioSortHeader("actualAnnualKwh", "Actual / annualised kWh/yr"),
     portfolioSortHeader("modelledAnnualKwh", "Matched model kWh/yr"),
     portfolioSortHeader("annualVariance", "Variance"),
-    portfolioSortHeader("modelAccuracy", "Model Accuracy"),
     portfolioSortHeader("performance", "Status")
   ];
   const maturityOptions = [{value:"mature",label:"Mature"},{value:"near",label:"Near-mature"},{value:"early",label:"Early"},{value:"review",label:"Review"}];
@@ -2622,7 +2673,7 @@ function renderPortfolioCalibration() {
   const sortDir = portfolioFilterValue("sortDir", "asc") === "desc" ? "high to low" : "low to high";
   const sortNames = {
     site: "site", maturity: "maturity", category: "category", performance: "status", investmentPriority: "investment priority", mic: "MIC", aadt: "AADT",
-    actualAnnualKwh: "actual annual kWh", modelledAnnualKwh: "matched model annual kWh", annualVariance: "annual variance", modelAccuracy: "model accuracy", absAnnualVariance: "absolute annual variance",
+    actualAnnualKwh: "actual annual kWh", modelledAnnualKwh: "matched model annual kWh", annualVariance: "annual variance", absAnnualVariance: "absolute annual variance",
     firstTriggerYear: "first trigger year", sessionsPer1000Aadt: "actual sessions per 1k AADT", kwhPerPlugDay: "kWh per plug per day", kwhPerKvaDay: "kWh per kVA per day"
   };
   const selectedBenchmark = selectedResult.benchmark;
@@ -2642,11 +2693,11 @@ function renderPortfolioCalibration() {
     : `${kpi("CAPEX estimate", selected?.uploadedNeedsSetup ? "Setup required" : currency(selectedCapex.model,0), selected?.uploadedNeedsSetup ? "confirm setup first" : "actual CAPEX not provided")}`;
   return `
     ${sectionTitle("Portfolio Calibration", "Compare live actuals against the matched model year using MIC, AADT, maturity and site category.")}
-    <section class="portfolio-hero panel"><div><span class="eyebrow">Operating intelligence layer</span><h3>Matched actual vs modelled performance</h3><p>The main table now matches actual performance to the relevant model year/basis before calculating variance. Variance, Model Accuracy and Status are separated so model fit does not hide operational pressure or ramp-up context.</p></div><div class="portfolio-summary-grid mature-only-summary">${kpi("Clean benchmark sites", number(benchmarkEligibleCount,0), `${number(results.length,0)} mapped sites shown`)}${kpi("Benchmark basis", `${number(mature.length + near.length,0)} sites`, "mature + near where possible")}${kpi("Capacity pressure", number(results.filter(r => r.assessment?.band === "capacity_pressure").length,0), "expansion candidates")}${kpi("Under-capturing", number(results.filter(r => r.assessment?.band === "under_capture").length,0), "improve site before capex")}</div></section>
-    <section class="panel portfolio-method-note compact"><h3>How to read this page</h3><p class="muted">AADT shows passing traffic opportunity. MIC shows available grid capacity. Annual kWh and variance compare the live actual period against the matched model year/basis. Variance is always the mathematical model-vs-actual result where actual exists. Model Accuracy judges the fit, while Status shows the operational signal such as ramp-up, capacity pressure or under-capture.</p></section>
+    <section class="portfolio-hero panel"><div><span class="eyebrow">Operating intelligence layer</span><h3>Matched actual vs modelled performance</h3><p>The main table matches actual performance to the relevant model year/basis before calculating variance. Variance is the model-fit signal; Status shows the operational pressure, ramp-up or capture signal.</p></div><div class="portfolio-summary-grid mature-only-summary">${kpi("Clean benchmark sites", number(benchmarkEligibleCount,0), `${number(results.length,0)} mapped sites shown`)}${kpi("Benchmark basis", `${number(mature.length + near.length,0)} sites`, "mature + near where possible")}${kpi("Capacity pressure", number(results.filter(r => r.assessment?.band === "capacity_pressure").length,0), "expansion candidates")}${kpi("Under-capturing", number(results.filter(r => r.assessment?.band === "under_capture").length,0), "improve site before capex")}</div></section>
+    <section class="panel portfolio-method-note compact"><h3>How to read this page</h3><p class="muted">AADT shows passing traffic opportunity. MIC shows available grid capacity. Annual kWh and variance compare the live actual period against the matched model year/basis. Variance is always the mathematical model-vs-actual result where actual exists. Click a variance badge to see the accuracy label and explanation. Status shows the operational signal such as ramp-up, capacity pressure or under-capture.</p></section>
     ${portfolioLiveCalibrationCard(mappedPortfolioSiteList)}
     <section class="panel portfolio-selector-panel"><div class="field"><label for="portfolioSiteSelect">Select operating hub</label><select id="portfolioSiteSelect">${siteOptions}</select><small>Mapped hubs can load directly into the model. Uploaded-only live sites show actuals but require MIC, AADT and charger setup before model loading.</small></div>${!portfolioCanLoadSite(selected) ? `<button type="button" class="secondary" id="applyPortfolioSite">Cannot load site</button>` : `<button type="button" class="primary" id="applyPortfolioSite">Load site into model + map</button>`}</section>
-    <section class="panel selected-backtest-card"><div class="selected-backtest-head"><div><span class="eyebrow">Selected hub</span><h3>${h(selected.name)}</h3><p>${h(selected.address || "Address unavailable")}</p></div>${portfolioMaturityBadge(selected.maturity?.tier)}</div><div class="portfolio-summary-grid selected-hub-overview">${kpi("Actual / annualised kWh/yr", kwh(selectedResult.actualAnnualKwh,0), selectedResult.actualAnnualBasis)}${kpi("Matched model kWh/yr", kwh(selectedResult.modelledAnnualKwh,0), selectedResult.modelComparisonBasis)}${kpi("Variance", portfolioVarianceBadge(selectedResult.annualKwhVariance, portfolioVarianceDisplayOptions(selectedResult)), "matched model vs actual; ±15% = in benchmark")}${kpi("Model accuracy", portfolioModelAccuracyBadge(selectedResult.annualKwhVariance, portfolioVarianceDisplayOptions(selectedResult)), "accuracy band based on variance")}${kpi("kWh/plug/day", number(selectedResult.metrics.kwhPerPlugDay,1), "actual productivity")}${kpi("AADT", number(selected.aadt,0), "vehicles/day")}${kpi("MIC", kva(selected.realMicKva,0), "actual connection")}${kpi("Status", portfolioPerformanceBadge(selectedResult.assessment.band, selectedResult), portfolioBenchmarkStatusLabel(selectedResult.assessment.benchmarkPosition))}${selectedCapexCards}</div>${!portfolioCanLoadSite(selected) ? `<div class="notice warn"><strong>Site cannot be loaded into the model.</strong> ${h(portfolioLoadBlockReason(selected))}</div>` : ""}${selectedCapex.note ? `<div class="notice"><strong>CAPEX note:</strong> ${h(selectedCapex.note)}</div>` : ""}<div class="notice ${selectedResult.assessment.band === "capacity_pressure" ? "warn" : selectedResult.assessment.band === "under_capture" ? "warn" : "good"}"><strong>${h(selectedAction.year)} · ${h(selectedAction.action)}:</strong> ${h(selectedResult.assessment.action)}</div><div class="portfolio-accordion-stack"><details class="portfolio-diagnostic-details"><summary>Traffic and benchmark detail</summary><div class="portfolio-benchmark-grid">${selectedMethodCards}</div><div class="portfolio-config-grid compact"><div><strong>Matched AADT</strong><span>${number(selected.aadt,0)} veh/day · ${h(selected.aadtCounter || "AADT counter")}</span></div><div><strong>AADT method</strong><span>${h(selected.aadtAggregationMethod || "curated / automatic counter selection")}</span></div><div><strong>AADT basis note</strong><span>${h(selected.aadtBasisNote || "AADT mapped from TII counter database")}</span></div><div><strong>Effective benchmark AADT</strong><span>${number(selectedProfile.effectiveAadt,0)} veh/day after site-type cap</span></div><div><strong>Matched model basis</strong><span>${h(selectedResult.modelComparisonBasis || "Model year")}</span></div><div><strong>Model factors applied</strong><span>${h(selectedResult.category.label)} · target ${number(selectedResult.targetSessionsPer1000Aadt,2)} sess/1k AADT · ramp ${pct(selectedResult.modelRampFactor,0)} · growth ${number(selectedResult.modelGrowthFactor,2)}x</span></div><div><strong>Actual sessions / 1k AADT</strong><span>${number(selectedResult.metrics.sessionsPer1000Aadt,2)}</span></div><div><strong>Peer kWh/plug/day median</strong><span>${number(peerMedianPlug,1)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>MIC / grid capacity detail</summary><div class="portfolio-config-grid compact"><div><strong>Current MIC</strong><span>${kva(selected.realMicKva,0)}</span></div><div><strong>Recommended MIC by Year 20</strong><span>${kva(selectedResult.doNothing.year20?.requiredMicKva,0)}</span></div><div><strong>Year 20 MIC gap</strong><span>${kva(Math.max(0, Number(selectedResult.doNothing.year20?.requiredMicKva || 0) - Number(selected.realMicKva || 0)),0)}</span></div><div><strong>First MIC trigger</strong><span>${selectedResult.doNothing.firstMicYear ? h(String(selectedResult.doNothing.firstMicYear)) : "No MIC trigger in 20yr"}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Configuration and 20-year do-nothing path</summary><div class="portfolio-config-grid compact"><div><strong>Model-equivalent configuration</strong><span>${h(selected.modelEquivalentSummary)}</span></div><div><strong>20-year do-nothing trigger</strong><span>${h(portfolioTriggerLabel(selectedResult.doNothing))}</span></div><div><strong>Trigger drivers</strong><span>${h(selectedResult.doNothing.triggerDrivers?.join(" + ") || "No near-term driver")}</span></div><div><strong>20-yr lost revenue risk</strong><span>${currency(selectedResult.doNothing.lostRevenue20yr,0)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Model QA diagnostics</summary><div class="portfolio-summary-grid">${kpi("Actual source", h(portfolioActualSourceLabel(selected)), selected.liveActuals?.sourceFile ? h(selected.liveActuals.sourceFile) : "portfolio baseline")}${kpi("Actual 30D kWh", kwh(selectedResult.actualKwh,0), "latest rolling operating data")}${kpi("Modelled 30D kWh", kwh(selectedResult.calibratedKwh,0), "site-type target")}${kpi("30D variance", portfolioVarianceBadge(selectedResult.calibratedKwhVariance), "QA comparison")}${kpi("Base annual variance", portfolioVarianceBadge(selectedResult.baseAnnualKwhVariance), "uncalibrated QA")}</div><p class="muted small">Technical diagnostics are retained for audit and investment review. The main comparison is matched to the relevant model year/basis before the ±15% benchmark status is applied.</p></details></div></section>
+    <section class="panel selected-backtest-card"><div class="selected-backtest-head"><div><span class="eyebrow">Selected hub</span><h3>${h(selected.name)}</h3><p>${h(selected.address || "Address unavailable")}</p></div>${portfolioMaturityBadge(selected.maturity?.tier)}</div><div class="portfolio-summary-grid selected-hub-overview">${kpi("Actual / annualised kWh/yr", kwh(selectedResult.actualAnnualKwh,0), selectedResult.actualAnnualBasis)}${kpi("Matched model kWh/yr", kwh(selectedResult.modelledAnnualKwh,0), selectedResult.modelComparisonBasis)}${kpi("Variance", portfolioVarianceBadge(selectedResult.annualKwhVariance, portfolioVarianceDisplayOptions(selectedResult)), "matched model vs actual; click for accuracy detail")}${kpi("kWh/plug/day", number(selectedResult.metrics.kwhPerPlugDay,1), "actual productivity")}${kpi("AADT", number(selected.aadt,0), "vehicles/day")}${kpi("MIC", kva(selected.realMicKva,0), "actual connection")}${kpi("Status", portfolioPerformanceBadge(selectedResult.assessment.band, selectedResult), portfolioBenchmarkStatusLabel(selectedResult.assessment.benchmarkPosition))}${selectedCapexCards}</div>${!portfolioCanLoadSite(selected) ? `<div class="notice warn"><strong>Site cannot be loaded into the model.</strong> ${h(portfolioLoadBlockReason(selected))}</div>` : ""}${selectedCapex.note ? `<div class="notice"><strong>CAPEX note:</strong> ${h(selectedCapex.note)}</div>` : ""}<div class="notice ${selectedResult.assessment.band === "capacity_pressure" ? "warn" : selectedResult.assessment.band === "under_capture" ? "warn" : "good"}"><strong>${h(selectedAction.year)} · ${h(selectedAction.action)}:</strong> ${h(selectedResult.assessment.action)}</div><div class="portfolio-accordion-stack"><details class="portfolio-diagnostic-details"><summary>Traffic and benchmark detail</summary><div class="portfolio-benchmark-grid">${selectedMethodCards}</div><div class="portfolio-config-grid compact"><div><strong>Matched AADT</strong><span>${number(selected.aadt,0)} veh/day · ${h(selected.aadtCounter || "AADT counter")}</span></div><div><strong>AADT method</strong><span>${h(selected.aadtAggregationMethod || "curated / automatic counter selection")}</span></div><div><strong>AADT basis note</strong><span>${h(selected.aadtBasisNote || "AADT mapped from TII counter database")}</span></div><div><strong>Effective benchmark AADT</strong><span>${number(selectedProfile.effectiveAadt,0)} veh/day after site-type cap</span></div><div><strong>Matched model basis</strong><span>${h(selectedResult.modelComparisonBasis || "Model year")}</span></div><div><strong>Model factors applied</strong><span>${h(selectedResult.category.label)} · target ${number(selectedResult.targetSessionsPer1000Aadt,2)} sess/1k AADT · ramp ${pct(selectedResult.modelRampFactor,0)} · growth ${number(selectedResult.modelGrowthFactor,2)}x</span></div><div><strong>Actual sessions / 1k AADT</strong><span>${number(selectedResult.metrics.sessionsPer1000Aadt,2)}</span></div><div><strong>Peer kWh/plug/day median</strong><span>${number(peerMedianPlug,1)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>MIC / grid capacity detail</summary><div class="portfolio-config-grid compact"><div><strong>Current MIC</strong><span>${kva(selected.realMicKva,0)}</span></div><div><strong>Recommended MIC by Year 20</strong><span>${kva(selectedResult.doNothing.year20?.requiredMicKva,0)}</span></div><div><strong>Year 20 MIC gap</strong><span>${kva(Math.max(0, Number(selectedResult.doNothing.year20?.requiredMicKva || 0) - Number(selected.realMicKva || 0)),0)}</span></div><div><strong>First MIC trigger</strong><span>${selectedResult.doNothing.firstMicYear ? h(String(selectedResult.doNothing.firstMicYear)) : "No MIC trigger in 20yr"}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Configuration and 20-year do-nothing path</summary><div class="portfolio-config-grid compact"><div><strong>Model-equivalent configuration</strong><span>${h(selected.modelEquivalentSummary)}</span></div><div><strong>20-year do-nothing trigger</strong><span>${h(portfolioTriggerLabel(selectedResult.doNothing))}</span></div><div><strong>Trigger drivers</strong><span>${h(selectedResult.doNothing.triggerDrivers?.join(" + ") || "No near-term driver")}</span></div><div><strong>20-yr lost revenue risk</strong><span>${currency(selectedResult.doNothing.lostRevenue20yr,0)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Model QA diagnostics</summary><div class="portfolio-summary-grid">${kpi("Actual source", h(portfolioActualSourceLabel(selected)), selected.liveActuals?.sourceFile ? h(selected.liveActuals.sourceFile) : "portfolio baseline")}${kpi("Actual 30D kWh", kwh(selectedResult.actualKwh,0), "latest rolling operating data")}${kpi("Modelled 30D kWh", kwh(selectedResult.calibratedKwh,0), "site-type target")}${kpi("30D variance", portfolioVarianceBadge(selectedResult.calibratedKwhVariance), "QA comparison")}${kpi("Base annual variance", portfolioVarianceBadge(selectedResult.baseAnnualKwhVariance), "uncalibrated QA")}</div><p class="muted small">Technical diagnostics are retained for audit and investment review. The main comparison is matched to the relevant model year/basis before the ±15% benchmark status is applied.</p></details></div></section>
     <section class="panel portfolio-filter-panel"><h3>Filters and sorting</h3><div class="portfolio-filter-grid">${portfolioMultiFilter("portfolioMaturity", "maturity", maturityOptions, "Maturity", "All maturity")}${portfolioMultiFilter("portfolioCategory", "category", categoryOptions, "Site category", "All categories")}${portfolioMultiFilter("portfolioPerformance", "performanceBand", statusOptions, "Status", "All statuses")}${portfolioMultiFilter("portfolioConfidence", "confidence", confidenceOptions, "AADT confidence", "All AADT confidence")}${portfolioMultiFilter("portfolioMicBand", "micBand", micBandOptions, "MIC band", "All MIC")}</div><p class="muted small">Open a filter and tick one or more options. Click a header to sort. Current sort: ${h(sortNames[sortKey] || "investment priority")} · ${h(sortDir)}.</p></section>
     <section class="panel"><h3>Current filtered view</h3><div class="portfolio-summary-grid">${selectedFilterCard("Sites shown", number(filtered.length,0), `${number(results.length,0)} mapped sites`)}${selectedFilterCard("Capacity pressure", number(capacityCount,0), "add plugs/MIC/battery candidates")}${selectedFilterCard("Under-capturing", number(underCaptureCount,0), "fix capture before capex")}${selectedFilterCard("In benchmark", number(normalCount,0), "model accuracy ±15%")}${selectedFilterCard("Earliest trigger", earliestTrigger ? String(earliestTrigger) : "No trigger", "do-nothing path")}${selectedFilterCard("Median abs variance", Number.isFinite(medianAbsAnnualVariance) ? pct(medianAbsAnnualVariance,1) : "—", "annual model vs actual")}</div></section>
     <section class="panel"><h3>Portfolio comparison table</h3>${table(headers, sorted.map(row), "portfolio-table portfolio-comparison-table portfolio-annual-table")}</section>
@@ -3059,6 +3110,13 @@ function wirePage(r) {
       e.preventDefault();
       e.stopPropagation();
       showPortfolioStatusPopover(e.currentTarget);
+    });
+  });
+  document.querySelectorAll("[data-portfolio-variance-trigger]").forEach(node => {
+    node.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      showPortfolioVariancePopover(e.currentTarget);
     });
   });
   document.querySelectorAll("[data-portfolio-maturity-trigger]").forEach(node => {
@@ -3559,7 +3617,7 @@ window.addEventListener("hashchange", () => {
 
 document.addEventListener("click", e => {
   const pop = document.getElementById("portfolioStatusPopover");
-  if (pop && !e.target.closest("#portfolioStatusPopover") && !e.target.closest("[data-portfolio-status-trigger]") && !e.target.closest("[data-portfolio-maturity-trigger]")) closePortfolioStatusPopover();
+  if (pop && !e.target.closest("#portfolioStatusPopover") && !e.target.closest("[data-portfolio-status-trigger]") && !e.target.closest("[data-portfolio-maturity-trigger]") && !e.target.closest("[data-portfolio-variance-trigger]")) closePortfolioStatusPopover();
   if (!e.target.closest(".portfolio-multi-filter")) closePortfolioFilterMenus();
 });
 

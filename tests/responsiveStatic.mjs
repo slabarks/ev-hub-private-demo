@@ -21,6 +21,6 @@ for (const token of requiredCss) {
 if (!app.includes('function plainTableLabel')) throw new Error('Missing plainTableLabel helper for responsive table labels.');
 if (!app.includes('data-label="${h(labels[i] || "Value")}"')) throw new Error('Responsive table data-label attributes are not rendered.');
 if (!html.includes('width=device-width, initial-scale=1.0')) throw new Error('Viewport meta tag missing.');
-if (!html.includes('35.49-portfolio-accuracy-status')) throw new Error('Responsive cache-busting version tag missing.');
+if (!html.includes('35.50-portfolio-compact-render')) throw new Error('Responsive cache-busting version tag missing.');
 
 console.log('Responsive static checks passed.');

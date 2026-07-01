@@ -1,4 +1,4 @@
-# EV Hub Investment Tool — v35.49 portfolio accuracy/status separation
+# EV Hub Investment Tool — v35.50 portfolio accuracy/status separation
 
 This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, the v35.44 grant render fix, and the v35.45 mapping/upload/Kempower update:
 
@@ -12,11 +12,15 @@ This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Po
 
 Run locally with `python3 server.py`.
 
-# EV Charging Hub Investment Tool — v34.2 Design Verified
+# EV Charging Hub Investment Tool
+
+Current review build: **v35.50 Portfolio Compact Rendering Fix** — v34.2 Design Verified
 
 This clean build includes the agreed design refinements, cache-busted CSS/JS, the redesigned workflow guide, refreshed icons, and Scenario Ranking layout polish.
 
-# EV Charging Hub Investment Tool — HTML/JavaScript Demo v33
+# EV Charging Hub Investment Tool
+
+Current review build: **v35.50 Portfolio Compact Rendering Fix** — HTML/JavaScript Demo v33
 
 This package is a local-first browser demo built from the uploaded **Financial Modelling - EV Hub - DUT . V13.xlsx** workbook and the uploaded Site Location Dashboard package.
 
@@ -212,7 +216,7 @@ This build embeds a ZEVI funding database from the matched site funding file and
 - Killashee remains only as an excluded reference record for audit purposes.
 
 
-## v35.49 portfolio accuracy/status separation
+## v35.50 portfolio accuracy/status separation
 
 - Main Portfolio Comparison table now separates **Variance**, **Model Accuracy** and **Status**.
 - Variance always shows the mathematical matched model vs actual percentage whenever actual kWh exists.

@@ -1471,6 +1471,23 @@ const PORTFOLIO_CATEGORY_FACTORS = {
     note: "Manual review category; use only as a holding class until the site is classified."
   }
 };
+function portfolioCategoryCompactLabel(key, label) {
+  const map = {
+    motorway_plaza: "Motorway",
+    retail: "Retail",
+    urban_service: "Urban service",
+    town_hub_forecourt: "Town forecourt",
+    hotel_destination: "Hotel",
+    local_community: "Community",
+    review: "Review"
+  };
+  return map[key] || label || "Review";
+}
+function portfolioCategoryCell(r) {
+  const label = r?.category?.label || "Review";
+  const compact = portfolioCategoryCompactLabel(r?.categoryKey, label);
+  return `<span class="portfolio-category-label" title="${h(label)}">${h(compact)}</span>`;
+}
 function portfolioCategoryKey(site) {
   const n = String(site?.name || "").toLowerCase();
   if (site?.categoryKey && PORTFOLIO_CATEGORY_FACTORS[site.categoryKey]) return site.categoryKey;
@@ -1518,6 +1535,11 @@ function portfolioMaturityBadge(tier) {
   const info = portfolioMaturityDescription(tier);
   return `<button type="button" class="portfolio-maturity-trigger" aria-label="Explain ${h(info.label)} maturity" data-portfolio-maturity-trigger="1" data-maturity="${h(tier || "review")}" data-title="${h(info.title)}" data-label="${h(info.label)}" data-description="${h(info.body)}"><span class="badge ${h(info.cls)}">${h(info.label)}</span></button>`;
 }
+function portfolioMaturityBadgeCompact(tier) {
+  const info = portfolioMaturityDescription(tier);
+  const compact = tier === "near" ? "Near" : info.label;
+  return `<button type="button" class="portfolio-maturity-trigger" aria-label="Explain ${h(info.label)} maturity" data-portfolio-maturity-trigger="1" data-maturity="${h(tier || "review")}" data-title="${h(info.title)}" data-label="${h(info.label)}" data-description="${h(info.body)}"><span class="badge ${h(info.cls)}" title="${h(info.label)}">${h(compact)}</span></button>`;
+}
 const PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE = 0.15;
 const PORTFOLIO_MATERIAL_VARIANCE_TOLERANCE = 0.30;
 function portfolioVarianceBadge(v, options = {}) {
@@ -1550,8 +1572,18 @@ function portfolioModelAccuracyInfo(v, options = {}) {
 }
 function portfolioModelAccuracyBadge(v, options = {}) {
   const info = portfolioModelAccuracyInfo(v, options);
-  const suffix = info.lowData ? " · low data" : "";
-  return `<span class="badge ${info.cls}" title="${h(info.title)}">${h(info.label + suffix)}</span>`;
+  const suffix = info.lowData && !options.compact ? " · low data" : "";
+  const compactLabelMap = {
+    excellent: "Excellent",
+    in_benchmark: "Benchmark",
+    moderate: "Moderate",
+    high: "High",
+    major: "Major",
+    no_actual: "No actual"
+  };
+  const label = options.compact ? (compactLabelMap[info.band] || info.label) : info.label + suffix;
+  const title = info.lowData && options.compact ? `${info.title} Low-data note is retained in the detail view, not in the variance column.` : info.title;
+  return `<span class="badge ${info.cls}" title="${h(title)}">${h(label)}</span>`;
 }
 function portfolioModelAccuracySortValue(r) {
   return Number.isFinite(r?.annualKwhVariance) ? Math.abs(Number(r.annualKwhVariance)) : 999;
@@ -2053,9 +2085,29 @@ function portfolioPerformanceInfo(band, row = null) {
   };
   return map[band] || map.review;
 }
-function portfolioPerformanceBadge(band, row = null) {
+function portfolioPerformanceCompactLabel(label, band, row = null) {
+  const secondaryBand = row?.assessment?.secondaryBand || null;
+  if (band === "maturity_ramp") {
+    if (secondaryBand === "capacity_pressure") return "Ramp ⚠";
+    if (secondaryBand === "under_capture") return "Ramp ↓";
+    if (secondaryBand === "outperforming") return "Ramp ↑";
+    if (secondaryBand === "review") return "Ramp review";
+    return "Ramp";
+  }
+  const map = {
+    "Capacity pressure": "Pressure",
+    "Under-capturing": "Under",
+    "Outperforming": "Outperform",
+    "Monitor": "Monitor",
+    "Review": "Review"
+  };
+  return map[label] || label;
+}
+function portfolioPerformanceBadge(band, row = null, options = {}) {
   const item = portfolioPerformanceInfo(band, row);
-  return `<span class="badge ${item.cls}">${h(item.label)}</span>`;
+  const label = options.compact ? portfolioPerformanceCompactLabel(item.label, band, row) : item.label;
+  const title = options.compact ? item.label : "";
+  return `<span class="badge ${item.cls}"${title ? ` title="${h(title)}"` : ""}>${h(label)}</span>`;
 }
 function portfolioRiskBadge(risk) {
   if (risk === "high") return `<span class="badge bad">High</span>`;
@@ -2407,7 +2459,7 @@ function portfolioStatusButton(r) {
   const varianceText = Number.isFinite(r?.annualKwhVariance) ? h((r.annualKwhVariance >= 0 ? "+" : "") + pct(r.annualKwhVariance,1)) : "—";
   const accuracyInfo = portfolioModelAccuracyInfo(r?.annualKwhVariance, portfolioVarianceDisplayOptions(r));
   const lowDataNote = r?.annualVarianceSuppressedReason === "low_data" ? "Actual exists but volume/history is low; treat variance and accuracy as directional." : "";
-  return `<button type="button" class="portfolio-status-trigger" aria-label="Open recommendation for ${h(r?.site?.name || "site")}" data-portfolio-status-trigger="1" data-site="${h(r?.site?.name || "Site")}" data-status="${h(statusInfo.label)}" data-year="${h(action.year)}" data-action="${h(action.action)}" data-recommendation="${h(recommendation)}" data-diagnosis="${h(diagnosis)}" data-secondary-status="${h(secondaryText)}" data-secondary-diagnosis="${h(secondaryDiagnosis)}" data-low-data-note="${h(lowDataNote)}" data-trigger="${h(trigger)}" data-drivers="${h(drivers)}" data-benchmark-position="${h(benchmarkPosition)}" data-model-basis="${h(r?.modelComparisonBasis || "Model year")}" data-variance="${varianceText}" data-accuracy="${h(accuracyInfo.label)}">${portfolioPerformanceBadge(band, r)}</button>`;
+  return `<button type="button" class="portfolio-status-trigger" aria-label="Open recommendation for ${h(r?.site?.name || "site")}" data-portfolio-status-trigger="1" data-site="${h(r?.site?.name || "Site")}" data-status="${h(statusInfo.label)}" data-year="${h(action.year)}" data-action="${h(action.action)}" data-recommendation="${h(recommendation)}" data-diagnosis="${h(diagnosis)}" data-secondary-status="${h(secondaryText)}" data-secondary-diagnosis="${h(secondaryDiagnosis)}" data-low-data-note="${h(lowDataNote)}" data-trigger="${h(trigger)}" data-drivers="${h(drivers)}" data-benchmark-position="${h(benchmarkPosition)}" data-model-basis="${h(r?.modelComparisonBasis || "Model year")}" data-variance="${varianceText}" data-accuracy="${h(accuracyInfo.label)}">${portfolioPerformanceBadge(band, r, { compact: true })}</button>`;
 }
 function closePortfolioStatusPopover() {
   const existing = document.getElementById("portfolioStatusPopover");
@@ -2538,14 +2590,14 @@ function renderPortfolioCalibration() {
   const siteOptions = portfolioSiteSelectOptions(mappedPortfolioSiteList, additionalPortfolioSites, selected?.id);
   const row = r => [
     `<div class="portfolio-site-cell"><strong>${h(r.site.name)}</strong></div>`,
-    portfolioMaturityBadge(r.site.maturity?.tier),
-    h(r.category.label),
+    portfolioMaturityBadgeCompact(r.site.maturity?.tier),
+    portfolioCategoryCell(r),
     number(r.site.realMicKva,0) + " kVA",
     number(r.site.aadt,0),
     kwh(r.actualAnnualKwh,0),
     kwh(r.modelledAnnualKwh,0),
     portfolioVarianceBadge(r.annualKwhVariance, portfolioVarianceDisplayOptions(r)),
-    portfolioModelAccuracyBadge(r.annualKwhVariance, portfolioVarianceDisplayOptions(r)),
+    portfolioModelAccuracyBadge(r.annualKwhVariance, { ...portfolioVarianceDisplayOptions(r), compact: true }),
     portfolioStatusButton(r)
   ];
   const headers = [

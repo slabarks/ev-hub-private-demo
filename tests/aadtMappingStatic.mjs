@@ -22,6 +22,6 @@ for (const [id, aadt] of Object.entries(expected)) {
   assert.ok(byId[id].aadtAggregationMethod, `${id} should expose aggregation method`);
   assert.ok(byId[id].aadtBasisNote, `${id} should expose AADT basis note`);
 }
-assert.equal(PORTFOLIO_CALIBRATION_SITES.filter(s => Number(s.aadt || 0) <= 0).length, 0, 'No mapped portfolio site should have zero AADT');
-assert.ok(PORTFOLIO_CALIBRATION_SITES.every(s => s.aadtCounter && String(s.aadtCounter).includes('TII')), 'Every mapped site should show a TII AADT source label');
+assert.equal(PORTFOLIO_CALIBRATION_SITES.filter(s => s.displayInPortfolio !== false && !s.retiredFromPortfolio).filter(s => Number(s.aadt || 0) <= 0).length, 0, 'No mapped portfolio site should have zero AADT');
+assert.ok(PORTFOLIO_CALIBRATION_SITES.filter(s => s.displayInPortfolio !== false && !s.retiredFromPortfolio).every(s => s.aadtCounter && String(s.aadtCounter).includes('TII')), 'Every mapped site should show a TII AADT source label');
 console.log('AADT mapping static regression passed.');

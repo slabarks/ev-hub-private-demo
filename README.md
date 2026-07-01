@@ -1,6 +1,6 @@
-# EV Hub Investment Tool — v35.44 grant render fix
+# EV Hub Investment Tool — v35.45 mapping, upload safety and Kempower triple-cabinet fix
 
-This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, and adds v35.44 grant render fix:
+This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, the v35.44 grant render fix, and the v35.45 mapping/upload/Kempower update:
 
 - Portfolio comparison now matches actual/live performance to the relevant model year or weighted model-year basis before calculating variance.
 - Static rolling-30D actuals are annualised and matched to the configured comparison year; uploaded trailing-365 actuals are matched to the equivalent operating window where first-active/latest dates are available.
@@ -189,6 +189,16 @@ See `DEPLOY_TO_RENDER.md` for step-by-step deployment and deletion instructions.
 - Portfolio Comparison table now hides the Model basis column to reduce noise.
 - Full model basis is preserved in the status popover, selected-site detail card and XLSX audit export.
 - The 9-column table now has protected desktop/tablet widths for Actual, Matched model, Variance and Status.
+
+
+## v35.45 mapping, upload safety and Kempower triple-cabinet update
+
+- Corrects verified hardware mappings from ePower_Site_Data_Mapping.xlsx and user-confirmed overrides.
+- Keeps Douglas Court as 4 active plugs.
+- Sets Banner Plaza current live state to 1 active Kempower triple cabinet / 4 active plugs while preserving the full 2-triple-cabinet / 8-plug design metadata.
+- Retires Anner Hotel from active portfolio calibration and keeps Killashee as a future-only hardware record.
+- Adds live-data upload merge protection so missing, blank or zero uploaded actuals do not overwrite existing/static actuals.
+- Adds a Kempower Triple Cabinet quantity selector allowing 1 or 2 triple cabinets without automatically increasing active satellites/plugs.
 
 ## v35.43 ZEVI funding database
 

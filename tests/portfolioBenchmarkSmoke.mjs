@@ -12,10 +12,11 @@ assert.ok(start > 0 && end > start, 'Portfolio block should be present');
 const block = app.slice(start, end);
 const factory = new Function('DEFAULT_INPUTS', 'DEFAULT_SELECTED_CONFIG', 'calculateDemand', 'calculateYearByYear', 'summariseFinancials', 'PORTFOLIO_CALIBRATION_SITES', `${block}\nreturn { portfolioBenchmarksByCategory, portfolioSiteResults };`);
 const { portfolioBenchmarksByCategory, portfolioSiteResults } = factory(DEFAULT_INPUTS, DEFAULT_SELECTED_CONFIG, calculateDemand, calculateYearByYear, summariseFinancials, PORTFOLIO_CALIBRATION_SITES);
-const benchmarks = portfolioBenchmarksByCategory(PORTFOLIO_CALIBRATION_SITES);
-const rows = PORTFOLIO_CALIBRATION_SITES.map(site => portfolioSiteResults(site, benchmarks));
-assert.equal(rows.length, 38, 'Portfolio smoke should cover 32 clean ROI sites plus 6 added mapped/live sites');
-assert.equal(PORTFOLIO_CALIBRATION_SITES.filter(s => s.benchmarkEligible !== false).length, 32, 'Benchmark peer pool should preserve the original 32 clean sites');
+const activeSites = PORTFOLIO_CALIBRATION_SITES.filter(s => s.displayInPortfolio !== false && !s.retiredFromPortfolio);
+const benchmarks = portfolioBenchmarksByCategory(activeSites);
+const rows = activeSites.map(site => portfolioSiteResults(site, benchmarks));
+assert.equal(rows.length, 37, 'Portfolio smoke should cover active verified sites after removing Anner and retaining Killashee as future-only');
+assert.equal(activeSites.filter(s => s.benchmarkEligible !== false).length, 31, 'Benchmark peer pool should exclude retired/future-only sites');
 for (const row of rows) {
   assert.ok(row.assessment?.band, `${row.site.name} should have a performance band`);
   assert.ok(row.assessment?.action, `${row.site.name} should have a recommended action`);

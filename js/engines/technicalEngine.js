@@ -1,4 +1,4 @@
-import { platformItem, dispenserNameForPlatform } from "../data/platformLibrary.js";
+import { platformItem, dispenserNameForPlatform, effectiveCabinetPowerKw, effectiveCabinetUnitCost, effectiveCabinetCommissioning, effectiveCabinetMaxDualDisp } from "../data/platformLibrary.js";
 import { batteryItem, batteryDeploymentCostProfile } from "../data/batteryLibrary.js";
 import { GRID_SUBSTATION, approximateLvConnectionCost, substationMultiplier } from "../data/gridSubstation.js";
 import { deriveCivilElectricalCost } from "../data/civilElectricalCostLibrary.js";
@@ -27,7 +27,7 @@ export function validateConfiguration(config) {
     const cab = platformItem(config.cabinetType);
     if (!cab || cab.type !== "Cabinet") reasons.push("Distributed platform requires a cabinet");
     if (cab && cab.platform !== config.platform) reasons.push("Cabinet is not compatible with selected platform");
-    if (cab && asNum(config.dispenserCount, 0) > cab.maxDualDisp) reasons.push("Cabinet max satellites/dispensers exceeded");
+    if (cab && asNum(config.dispenserCount, 0) > effectiveCabinetMaxDualDisp(config, cab)) reasons.push("Cabinet max satellites/dispensers exceeded");
   }
   const batt = batteryItem(config.batterySize);
   if (batt.item !== "No battery") {
@@ -45,9 +45,13 @@ export function deriveConfiguration(config, inputs) {
   const chargerCount = asNum(config.chargerCount, 1);
   const dispenserCount = asNum(config.dispenserCount, 0);
 
-  const installedChargerPowerKw = config.platform === "Autel Standalone"
+  const modelEquivalentChargerPowerKw = config.platform === "Autel Standalone"
     ? (charger ? charger.powerKw : 0) * chargerCount
-    : Math.min(cabinet ? cabinet.powerKw : 0, dispenserCount * 400);
+    : Math.min(effectiveCabinetPowerKw(config, cabinet), dispenserCount * 400);
+  const actualPowerOverride = Number(config.actualInstalledPowerKwOverride || 0);
+  const installedChargerPowerKw = Number.isFinite(actualPowerOverride) && actualPowerOverride > 0
+    ? actualPowerOverride
+    : modelEquivalentChargerPowerKw;
 
   const installedOutputs = config.platform === "Autel Standalone"
     ? (charger ? charger.outputs : 0) * chargerCount
@@ -82,7 +86,7 @@ export function deriveConfiguration(config, inputs) {
 
   const chargerHardwareCostForWarranty = config.platform === "Autel Standalone"
     ? (charger ? charger.unitCost : 0) * chargerCount
-    : (cabinet ? cabinet.unitCost : 0) + dispenserCount * (dispenser ? dispenser.unitCost : 0);
+    : effectiveCabinetUnitCost(config, cabinet) + dispenserCount * (dispenser ? dispenser.unitCost : 0);
   const chargerWarrantyRate = config.platform.includes("Kempower") ? inputs.kempowerChargerWarrantyAnnualRate : inputs.autelChargerWarrantyAnnualRate;
   const annualChargerWarrantyCost = config.chargerWarrantyYears === 0 ? 0 : chargerHardwareCostForWarranty * chargerWarrantyRate;
 
@@ -101,6 +105,8 @@ export function deriveConfiguration(config, inputs) {
     chargerCount,
     dispenserCount,
     installedChargerPowerKw,
+    modelEquivalentChargerPowerKw,
+    actualInstalledPowerKwOverride: actualPowerOverride > 0 ? actualPowerOverride : null,
     installedOutputs,
     batteryPowerKw,
     batteryEnergyKwh,
@@ -132,7 +138,7 @@ export function initialCapexDetail(config, inputs) {
   const chargerCount = asNum(config.chargerCount, 1);
   const dispenserCount = asNum(config.dispenserCount, 0);
 
-  const cabinetHw = cabinet ? cabinet.unitCost : 0;
+  const cabinetHw = effectiveCabinetUnitCost(config, cabinet);
   const dispenserHw = dispenserCount * (dispenser ? dispenser.unitCost : 0);
   const standaloneHw = config.platform === "Autel Standalone" ? (charger ? charger.unitCost : 0) * chargerCount : 0;
   const batteryHw = battery.hardwareCost || 0;
@@ -155,7 +161,7 @@ export function initialCapexDetail(config, inputs) {
   const batteryInstallCommissioning = battery.installCommissioning || 0;
   const commissioning = config.platform === "Autel Standalone"
     ? (charger ? charger.commissioning || 0 : 0) * chargerCount
-    : (cabinet ? cabinet.commissioning || 0 : 0);
+    : effectiveCabinetCommissioning(config, cabinet);
 
   const calculatedTotal = cabinetHw + dispenserHw + standaloneHw + batteryHw + batteryInstall + batteryUnitInstall + install + gridConnection + substation + batteryLogistics + batteryInstallCommissioning + commissioning;
   const overrideTotal = actualInitialCapexOverride(config);
@@ -191,7 +197,7 @@ export function chargerReplacementCapex(config) {
   const dispenser = platformItem(dispenserNameForPlatform(config.platform));
   const chargerCount = asNum(config.chargerCount, 1);
   const dispenserCount = asNum(config.dispenserCount, 0);
-  const cabinetHw = cabinet ? cabinet.unitCost : 0;
+  const cabinetHw = effectiveCabinetUnitCost(config, cabinet);
   const dispenserHw = dispenserCount * (dispenser ? dispenser.unitCost : 0);
   const standaloneHw = config.platform === "Autel Standalone" ? (charger ? charger.unitCost : 0) * chargerCount : 0;
   return cabinetHw + dispenserHw + standaloneHw;

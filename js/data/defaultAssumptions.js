@@ -85,6 +85,7 @@ export const DEFAULT_SELECTED_CONFIG = {
   chargerCount: "N/A",
   cabinetType: "Autel Double Cabinet 480-960",
   dispenserCount: 6,
+  kempowerTripleCabinetCount: "N/A",
   batterySize: "Autel 1x125kW/261kWh",
   serviceLevel: "Premium",
   selectedMicKva: 200,

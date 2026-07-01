@@ -1,3 +1,4 @@
+import { kempowerTripleCabinetCount } from "./platformLibrary.js";
 // Hidden civils & electrical costing engine.
 // Reference anchor provided by user quote:
 // Kempower distributed, single power cabinet, 2 dual dispensers, no battery = €43,420.20.
@@ -17,9 +18,9 @@ const KEMPOWER_BASE = {
   defaultDispenserCableRunM: 20
 };
 
-function cabinetPowerUnitCount(cabinetName = "") {
+function cabinetPowerUnitCount(cabinetName = "", config = {}) {
   const name = String(cabinetName).toLowerCase();
-  if (name.includes("triple")) return 3;
+  if (name.includes("triple")) return 3 * kempowerTripleCabinetCount(config);
   if (name.includes("double")) return 2;
   if (name.includes("single")) return 1;
   return 1;
@@ -76,14 +77,14 @@ export function deriveCivilElectricalCost(config, inputs, derived = {}) {
   const gridUplift = micGridElectricalUplift(mic);
 
   if (platform === "Kempower Distributed") {
-    const powerCabinetCount = cabinetPowerUnitCount(config.cabinetType);
+    const powerCabinetCount = cabinetPowerUnitCount(config.cabinetType, config);
     const noBattery = kempowerNoBatteryCivilsElectrical(powerCabinetCount, dispenserCount);
     const batteryIntegration = batteryIntegrationAllowance(platform, batteryName, battery.powerKw || 0, battery.energyKwh || 0);
     return Math.round(noBattery + batteryIntegration + gridUplift);
   }
 
   if (platform === "Autel Distributed") {
-    const powerCabinetCount = cabinetPowerUnitCount(config.cabinetType);
+    const powerCabinetCount = cabinetPowerUnitCount(config.cabinetType, config);
     const kempowerEquivalent = kempowerNoBatteryCivilsElectrical(powerCabinetCount, dispenserCount);
     const architectureFactor = 0.94;
     const batteryIntegration = batteryIntegrationAllowance(platform, batteryName, battery.powerKw || 0, battery.energyKwh || 0);

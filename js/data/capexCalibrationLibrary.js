@@ -14,7 +14,7 @@ export function capexKey(value) {
 }
 
 export const KNOWN_SITE_CAPEX = [
-  { key: "anner hotel 120", aliases: ["Anner Hotel", "Anner Hotel 120 kW DC"], actualCapexExVat: 58580, treatment: "actual_capex", note: "Actual project CAPEX provided." },
+  { key: "anner hotel 120", aliases: ["Anner Hotel", "Anner Hotel 120 kW DC"], actualCapexExVat: 58580, treatment: "retired_reference", note: "Removed from active portfolio because no MIC was confirmed in the verified mapping dataset." },
   { key: "circle k junction 20", aliases: ["Circle K - Junction 20", "Circle K Junction 20"], actualCapexExVat: 64999, treatment: "actual_capex", note: "Actual project CAPEX provided." },
   { key: "circle k express dungarvan", aliases: ["Circle K Express Dungarvan", "Dungarvan Nissan"], actualCapexExVat: 125696, treatment: "actual_capex_review", note: "Actual CAPEX provided; high/review works-cost behaviour." },
   { key: "the cope shopping centre", aliases: ["The Cope Shopping Centre", "The Cope SC"], actualCapexExVat: 120728, treatment: "actual_capex_review", note: "Actual CAPEX provided; high/review works-cost behaviour." },
@@ -26,6 +26,16 @@ export const KNOWN_SITE_CAPEX = [
   { key: "the brehon hotel", aliases: ["The Brehon Hotel", "The Brehon Hotel DC"], actualCapexExVat: 90858, treatment: "actual_capex_ac_scope_note", note: "Actual CAPEX includes ancillary AC scope; DC model remains 1 charger / 2 fast plugs." },
   { key: "greenhills hotel", aliases: ["Greenhills Hotel", "Greenhills Hotel DC"], actualCapexExVat: 162823, treatment: "actual_capex_ac_scope_note", note: "Dashboard points include AC; DC mapping remains Kempower 1 cabinet + 2 dual DC dispensers." },
   { key: "southgate shopping centre", aliases: ["Southgate Shopping Centre"], actualCapexExVat: 133517, treatment: "actual_capex", note: "Actual project CAPEX provided." },
+
+  { key: "ahern s centra castlemartyr", aliases: ["Ahern's Centra - Castlemartyr", "Ahern's Centra Castlemartyr"], actualCapexExVat: 89011, treatment: "actual_capex", note: "Verified hardware/CAPEX mapping dataset; 1 charger / 2 plugs confirmed." },
+  { key: "aherns centra carrigtwohill", aliases: ["Aherns Centra - Carrigtwohill", "Ahern's Centra Carrigtwohill"], actualCapexExVat: 134222, treatment: "actual_capex", note: "Verified hardware/CAPEX mapping dataset; 1 charger / 2 plugs confirmed." },
+  { key: "axis retail park", aliases: ["Axis Retail Park"], actualCapexExVat: 146060, treatment: "actual_capex", note: "Verified hardware/CAPEX mapping dataset; 2 × Autel DH480 / 4 plugs." },
+  { key: "charleville park hotel", aliases: ["Charleville Park Hotel"], actualCapexExVat: 140055, treatment: "actual_capex", note: "Verified hardware/CAPEX mapping dataset; 2 × Autel DH480 / 4 plugs." },
+  { key: "mallow plaza", aliases: ["Mallow Plaza", "Mallow N20 Plaza"], actualCapexExVat: 131568, treatment: "actual_capex", note: "Verified hardware/CAPEX mapping dataset; 2 × Autel DH480 / 4 plugs." },
+  { key: "newtown park hotel", aliases: ["Newtown Park Hotel"], actualCapexExVat: 128485, treatment: "actual_capex", note: "Verified hardware/CAPEX mapping dataset; 2 × Autel DH480 / 4 plugs." },
+  { key: "o brien s larkin s cross", aliases: ["O'Brien's Larkin's Cross", "O'Briens Larkin's Cross"], actualCapexExVat: 111915, treatment: "actual_capex", note: "Verified hardware/CAPEX mapping dataset; 2 × Autel DH480 / 4 plugs." },
+  { key: "corrib oil swinford", aliases: ["Corrib Oil - Swinford", "Corrib Oil Swinford"], actualCapexExVat: 99945, treatment: "actual_capex", note: "Verified hardware/CAPEX mapping dataset; 1 × Autel DH480 / 2 plugs." },
+  { key: "supervalu tipperary", aliases: ["Supervalu - Tipperary", "Supervalu Tipperary"], actualCapexExVat: 96139, treatment: "actual_capex", note: "Verified hardware/CAPEX mapping dataset; 1 × Autel DH480 / 2 plugs." },
   { key: "newbridge retail park", aliases: ["Newbridge Retail Park"], actualCapexExVat: 132300, treatment: "actual_capex", note: "Actual project CAPEX provided." },
   { key: "castletroy park hotel", aliases: ["Castletroy Park Hotel"], actualCapexExVat: 113416, treatment: "actual_capex", note: "Actual project CAPEX provided." },
   { key: "circle k aherns service station", aliases: ["Circle K - Aherns Service Station", "Aherne's Circle K Thurles", "Circle K Ahern Thurles"], actualCapexExVat: 73617, treatment: "actual_capex", note: "Actual project CAPEX provided." },
@@ -37,12 +47,12 @@ export const KNOWN_SITE_CAPEX = [
   { key: "corrib oil fermoy", aliases: ["Corrib Oil - Fermoy", "Corrib Oil Fermoy"], actualCapexExVat: 158644, treatment: "actual_capex", note: "Actual project CAPEX provided." },
   { key: "castleknock hotel", aliases: ["Castleknock Hotel"], actualCapexExVat: 133072, treatment: "actual_capex_ac_scope_note", note: "Actual CAPEX includes ancillary AC scope; DC model remains 1 charger / 2 fast plugs." },
   { key: "texaco newcastle", aliases: ["Texaco Newcastle"], actualCapexExVat: 139663, treatment: "actual_capex", note: "Actual project CAPEX provided." },
-  { key: "douglas court", aliases: ["Douglas Court", "Douglas Court Shopping Centre", "Douglas Phase 1"], actualCapexExVat: 201933, treatment: "actual_capex_ds480_high_side", note: "1 DS480 + 4 dual dispensers; actual CAPEX provided." },
-  { key: "banner plaza ennis", aliases: ["Banner Plaza Ennis", "Banner Plaza Ennis Junction 12", "Banner Plaza Ennis, Junction 12"], actualCapexExVat: 865368, treatment: "actual_capex_battery_major_infra", note: "Large skid battery + major infrastructure benchmark only." },
+  { key: "douglas court", aliases: ["Douglas Court", "Douglas Court Shopping Centre", "Douglas Phase 1"], actualCapexExVat: 201933, treatment: "actual_capex_ds480_high_side", note: "Douglas Court loaded as 4 active plugs for current model validation; physical DS480 8-connector hardware retained as inactive capacity context." },
+  { key: "banner plaza ennis", aliases: ["Banner Plaza Ennis", "Banner Plaza Ennis Junction 12", "Banner Plaza Ennis, Junction 12"], actualCapexExVat: 865368, treatment: "actual_capex_battery_major_infra", note: "Banner current live state uses 1 triple cabinet + 4 active plugs; full installed design remains 2 triple cabinets + 8 plugs + Polarium large skid battery. Major infrastructure benchmark only." },
   { key: "ashbourne high street", aliases: ["Ashbourne High Street", "Ashbourne Town Centre"], actualCapexExVat: 117121, treatment: "mixed_reference_blocked", note: "Mixed site; shown for reference but blocked from clean model loading." },
   { key: "west point retail park ennis", aliases: ["West Point Retail Park Ennis", "West Point Retail Park - Ennis", "Westpoint Ennis"], actualCapexExVat: 143652, treatment: "mixed_reference_blocked", note: "Mixed DC/AC site; shown for reference but blocked from clean model loading." },
   { key: "fota island resort", aliases: ["Fota Island Resort", "Fota Island Resort 180 kW DC"], actualCapexExVat: 99829, treatment: "review_reference_blocked", note: "MIC not confirmed; shown for reference but blocked from model loading." },
-  { key: "killashee house hotel", aliases: ["Killashee House Hotel"], actualCapexExVat: 128154, treatment: "mixed_reference_blocked", note: "Mixed/review site; shown for reference but blocked from clean model loading." },
+  { key: "killashee house hotel", aliases: ["Killashee House Hotel"], actualCapexExVat: 128154, treatment: "future_hardware_record", note: "Future-only verified hardware record; do not show in active portfolio until live data and AADT mapping are available." },
   { key: "centra a1 banbridge", aliases: ["Centra A1 Banbridge"], actualCapexExVat: 117230, treatment: "outside_roi_reference_blocked", note: "Outside ROI/TII scope; shown for reference but blocked from model loading." }
 ];
 

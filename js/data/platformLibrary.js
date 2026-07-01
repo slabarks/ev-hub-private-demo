@@ -30,3 +30,31 @@ export function cabinetOptions(platform) {
 export function standaloneChargerOptions() {
   return PLATFORM_LIBRARY.filter(x => x.type === "All-in-One" && x.platform === "Autel Standalone");
 }
+
+export function kempowerTripleCabinetCount(config = {}) {
+  const platform = String(config.platform || "");
+  const cabinetType = String(config.cabinetType || "");
+  if (platform !== "Kempower Distributed" || cabinetType !== "Kempower Triple Cabinet") return 1;
+  const count = Math.round(Number(config.kempowerTripleCabinetCount || 1));
+  return count === 2 ? 2 : 1;
+}
+
+export function effectiveCabinetPowerKw(config = {}, cabinet = platformItem(config.cabinetType)) {
+  if (!cabinet) return 0;
+  return Number(cabinet.powerKw || 0) * kempowerTripleCabinetCount(config);
+}
+
+export function effectiveCabinetUnitCost(config = {}, cabinet = platformItem(config.cabinetType)) {
+  if (!cabinet) return 0;
+  return Number(cabinet.unitCost || 0) * kempowerTripleCabinetCount(config);
+}
+
+export function effectiveCabinetCommissioning(config = {}, cabinet = platformItem(config.cabinetType)) {
+  if (!cabinet) return 0;
+  return Number(cabinet.commissioning || 0) * kempowerTripleCabinetCount(config);
+}
+
+export function effectiveCabinetMaxDualDisp(config = {}, cabinet = platformItem(config.cabinetType)) {
+  if (!cabinet || !Number.isFinite(Number(cabinet.maxDualDisp))) return null;
+  return Number(cabinet.maxDualDisp) * kempowerTripleCabinetCount(config);
+}

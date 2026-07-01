@@ -1,6 +1,6 @@
 import { state, setInput, setConfig, setSiteContext, resetState } from "./state.js";
 import { MIC_VALUES, DEFAULT_INPUTS, DEFAULT_SELECTED_CONFIG, ASSUMPTION_DICTIONARY } from "./data/defaultAssumptions.js";
-import { PLATFORM_LIBRARY, cabinetOptions, standaloneChargerOptions } from "./data/platformLibrary.js";
+import { PLATFORM_LIBRARY, cabinetOptions, standaloneChargerOptions, effectiveCabinetMaxDualDisp, kempowerTripleCabinetCount } from "./data/platformLibrary.js";
 import { batteryOptionsFor } from "./data/batteryLibrary.js";
 import { calculateDemand } from "./engines/demandEngine.js";
 import { calculateYearByYear, summariseFinancials } from "./engines/financialEngine.js";
@@ -251,12 +251,13 @@ function dualUnitLabel() { return state.config.platform === "Autel Standalone" ?
 function selectedCabinetMaxDualDisp(config = state.config) {
   if (!String(config.platform || "").includes("Distributed")) return null;
   const cabinet = PLATFORM_LIBRARY.find(x => x.item === config.cabinetType && x.type === "Cabinet" && x.platform === config.platform);
-  return cabinet && Number.isFinite(Number(cabinet.maxDualDisp)) ? Number(cabinet.maxDualDisp) : null;
+  return effectiveCabinetMaxDualDisp(config, cabinet);
 }
 function dispenserLimitHelp(config = state.config) {
   const max = selectedCabinetMaxDualDisp(config);
   if (max == null) return "Not used for standalone chargers.";
-  return `${config.cabinetType} supports up to ${max} dual dispenser${max === 1 ? "" : "s"} / satellite${max === 1 ? "" : "s"}. Values above this are automatically reduced to the cabinet limit.`;
+  const countNote = String(config.platform || "") === "Kempower Distributed" && String(config.cabinetType || "") === "Kempower Triple Cabinet" ? ` (${kempowerTripleCabinetCount(config)} triple cabinet${kempowerTripleCabinetCount(config) === 1 ? "" : "s"})` : "";
+  return `${config.cabinetType}${countNote} supports up to ${max} dual dispenser${max === 1 ? "" : "s"} / satellite${max === 1 ? "" : "s"}. Values above this are automatically reduced to the cabinet limit.`;
 }
 function inputField(key, label, opts = {}) {
   const value = state.inputs[key];
@@ -329,28 +330,71 @@ function portfolioLiveActualIndex(snapshot = portfolioLiveActualsSnapshot) {
   });
   return index;
 }
+const PORTFOLIO_LIVE_NUMERIC_ACTUAL_KEYS = ["rolling30Kwh", "rolling30Sessions", "rolling30NetRevenue", "dailyKwh", "dailySessions", "annualKwh", "annualSessions", "annualNetRevenue"];
+function positiveLiveNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function liveActualHasPositiveValue(actual = {}) {
+  return PORTFOLIO_LIVE_NUMERIC_ACTUAL_KEYS.some(key => positiveLiveNumber(actual[key]) != null);
+}
 function portfolioMergeLiveActual(site, liveItem) {
   if (!liveItem?.actual) return site;
   const liveActual = { ...liveItem.actual };
-  ["annualKwh", "annualSessions", "annualNetRevenue"].forEach(key => {
-    if (!Number.isFinite(Number(liveActual[key])) || Number(liveActual[key]) <= 0) delete liveActual[key];
+  const mergedActual = { ...(site.actual || {}) };
+  let appliedPositiveCount = 0;
+  PORTFOLIO_LIVE_NUMERIC_ACTUAL_KEYS.forEach(key => {
+    const value = positiveLiveNumber(liveActual[key]);
+    if (value != null) {
+      mergedActual[key] = value;
+      appliedPositiveCount += 1;
+    }
+  });
+  ["asOfDate", "sourceFile", "source", "siteName", "firstActiveDate"].forEach(key => {
+    if (liveActual[key]) mergedActual[key] = liveActual[key];
   });
   const capex = Number(site.actualCapexExVat || actualCapexForSite(site) || actualCapexForSite(liveItem.siteName) || 0);
+  const applied = appliedPositiveCount > 0;
+  const retainedExisting = !applied && liveActualHasPositiveValue(site.actual || {});
   return {
     ...site,
     ...(capex > 0 ? { actualCapexExVat: capex } : {}),
     capexStatus: site.capexStatus || capexStatusForSite(site),
     capexCalibrationNote: site.capexCalibrationNote || capexNoteForSite(site),
-    actual: { ...(site.actual || {}), ...liveActual },
-    maturity: { ...(site.maturity || {}), ...(liveItem.maturity || {}) },
+    actual: mergedActual,
+    maturity: applied ? { ...(site.maturity || {}), ...(liveItem.maturity || {}) } : { ...(site.maturity || {}) },
     liveActuals: {
-      source: "uploaded",
+      source: applied ? "uploaded" : retainedExisting ? "uploaded_zero_retained_existing" : "uploaded_no_positive_actual",
+      actualSourceStatus: applied ? "uploaded live actual" : retainedExisting ? "uploaded zero/blank ignored; existing actual retained" : "uploaded zero/blank ignored; no actual available",
       siteName: liveItem.siteName,
       asOfDate: liveActual.asOfDate || portfolioLiveActualsSnapshot?.latestDate,
       sourceFile: liveActual.sourceFile || portfolioLiveActualsSnapshot?.parsedFiles?.join(", "),
-      diagnostics: liveItem.diagnostics || {}
+      diagnostics: liveItem.diagnostics || {},
+      mergeApplied: applied,
+      zeroOverwriteBlocked: !applied
     }
   };
+}
+function portfolioMarkMissingFromLatestUpload(site) {
+  if (!portfolioLiveActualsSnapshot) return site;
+  return {
+    ...site,
+    liveActuals: {
+      ...(site.liveActuals || {}),
+      source: "missing_from_latest_upload",
+      actualSourceStatus: liveActualHasPositiveValue(site.actual || {}) ? "missing from latest upload; existing/static actual retained" : "missing from latest upload; no actual available",
+      siteName: site.name,
+      asOfDate: portfolioLiveActualsSnapshot.latestDate || site.liveActuals?.asOfDate,
+      sourceFile: portfolioLiveActualsSnapshot.parsedFiles?.join(", ") || site.liveActuals?.sourceFile,
+      mergeApplied: false
+    }
+  };
+}
+function portfolioActualSourceLabel(site) {
+  const status = site?.liveActuals?.actualSourceStatus;
+  if (status) return status;
+  if (liveActualHasPositiveValue(site?.actual || {})) return "static baseline actual";
+  return "no actual";
 }
 function portfolioLoadBlockReason(site) {
   if (!site) return "No site selected.";
@@ -369,22 +413,26 @@ function portfolioCapexInfo(site, modelInitialCapex = 0) {
 }
 function portfolioMappedSites() {
   const liveIndex = portfolioLiveActualIndex();
-  return PORTFOLIO_CALIBRATION_SITES.map(site => {
-    const candidateKeys = [site.name, site.id, site.modelEquivalentSummary]
+  return PORTFOLIO_CALIBRATION_SITES.flatMap(site => {
+    const candidateKeys = [site.name, site.id, site.modelEquivalentSummary, site.actualHardwareSummary]
       .map(normalisePortfolioLiveKey)
       .filter(Boolean);
     const liveItem = candidateKeys.map(key => liveIndex.get(key)).find(Boolean);
-    const merged = liveItem ? portfolioMergeLiveActual(site, liveItem) : site;
+    if (site.retiredFromPortfolio) return [];
+    if (site.displayInPortfolio === false && !(site.includeWhenLiveUploaded && liveItem)) return [];
+    const merged = liveItem ? portfolioMergeLiveActual(site, liveItem) : portfolioMarkMissingFromLatestUpload(site);
     const zeviFunding = zeviFundingForSite(grantFundingContextFromSite(merged), { allowAllocationExact: true });
-    return zeviFunding ? { ...merged, zeviFunding } : merged;
+    return [zeviFunding ? { ...merged, zeviFunding } : merged];
   });
 }
 function portfolioAdditionalLiveSites(mappedSites = portfolioMappedSites()) {
   const actuals = portfolioLiveActualsSnapshot?.siteActuals || [];
   if (!actuals.length) return [];
   const matchedKeys = new Set(mappedSites.flatMap(s => [s.name, s.id, s.liveActuals?.siteName, s.modelEquivalentSummary].map(normalisePortfolioLiveKey).filter(Boolean)));
+  const retiredKeys = new Set(PORTFOLIO_CALIBRATION_SITES.filter(s => s.retiredFromPortfolio).flatMap(s => [s.name, s.id, s.modelEquivalentSummary].map(normalisePortfolioLiveKey).filter(Boolean)));
   return actuals
     .filter(a => !matchedKeys.has(normalisePortfolioLiveKey(a.siteName)))
+    .filter(a => !retiredKeys.has(normalisePortfolioLiveKey(a.siteName)))
     .map((a, index) => {
       const actual = a.actual || {};
       const chargerCount = Number(a.diagnostics?.chargerCount || 0);
@@ -419,10 +467,12 @@ function portfolioSites(options = {}) {
 function portfolioLiveActualStatus(sites = portfolioMappedSites()) {
   const liveIndex = portfolioLiveActualIndex();
   const matchedCleanSites = sites.filter(s => s.liveActuals?.source === "uploaded").length;
+  const retainedMissing = sites.filter(s => s.liveActuals?.source === "missing_from_latest_upload" || s.liveActuals?.zeroOverwriteBlocked).length;
   const actuals = portfolioLiveActualsSnapshot?.siteActuals || [];
   const matchedKeys = new Set(sites.filter(s => s.liveActuals?.source === "uploaded").map(s => normalisePortfolioLiveKey(s.liveActuals.siteName || s.name)));
-  const additional = actuals.filter(a => !matchedKeys.has(normalisePortfolioLiveKey(a.siteName))).length;
-  return { matchedCleanSites, additional, uploadedSiteCount: actuals.length, hasLive: !!portfolioLiveActualsSnapshot, liveIndexSize: liveIndex.size };
+  const retiredKeys = new Set(PORTFOLIO_CALIBRATION_SITES.filter(s => s.retiredFromPortfolio).flatMap(s => [s.name, s.id, s.modelEquivalentSummary].map(normalisePortfolioLiveKey).filter(Boolean)));
+  const additional = actuals.filter(a => !matchedKeys.has(normalisePortfolioLiveKey(a.siteName)) && !retiredKeys.has(normalisePortfolioLiveKey(a.siteName))).length;
+  return { matchedCleanSites, retainedMissing, additional, uploadedSiteCount: actuals.length, hasLive: !!portfolioLiveActualsSnapshot, liveIndexSize: liveIndex.size, activeSiteCount: sites.length };
 }
 function savePortfolioLiveActuals(snapshot) {
   PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS.forEach(key => { try { sessionStorage.removeItem(key); } catch (_) {} });
@@ -459,7 +509,7 @@ function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {
       <div><span class="eyebrow">Live calibration data</span><h3>${hasLive ? "Uploaded actuals active" : "Using stored calibration data"}</h3><p>${hasLive ? "Portfolio Calibration is using validated uploaded operating-hub actuals for this browser session." : "Upload the latest dashboard exports to refresh actual kWh, sessions and revenue. Validation runs automatically after file selection."}</p></div>
       <span class="badge ${hasLive ? "good" : "warn"}">${hasLive ? "Live session" : "Stored fallback"}</span>
     </div>
-    <div class="portfolio-summary-grid live-calibration-kpis">${kpi("Latest actuals date", h(latest), hasLive ? "from uploaded files" : "stored app library")}${kpi("Matched clean sites", `${number(status.matchedCleanSites,0)} / ${number(PORTFOLIO_CALIBRATION_SITES.length,0)}`, "used in calibration table")}${kpi("Additional live sites", number(status.additional,0), "shown under uploaded sites")}${kpi("Uploaded site rows", number(status.uploadedSiteCount,0), hasLive ? "validated live sites" : "none uploaded")}</div>
+    <div class="portfolio-summary-grid live-calibration-kpis">${kpi("Latest actuals date", h(latest), hasLive ? "from uploaded files" : "stored app library")}${kpi("Matched clean sites", `${number(status.matchedCleanSites,0)} / ${number(status.activeSiteCount || sites.length,0)}`, "used in calibration table")}${kpi("Additional live sites", number(status.additional,0), "shown under uploaded sites")}${kpi("Uploaded site rows", number(status.uploadedSiteCount,0), hasLive ? "validated live sites" : "none uploaded")}${hasLive ? kpi("Actuals retained", number(status.retainedMissing || 0,0), "missing/zero upload did not overwrite") : ""}</div>
     <details class="live-calibration-details"><summary>Which files should I upload?</summary><div class="live-file-guidance"><div><strong>Minimum required</strong><ul>${requiredFiles.map(f => `<li>${h(f)}</li>`).join("")}</ul></div><div><strong>Recommended full pack</strong><ul>${recommendedFiles.map(f => `<li>${h(f)}</li>`).join("")}</ul></div><div><strong>Optional support / trend files</strong><ul>${optionalFiles.map(f => `<li>${h(f)}</li>`).join("")}</ul></div></div></details>
     ${errorHtml}
     ${warnings.length ? `<div class="notice warn"><strong>Upload warnings</strong><br>${warnings.slice(0,4).map(h).join("<br>")}</div>` : ""}
@@ -1009,6 +1059,15 @@ function configOptions() {
   return { cabinets: ["N/A", ...cabinets], batteries, chargerModels };
 }
 
+function showKempowerTripleCabinetCount(config = state.config) {
+  return String(config.platform || "") === "Kempower Distributed" && String(config.cabinetType || "") === "Kempower Triple Cabinet";
+}
+
+function kempowerTripleCabinetCountField() {
+  if (!showKempowerTripleCabinetCount()) return "";
+  return selectFieldConfig("kempowerTripleCabinetCount", "Number of triple cabinets", ["1", "2"], { help: "For Kempower Triple Cabinet only. Adds a second triple power cabinet without automatically increasing active satellites/plugs." });
+}
+
 function configValidatorItems(r) {
   const c = state.config;
   const yd = r.yearByYear.derived;
@@ -1103,6 +1162,7 @@ function renderScenarioSetup(r) {
             ${selectFieldConfig("chargerModel", "Charger model", o.chargerModels)}
             ${inputFieldConfig("chargerCount", "Number of chargers", { step: 1, min: 1, unit: "chargers" })}
             ${selectFieldConfig("cabinetType", "Cabinet type", o.cabinets)}
+            ${kempowerTripleCabinetCountField()}
             ${inputFieldConfig("dispenserCount", "Dual dispensers / satellites", { step: 1, min: 0, max: selectedCabinetMaxDualDisp(), unit: "dual dispensers", help: dispenserLimitHelp() })}
           </div>
         </section>
@@ -1267,7 +1327,8 @@ function scenarioHardwareSummary(s) {
   const cfg = s.config || {};
   const outputs = number(s.derived?.installedOutputs || 0,0);
   if (cfg.platform === "Autel Standalone") return `${cfg.chargerCount} chargers · ${outputs} plugs`;
-  return `${cfg.dispenserCount} dispensers · ${outputs} plugs`;
+  const cabinetCount = showKempowerTripleCabinetCount(cfg) ? `${kempowerTripleCabinetCount(cfg)} × triple cabinet · ` : "";
+  return `${cabinetCount}${cfg.dispenserCount} dispensers · ${outputs} plugs`;
 }
 function cleanBatteryLabel(value) {
   const raw = String(value || "No battery");
@@ -1630,7 +1691,7 @@ function portfolioAnnualOperatingValues(site, metrics = portfolioOperatingMetric
   const annualRevenue = explicitAnnualRevenue > 0 ? explicitAnnualRevenue : annualKwh * Number(metrics.revenuePerKwh || DEFAULT_INPUTS.netSellingPriceExVat || 0);
   const dataDays = Number(site?.maturity?.dataDays || 0);
   const dateInfo = portfolioActualDateInfo(site);
-  const uploadedSuffix = site?.liveActuals?.source === "uploaded" ? ` · uploaded actuals${site.liveActuals.asOfDate ? ` as of ${site.liveActuals.asOfDate}` : ""}` : "";
+  const uploadedSuffix = site?.liveActuals?.source === "uploaded" ? ` · uploaded actuals${site.liveActuals.asOfDate ? ` as of ${site.liveActuals.asOfDate}` : ""}` : site?.liveActuals?.actualSourceStatus ? ` · ${site.liveActuals.actualSourceStatus}` : "";
   const periodEnd = dateInfo.latestDate;
   const periodStart = hasExplicitAnnual && periodEnd
     ? portfolioDateAddDays(periodEnd, -364)
@@ -2421,7 +2482,7 @@ function renderPortfolioCalibration() {
     <section class="panel portfolio-method-note compact"><h3>How to read this page</h3><p class="muted">AADT shows passing traffic opportunity. MIC shows available grid capacity. Annual kWh and variance compare the live actual period against the matched model year/basis. Click the Status pill to see the recommendation. Sites with less than 12 months of history remain ramp-up and use a rolling 30-day annualised run-rate.</p></section>
     ${portfolioLiveCalibrationCard(mappedPortfolioSiteList)}
     <section class="panel portfolio-selector-panel"><div class="field"><label for="portfolioSiteSelect">Select operating hub</label><select id="portfolioSiteSelect">${siteOptions}</select><small>Mapped hubs can load directly into the model. Uploaded-only live sites show actuals but require MIC, AADT and charger setup before model loading.</small></div>${!portfolioCanLoadSite(selected) ? `<button type="button" class="secondary" id="applyPortfolioSite">Cannot load site</button>` : `<button type="button" class="primary" id="applyPortfolioSite">Load site into model + map</button>`}</section>
-    <section class="panel selected-backtest-card"><div class="selected-backtest-head"><div><span class="eyebrow">Selected hub</span><h3>${h(selected.name)}</h3><p>${h(selected.address || "Address unavailable")}</p></div>${portfolioMaturityBadge(selected.maturity?.tier)}</div><div class="portfolio-summary-grid selected-hub-overview">${kpi("Actual / annualised kWh/yr", kwh(selectedResult.actualAnnualKwh,0), selectedResult.actualAnnualBasis)}${kpi("Matched model kWh/yr", kwh(selectedResult.modelledAnnualKwh,0), selectedResult.modelComparisonBasis)}${kpi("Variance", portfolioVarianceBadge(selectedResult.annualKwhVariance), "matched model vs actual; ±15% = in benchmark")}${kpi("kWh/plug/day", number(selectedResult.metrics.kwhPerPlugDay,1), "actual productivity")}${kpi("AADT", number(selected.aadt,0), "vehicles/day")}${kpi("MIC", kva(selected.realMicKva,0), "actual connection")}${kpi("Status", portfolioPerformanceBadge(selectedResult.assessment.band), portfolioBenchmarkStatusLabel(selectedResult.assessment.benchmarkPosition))}${selectedCapexCards}</div>${!portfolioCanLoadSite(selected) ? `<div class="notice warn"><strong>Site cannot be loaded into the model.</strong> ${h(portfolioLoadBlockReason(selected))}</div>` : ""}${selectedCapex.note ? `<div class="notice"><strong>CAPEX note:</strong> ${h(selectedCapex.note)}</div>` : ""}<div class="notice ${selectedResult.assessment.band === "capacity_pressure" ? "warn" : selectedResult.assessment.band === "under_capture" ? "warn" : "good"}"><strong>${h(selectedAction.year)} · ${h(selectedAction.action)}:</strong> ${h(selectedResult.assessment.action)}</div><div class="portfolio-accordion-stack"><details class="portfolio-diagnostic-details"><summary>Traffic and benchmark detail</summary><div class="portfolio-benchmark-grid">${selectedMethodCards}</div><div class="portfolio-config-grid compact"><div><strong>Matched AADT</strong><span>${number(selected.aadt,0)} veh/day · ${h(selected.aadtCounter || "AADT counter")}</span></div><div><strong>AADT method</strong><span>${h(selected.aadtAggregationMethod || "curated / automatic counter selection")}</span></div><div><strong>AADT basis note</strong><span>${h(selected.aadtBasisNote || "AADT mapped from TII counter database")}</span></div><div><strong>Effective benchmark AADT</strong><span>${number(selectedProfile.effectiveAadt,0)} veh/day after site-type cap</span></div><div><strong>Matched model basis</strong><span>${h(selectedResult.modelComparisonBasis || "Model year")}</span></div><div><strong>Model factors applied</strong><span>${h(selectedResult.category.label)} · target ${number(selectedResult.targetSessionsPer1000Aadt,2)} sess/1k AADT · ramp ${pct(selectedResult.modelRampFactor,0)} · growth ${number(selectedResult.modelGrowthFactor,2)}x</span></div><div><strong>Actual sessions / 1k AADT</strong><span>${number(selectedResult.metrics.sessionsPer1000Aadt,2)}</span></div><div><strong>Peer kWh/plug/day median</strong><span>${number(peerMedianPlug,1)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>MIC / grid capacity detail</summary><div class="portfolio-config-grid compact"><div><strong>Current MIC</strong><span>${kva(selected.realMicKva,0)}</span></div><div><strong>Recommended MIC by Year 20</strong><span>${kva(selectedResult.doNothing.year20?.requiredMicKva,0)}</span></div><div><strong>Year 20 MIC gap</strong><span>${kva(Math.max(0, Number(selectedResult.doNothing.year20?.requiredMicKva || 0) - Number(selected.realMicKva || 0)),0)}</span></div><div><strong>First MIC trigger</strong><span>${selectedResult.doNothing.firstMicYear ? h(String(selectedResult.doNothing.firstMicYear)) : "No MIC trigger in 20yr"}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Configuration and 20-year do-nothing path</summary><div class="portfolio-config-grid compact"><div><strong>Model-equivalent configuration</strong><span>${h(selected.modelEquivalentSummary)}</span></div><div><strong>20-year do-nothing trigger</strong><span>${h(portfolioTriggerLabel(selectedResult.doNothing))}</span></div><div><strong>Trigger drivers</strong><span>${h(selectedResult.doNothing.triggerDrivers?.join(" + ") || "No near-term driver")}</span></div><div><strong>20-yr lost revenue risk</strong><span>${currency(selectedResult.doNothing.lostRevenue20yr,0)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Model QA diagnostics</summary><div class="portfolio-summary-grid">${kpi("Actual 30D kWh", kwh(selectedResult.actualKwh,0), "latest rolling operating data")}${kpi("Modelled 30D kWh", kwh(selectedResult.calibratedKwh,0), "site-type target")}${kpi("30D variance", portfolioVarianceBadge(selectedResult.calibratedKwhVariance), "QA comparison")}${kpi("Base annual variance", portfolioVarianceBadge(selectedResult.baseAnnualKwhVariance), "uncalibrated QA")}</div><p class="muted small">Technical diagnostics are retained for audit and investment review. The main comparison is matched to the relevant model year/basis before the ±15% benchmark status is applied.</p></details></div></section>
+    <section class="panel selected-backtest-card"><div class="selected-backtest-head"><div><span class="eyebrow">Selected hub</span><h3>${h(selected.name)}</h3><p>${h(selected.address || "Address unavailable")}</p></div>${portfolioMaturityBadge(selected.maturity?.tier)}</div><div class="portfolio-summary-grid selected-hub-overview">${kpi("Actual / annualised kWh/yr", kwh(selectedResult.actualAnnualKwh,0), selectedResult.actualAnnualBasis)}${kpi("Matched model kWh/yr", kwh(selectedResult.modelledAnnualKwh,0), selectedResult.modelComparisonBasis)}${kpi("Variance", portfolioVarianceBadge(selectedResult.annualKwhVariance), "matched model vs actual; ±15% = in benchmark")}${kpi("kWh/plug/day", number(selectedResult.metrics.kwhPerPlugDay,1), "actual productivity")}${kpi("AADT", number(selected.aadt,0), "vehicles/day")}${kpi("MIC", kva(selected.realMicKva,0), "actual connection")}${kpi("Status", portfolioPerformanceBadge(selectedResult.assessment.band), portfolioBenchmarkStatusLabel(selectedResult.assessment.benchmarkPosition))}${selectedCapexCards}</div>${!portfolioCanLoadSite(selected) ? `<div class="notice warn"><strong>Site cannot be loaded into the model.</strong> ${h(portfolioLoadBlockReason(selected))}</div>` : ""}${selectedCapex.note ? `<div class="notice"><strong>CAPEX note:</strong> ${h(selectedCapex.note)}</div>` : ""}<div class="notice ${selectedResult.assessment.band === "capacity_pressure" ? "warn" : selectedResult.assessment.band === "under_capture" ? "warn" : "good"}"><strong>${h(selectedAction.year)} · ${h(selectedAction.action)}:</strong> ${h(selectedResult.assessment.action)}</div><div class="portfolio-accordion-stack"><details class="portfolio-diagnostic-details"><summary>Traffic and benchmark detail</summary><div class="portfolio-benchmark-grid">${selectedMethodCards}</div><div class="portfolio-config-grid compact"><div><strong>Matched AADT</strong><span>${number(selected.aadt,0)} veh/day · ${h(selected.aadtCounter || "AADT counter")}</span></div><div><strong>AADT method</strong><span>${h(selected.aadtAggregationMethod || "curated / automatic counter selection")}</span></div><div><strong>AADT basis note</strong><span>${h(selected.aadtBasisNote || "AADT mapped from TII counter database")}</span></div><div><strong>Effective benchmark AADT</strong><span>${number(selectedProfile.effectiveAadt,0)} veh/day after site-type cap</span></div><div><strong>Matched model basis</strong><span>${h(selectedResult.modelComparisonBasis || "Model year")}</span></div><div><strong>Model factors applied</strong><span>${h(selectedResult.category.label)} · target ${number(selectedResult.targetSessionsPer1000Aadt,2)} sess/1k AADT · ramp ${pct(selectedResult.modelRampFactor,0)} · growth ${number(selectedResult.modelGrowthFactor,2)}x</span></div><div><strong>Actual sessions / 1k AADT</strong><span>${number(selectedResult.metrics.sessionsPer1000Aadt,2)}</span></div><div><strong>Peer kWh/plug/day median</strong><span>${number(peerMedianPlug,1)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>MIC / grid capacity detail</summary><div class="portfolio-config-grid compact"><div><strong>Current MIC</strong><span>${kva(selected.realMicKva,0)}</span></div><div><strong>Recommended MIC by Year 20</strong><span>${kva(selectedResult.doNothing.year20?.requiredMicKva,0)}</span></div><div><strong>Year 20 MIC gap</strong><span>${kva(Math.max(0, Number(selectedResult.doNothing.year20?.requiredMicKva || 0) - Number(selected.realMicKva || 0)),0)}</span></div><div><strong>First MIC trigger</strong><span>${selectedResult.doNothing.firstMicYear ? h(String(selectedResult.doNothing.firstMicYear)) : "No MIC trigger in 20yr"}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Configuration and 20-year do-nothing path</summary><div class="portfolio-config-grid compact"><div><strong>Model-equivalent configuration</strong><span>${h(selected.modelEquivalentSummary)}</span></div><div><strong>20-year do-nothing trigger</strong><span>${h(portfolioTriggerLabel(selectedResult.doNothing))}</span></div><div><strong>Trigger drivers</strong><span>${h(selectedResult.doNothing.triggerDrivers?.join(" + ") || "No near-term driver")}</span></div><div><strong>20-yr lost revenue risk</strong><span>${currency(selectedResult.doNothing.lostRevenue20yr,0)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Model QA diagnostics</summary><div class="portfolio-summary-grid">${kpi("Actual source", h(portfolioActualSourceLabel(selected)), selected.liveActuals?.sourceFile ? h(selected.liveActuals.sourceFile) : "portfolio baseline")}${kpi("Actual 30D kWh", kwh(selectedResult.actualKwh,0), "latest rolling operating data")}${kpi("Modelled 30D kWh", kwh(selectedResult.calibratedKwh,0), "site-type target")}${kpi("30D variance", portfolioVarianceBadge(selectedResult.calibratedKwhVariance), "QA comparison")}${kpi("Base annual variance", portfolioVarianceBadge(selectedResult.baseAnnualKwhVariance), "uncalibrated QA")}</div><p class="muted small">Technical diagnostics are retained for audit and investment review. The main comparison is matched to the relevant model year/basis before the ±15% benchmark status is applied.</p></details></div></section>
     <section class="panel portfolio-filter-panel"><h3>Filters and sorting</h3><div class="portfolio-filter-grid">${portfolioMultiFilter("portfolioMaturity", "maturity", maturityOptions, "Maturity", "All maturity")}${portfolioMultiFilter("portfolioCategory", "category", categoryOptions, "Site category", "All categories")}${portfolioMultiFilter("portfolioPerformance", "performanceBand", statusOptions, "Status", "All statuses")}${portfolioMultiFilter("portfolioConfidence", "confidence", confidenceOptions, "AADT confidence", "All AADT confidence")}${portfolioMultiFilter("portfolioMicBand", "micBand", micBandOptions, "MIC band", "All MIC")}</div><p class="muted small">Open a filter and tick one or more options. Click a header to sort. Current sort: ${h(sortNames[sortKey] || "investment priority")} · ${h(sortDir)}.</p></section>
     <section class="panel"><h3>Current filtered view</h3><div class="portfolio-summary-grid">${selectedFilterCard("Sites shown", number(filtered.length,0), `${number(results.length,0)} mapped sites`)}${selectedFilterCard("Capacity pressure", number(capacityCount,0), "add plugs/MIC/battery candidates")}${selectedFilterCard("Under-capturing", number(underCaptureCount,0), "fix capture before capex")}${selectedFilterCard("In benchmark", number(normalCount,0), "monitor")}${selectedFilterCard("Earliest trigger", earliestTrigger ? String(earliestTrigger) : "No trigger", "do-nothing path")}${selectedFilterCard("Median abs variance", Number.isFinite(medianAbsAnnualVariance) ? pct(medianAbsAnnualVariance,1) : "—", "annual model vs actual")}</div></section>
     <section class="panel"><h3>Portfolio comparison table</h3>${table(headers, sorted.map(row), "portfolio-table portfolio-comparison-table portfolio-annual-table")}</section>
@@ -2764,7 +2825,7 @@ function wirePage(r) {
     node.addEventListener("change", e => {
       const key = e.target.dataset.config;
       let raw = e.target.value;
-      if (["selectedMicKva", "chargerWarrantyYears", "batteryWarrantyYears", "dispenserCount", "chargerCount"].includes(key)) {
+      if (["selectedMicKva", "chargerWarrantyYears", "batteryWarrantyYears", "dispenserCount", "chargerCount", "kempowerTripleCabinetCount"].includes(key)) {
         raw = raw === "N/A" ? "N/A" : Number(raw);
       }
       setConfig(key, raw);
@@ -3135,6 +3196,7 @@ function enforceConfigCompatibility() {
   if (state.config.platform === "Autel Standalone") {
     state.config.cabinetType = "N/A";
     state.config.dispenserCount = "N/A";
+    state.config.kempowerTripleCabinetCount = "N/A";
     if (state.config.chargerModel === "N/A") state.config.chargerModel = "Autel DH480 — 320 kW";
     if (state.config.chargerCount === "N/A") state.config.chargerCount = 2;
     state.config.chargerCount = Math.max(1, Math.round(Number(state.config.chargerCount) || 1));
@@ -3143,6 +3205,12 @@ function enforceConfigCompatibility() {
     state.config.chargerCount = "N/A";
     const cabinets = cabinetOptions(state.config.platform);
     if (!cabinets.some(x => x.item === state.config.cabinetType)) state.config.cabinetType = cabinets[0]?.item || "N/A";
+    if (showKempowerTripleCabinetCount(state.config)) {
+      const rawCount = Math.round(Number(state.config.kempowerTripleCabinetCount || 1));
+      state.config.kempowerTripleCabinetCount = rawCount === 2 ? 2 : 1;
+    } else {
+      state.config.kempowerTripleCabinetCount = "N/A";
+    }
     const maxDual = selectedCabinetMaxDualDisp(state.config);
     let disp = state.config.dispenserCount === "N/A" ? 2 : Math.round(Number(state.config.dispenserCount) || 0);
     disp = Math.max(0, disp);

@@ -524,7 +524,7 @@ function pdfPortfolioResult(site) {
   return { site, category: pdfPortfolioProfile(site).category.label, maturity: pdfPortfolioMaturityLabel(tier), actualAnnualKwh: actual.annualKwh, modelledAnnualKwh: modelAnnual, modelBasis: matched.basis, annualVariance: variance, status, triggerYear: doNothing.firstActionYear || "Monitor" };
 }
 function portfolioExportRows(limit = 80) {
-  return PORTFOLIO_CALIBRATION_SITES.map(pdfPortfolioResult).sort((a,b) => String(a.site.name).localeCompare(String(b.site.name))).slice(0, limit);
+  return PORTFOLIO_CALIBRATION_SITES.filter(site => site.displayInPortfolio !== false && !site.retiredFromPortfolio).map(pdfPortfolioResult).sort((a,b) => String(a.site.name).localeCompare(String(b.site.name))).slice(0, limit);
 }
 function portfolioPdfTableRows(limit = 80) {
   return portfolioExportRows(limit).map(r => [esc(r.site.name), esc(r.maturity), esc(r.category), `${number(r.site.realMicKva,0)} kVA`, number(r.site.aadt,0), kwh(r.actualAnnualKwh,0), kwh(r.modelledAnnualKwh,0), Number.isFinite(r.annualVariance) ? pct(r.annualVariance,1) : "—", esc(r.status)]);

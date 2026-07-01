@@ -3,7 +3,7 @@ import { MIC_VALUES } from "../data/defaultAssumptions.js";
 import { calculateYearByYear, summariseFinancials } from "./financialEngine.js";
 import { technicalChecks, validateConfiguration } from "./technicalEngine.js";
 import { batteryItem, batteryOptionsFor } from "../data/batteryLibrary.js";
-import { cabinetOptions, standaloneChargerOptions } from "../data/platformLibrary.js";
+import { cabinetOptions, standaloneChargerOptions, effectiveCabinetMaxDualDisp } from "../data/platformLibrary.js";
 
 const SAFE_NEGATIVE_METRIC = -999999999;
 const SAFE_POSITIVE_METRIC = 999999999;
@@ -105,6 +105,7 @@ function rightSizeKey(config = {}) {
     config.chargerModel,
     config.chargerCount,
     config.cabinetType,
+    config.kempowerTripleCabinetCount,
     config.dispenserCount,
     config.serviceLevel
   ].map(v => String(v ?? "")).join("|");
@@ -163,6 +164,7 @@ function hardwareVariants(base, demand) {
           chargerCount: count,
           cabinetType: "N/A",
           dispenserCount: "N/A",
+          kempowerTripleCabinetCount: "N/A",
           autoSizedOutputs: requiredOutputs,
           autoSized: count !== Number(base.chargerCount) || charger.item !== base.chargerModel
         }));
@@ -174,16 +176,22 @@ function hardwareVariants(base, demand) {
     const variants = [];
     cabinetOptions(base.platform).sort((a, b) => (a.powerKw || 0) - (b.powerKw || 0)).forEach(cab => {
       const minDisp = Math.max(1, Math.ceil(requiredOutputs / 2));
-      for (let disp = minDisp; disp <= (cab.maxDualDisp || minDisp); disp += 1) {
-        variants.push(withBase(base, {
-          chargerModel: "N/A",
-          chargerCount: "N/A",
-          cabinetType: cab.item,
-          dispenserCount: disp,
-          autoSizedOutputs: requiredOutputs,
-          autoSized: disp !== Number(base.dispenserCount) || cab.item !== base.cabinetType
-        }));
-      }
+      const cabinetCounts = base.platform === "Kempower Distributed" && cab.item === "Kempower Triple Cabinet" ? [1, 2] : ["N/A"];
+      cabinetCounts.forEach(count => {
+        const configForLimit = { ...base, cabinetType: cab.item, kempowerTripleCabinetCount: count };
+        const maxDual = effectiveCabinetMaxDualDisp(configForLimit, cab) || minDisp;
+        for (let disp = minDisp; disp <= maxDual; disp += 1) {
+          variants.push(withBase(base, {
+            chargerModel: "N/A",
+            chargerCount: "N/A",
+            cabinetType: cab.item,
+            kempowerTripleCabinetCount: count,
+            dispenserCount: disp,
+            autoSizedOutputs: requiredOutputs,
+            autoSized: disp !== Number(base.dispenserCount) || cab.item !== base.cabinetType || String(count) !== String(base.kempowerTripleCabinetCount || "N/A")
+          }));
+        }
+      });
     });
     return variants;
   }
@@ -270,7 +278,8 @@ function noCandidateScenario(family, idx, inputs, demand, horizon) {
     chargerModel: family.platform === "Autel Standalone" ? "No available charger count in library" : "N/A",
     chargerCount: family.platform === "Autel Standalone" ? 0 : "N/A",
     cabinetType: family.platform && family.platform.includes("Distributed") ? "No available cabinet/dispenser count in library" : "N/A",
-    dispenserCount: family.platform && family.platform.includes("Distributed") ? 0 : "N/A"
+    dispenserCount: family.platform && family.platform.includes("Distributed") ? 0 : "N/A",
+    kempowerTripleCabinetCount: "N/A"
   });
   const requiredPlugs = Math.ceil(Number(demand.maxConcurrentSessions) || 0);
   const failure = `No equipment-library hardware candidate can cover the required ${requiredPlugs} simultaneous plug(s).`;

@@ -1,5 +1,5 @@
-// Auto-generated portfolio calibration library for v35.39.
-// Each site is mapped to a model-equivalent configuration for back-testing.
+// Auto-generated portfolio calibration library for v35.45.
+// Each site is mapped to active model configuration plus verified actual-hardware metadata where available.
 export const PORTFOLIO_CALIBRATION_SITES = [
   {
     "id": "circle_k_express_dungarvan",
@@ -26,17 +26,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 170,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 180
     },
     "realMicKva": 170,
-    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × Axon Easy 180 kW mapped to Autel DH240 equivalent (2 plugs)",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 125696,
@@ -46,7 +48,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020255"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of two selected N25 counters around Dungarvan; both are same-corridor public TII AADT rows."
+    "aadtBasisNote": "Average of two selected N25 counters around Dungarvan; both are same-corridor public TII AADT rows.",
+    "actualHardwareSummary": "1 × Axon Easy 180 kW",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 180
   },
   {
     "id": "circle_k_junction_20",
@@ -73,17 +78,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 170,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 180
     },
     "realMicKva": 170,
-    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × Axon Easy 180 kW mapped to Autel DH240 equivalent (2 plugs)",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 64999,
@@ -93,7 +100,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020018"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected N01/M01 Junction 20 corridor counters; same access corridor."
+    "aadtBasisNote": "Average of selected N01/M01 Junction 20 corridor counters; same access corridor.",
+    "actualHardwareSummary": "1 × Axon Easy 180 kW",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 180
   },
   {
     "id": "anner_hotel_120_kw_dc",
@@ -132,7 +142,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "realMicKva": 120,
     "modelEquivalentSummary": "1 × DH240 / 160 kW equivalent",
     "modelEquivalentPlugs": 2,
-    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
+    "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery. Removed from active portfolio per verified mapping review.",
     "actualCapexExVat": 58580,
     "capexSource": "Actual project CAPEX provided by model owner",
     "aadtCounterIds": [
@@ -140,7 +150,11 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020088"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected M08 Thurles/Cashel corridor counters; demand model applies hotel/destination relevance cap."
+    "aadtBasisNote": "Average of selected M08 Thurles/Cashel corridor counters; demand model applies hotel/destination relevance cap.",
+    "displayInPortfolio": false,
+    "retiredFromPortfolio": true,
+    "loadBlocked": true,
+    "loadBlockReason": "Removed from active verified mapping because no MIC was confirmed in the verified site dataset."
   },
   {
     "id": "the_cope_shopping_centre",
@@ -167,17 +181,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 184
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × ABB Terra 184 kW mapped to Autel DH240 equivalent (2 plugs)",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 120728,
@@ -186,7 +202,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020562"
     ],
     "aadtAggregationMethod": "single_counter_excluding_abnormal_low",
-    "aadtBasisNote": "Uses the valid N56 TMU counter only; CMU 000000080562 has 12 AADT and is excluded as non-representative."
+    "aadtBasisNote": "Uses the valid N56 TMU counter only; CMU 000000080562 has 12 AADT and is excluded as non-representative.",
+    "actualHardwareSummary": "1 × ABB Terra 184 kW",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 184
   },
   {
     "id": "walsh_s_centra_service_station_roscommon",
@@ -260,17 +279,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 360
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Axon Easy 180 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 268323,
@@ -280,7 +301,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020222"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected N22 Cork/Model Farm corridor counters from the curated mapping file."
+    "aadtBasisNote": "Average of selected N22 Cork/Model Farm corridor counters from the curated mapping file.",
+    "actualHardwareSummary": "2 × Axon Easy 180 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 360
   },
   {
     "id": "oran_point_oranmore",
@@ -307,17 +331,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 184
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × ABB Terra 184 kW mapped to Autel DH240 equivalent (2 plugs)",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery. Oran Point MIC corrected to 199 kVA in CAPEX calibration revision.",
     "actualCapexExVat": 85993,
@@ -327,7 +353,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000003182"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected M18/N18 Oranmore/Kilcolgan corridor counters."
+    "aadtBasisNote": "Average of selected M18/N18 Oranmore/Kilcolgan corridor counters.",
+    "actualHardwareSummary": "1 × ABB Terra 184 kW",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 184
   },
   {
     "id": "athlone_m6_junction_13_westpoint_business_centre",
@@ -354,17 +383,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 368
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × ABB Terra 184 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 142011,
@@ -374,7 +405,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020065"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected Athlone bypass / M6 Junction 13 corridor counters."
+    "aadtBasisNote": "Average of selected Athlone bypass / M6 Junction 13 corridor counters.",
+    "actualHardwareSummary": "2 × ABB Terra 184 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 368
   },
   {
     "id": "corrib_oil_tralee",
@@ -401,17 +435,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 170,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 360
     },
     "realMicKva": 170,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Axon Easy 180 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 171634,
@@ -421,7 +457,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000001703"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected N22/N70 Tralee ring-road counters."
+    "aadtBasisNote": "Average of selected N22/N70 Tralee ring-road counters.",
+    "actualHardwareSummary": "2 × Axon Easy 180 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 360
   },
   {
     "id": "the_brehon_hotel",
@@ -448,17 +487,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
-      "chargerModel": "Autel DH240 — 160 kW",
+      "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 160
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 × DH240 / 160 kW equivalent",
+    "modelEquivalentSummary": "1 × Schneider EVLink Pro DC mapped to Autel DH240 equivalent (2 plugs)",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 90858,
@@ -469,7 +510,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000001223"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected N22 Killarney counters; replaces the low 873 proxy and remains capped by hotel/destination factors."
+    "aadtBasisNote": "Average of selected N22 Killarney counters; replaces the low 873 proxy and remains capped by hotel/destination factors.",
+    "actualHardwareSummary": "1 × Schneider EVLink Pro DC - CCS + CCS",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 160
   },
   {
     "id": "greenhills_hotel",
@@ -544,17 +588,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 360
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Axon Easy 180 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 133517,
@@ -563,7 +609,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000001019"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected M01 Drogheda South corridor counter."
+    "aadtBasisNote": "Selected M01 Drogheda South corridor counter.",
+    "actualHardwareSummary": "2 × Axon Easy 180 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 360
   },
   {
     "id": "the_rhu_glenn_hotel",
@@ -590,17 +639,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 480
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Axon Easy 240 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "capexCalibrationNote": "Dashboard points include ancillary AC points; DC model mapping remains 2 DC chargers / 4 fast plugs.",
@@ -609,7 +660,12 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000001243"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected N25/N24 Waterford approach counters; replaces the low 2,967 proxy."
+    "aadtBasisNote": "Average of selected N25/N24 Waterford approach counters; replaces the low 2,967 proxy.",
+    "actualHardwareSummary": "2 × Axon Easy 240 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 480,
+    "actualCapexExVat": 158828,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "ahern_s_centra_castlemartyr",
@@ -636,24 +692,31 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 240
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × Axon Easy 240 kW mapped to Autel DH240 equivalent (2 plugs)",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "aadtCounterIds": [
       "000000001252"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N25 Castlemartyr-Midleton counter."
+    "aadtBasisNote": "Selected N25 Castlemartyr-Midleton counter.",
+    "actualHardwareSummary": "1 × Axon Easy 240 kW",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 240,
+    "actualCapexExVat": 89011,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "aherns_centra_carrigtwohill",
@@ -680,24 +743,31 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 240
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × Axon Easy 240 kW mapped to Autel DH240 equivalent (2 plugs)",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "aadtCounterIds": [
       "000000020256"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N25 Carrigtwohill bypass counter."
+    "aadtBasisNote": "Selected N25 Carrigtwohill bypass counter.",
+    "actualHardwareSummary": "1 × Axon Easy 240 kW",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 240,
+    "actualCapexExVat": 134222,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "charleville_park_hotel",
@@ -721,27 +791,34 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
-      "platform": "Autel Distributed",
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
-      "selectedMicKva": 199,
-      "chargerModel": "N/A",
-      "chargerCount": "N/A",
-      "cabinetType": "Autel Single Cabinet",
-      "dispenserCount": 4,
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH480 — 480 kW",
+      "chargerCount": 2,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 960
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
-    "modelEquivalentPlugs": 8,
+    "modelEquivalentSummary": "2 × Autel MaxiCharger DC DH480 standalone (4 plugs)",
+    "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "aadtCounterIds": [
       "000000001201"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N20 Buttevant-Charleville counter."
+    "aadtBasisNote": "Selected N20 Buttevant-Charleville counter.",
+    "actualHardwareSummary": "2 × Autel MaxiCharger DC DH480",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 960,
+    "actualCapexExVat": 140055,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "castletroy_park_hotel",
@@ -765,29 +842,34 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
-      "platform": "Autel Distributed",
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
-      "selectedMicKva": 199,
-      "chargerModel": "N/A",
-      "chargerCount": "N/A",
-      "cabinetType": "Autel Single Cabinet",
-      "dispenserCount": 4,
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH480 — 480 kW",
+      "chargerCount": 2,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 960
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
-    "modelEquivalentPlugs": 8,
+    "modelEquivalentSummary": "2 × Autel MaxiCharger DC DH480 standalone (4 plugs)",
+    "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 113416,
-    "capexSource": "Actual project CAPEX provided by model owner",
+    "capexSource": "Verified hardware/CAPEX mapping dataset",
     "aadtCounterIds": [
       "000000200722"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected M07 Castletroy/Ballysimon corridor counter; hotel/destination cap remains applied."
+    "aadtBasisNote": "Selected M07 Castletroy/Ballysimon corridor counter; hotel/destination cap remains applied.",
+    "actualHardwareSummary": "2 × Autel MaxiCharger DC DH480",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 960
   },
   {
     "id": "mallow_plaza",
@@ -811,27 +893,34 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
-      "platform": "Autel Distributed",
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
-      "selectedMicKva": 199,
-      "chargerModel": "N/A",
-      "chargerCount": "N/A",
-      "cabinetType": "Autel Single Cabinet",
-      "dispenserCount": 4,
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH480 — 480 kW",
+      "chargerCount": 2,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 960
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
-    "modelEquivalentPlugs": 8,
+    "modelEquivalentSummary": "2 × Autel MaxiCharger DC DH480 standalone (4 plugs)",
+    "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "aadtCounterIds": [
       "000000020204"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N20 Blarney-Mallow counter."
+    "aadtBasisNote": "Selected N20 Blarney-Mallow counter.",
+    "actualHardwareSummary": "2 × Autel MaxiCharger DC DH480",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 960,
+    "actualCapexExVat": 131568,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "leopardstown_retail_park",
@@ -858,17 +947,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 360
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Axon Easy 180 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 171779,
@@ -877,7 +968,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000001312"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N31 Brewery Road / Leopardstown counter."
+    "aadtBasisNote": "Selected N31 Brewery Road / Leopardstown counter.",
+    "actualHardwareSummary": "2 × Axon Easy 180 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 360
   },
   {
     "id": "finline_furniture_dublin",
@@ -904,17 +998,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 360
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Axon Easy 180 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 164525,
@@ -923,7 +1019,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000001072"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N07 Newlands Cross-Kingswood counter; high corridor proxy moderated by retail category factors."
+    "aadtBasisNote": "Selected N07 Newlands Cross-Kingswood counter; high corridor proxy moderated by retail category factors.",
+    "actualHardwareSummary": "2 × Axon Easy 180 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 360
   },
   {
     "id": "axis_retail_park",
@@ -947,28 +1046,35 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
-      "platform": "Autel Distributed",
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
-      "selectedMicKva": 199,
-      "chargerModel": "N/A",
-      "chargerCount": "N/A",
-      "cabinetType": "Autel Single Cabinet",
-      "dispenserCount": 4,
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH480 — 480 kW",
+      "chargerCount": 2,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 960
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
-    "modelEquivalentPlugs": 8,
+    "modelEquivalentSummary": "2 × Autel MaxiCharger DC DH480 standalone (4 plugs)",
+    "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "aadtCounterIds": [
       "000000020045",
       "000000001057"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected N04/N5 Longford bypass counters."
+    "aadtBasisNote": "Average of selected N04/N5 Longford bypass counters.",
+    "actualHardwareSummary": "2 × Autel MaxiCharger DC DH480",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 960,
+    "actualCapexExVat": 146060,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "tullamore_retail_park",
@@ -995,17 +1101,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 700,
       "chargerModel": "Autel DH480 — 320 kW",
       "chargerCount": 5,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 900
     },
     "realMicKva": 700,
-    "modelEquivalentSummary": "5 × Autel DH480 / 320 kW standalone equivalent (10 plugs)",
+    "modelEquivalentSummary": "5 × Axon Easy 180 kW mapped to Autel DH480 / 320 kW equivalent (10 plugs)",
     "modelEquivalentPlugs": 10,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery. Tullamore maps to 5 × Autel DH480; actual 700 kVA maps to 800 kVA model MIC on load.",
     "actualCapexExVat": 642662,
@@ -1014,7 +1122,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020801"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N80 Tullamore counter."
+    "aadtBasisNote": "Selected N80 Tullamore counter.",
+    "actualHardwareSummary": "5 × Axon Easy 180 kW",
+    "activeDcPlugs": 10,
+    "actualInstalledPowerKw": 900
   },
   {
     "id": "supervalu_tipperary",
@@ -1038,27 +1149,34 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
-      "platform": "Autel Distributed",
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
-      "selectedMicKva": 199,
-      "chargerModel": "N/A",
-      "chargerCount": "N/A",
-      "cabinetType": "Autel Single Cabinet",
-      "dispenserCount": 2,
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH480 — 480 kW",
+      "chargerCount": 1,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 480
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "Autel Single Cabinet + 2 dual dispensers (DH480 4-connector equivalent)",
-    "modelEquivalentPlugs": 4,
+    "modelEquivalentSummary": "1 × Autel MaxiCharger DC DH480 standalone (2 plugs)",
+    "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "aadtCounterIds": [
       "000000001241"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N24 Bansha-Tipperary Town counter; fixes previous zero AADT."
+    "aadtBasisNote": "Selected N24 Bansha-Tipperary Town counter; fixes previous zero AADT.",
+    "actualHardwareSummary": "1 × Autel MaxiCharger DC DH480",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 480,
+    "actualCapexExVat": 96139,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "newtown_park_hotel",
@@ -1082,27 +1200,34 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
-      "platform": "Autel Distributed",
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
-      "selectedMicKva": 199,
-      "chargerModel": "N/A",
-      "chargerCount": "N/A",
-      "cabinetType": "Autel Single Cabinet",
-      "dispenserCount": 4,
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH480 — 480 kW",
+      "chargerCount": 2,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 960
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
-    "modelEquivalentPlugs": 8,
+    "modelEquivalentSummary": "2 × Autel MaxiCharger DC DH480 standalone (4 plugs)",
+    "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "aadtCounterIds": [
       "000000020252"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N25 Carrickbyrne counter."
+    "aadtBasisNote": "Selected N25 Carrickbyrne counter.",
+    "actualHardwareSummary": "2 × Autel MaxiCharger DC DH480",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 960,
+    "actualCapexExVat": 128485,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "newbridge_retail_park",
@@ -1176,17 +1301,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 180
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × Axon Easy 180 kW mapped to Autel DH240 equivalent (2 plugs)",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 73617,
@@ -1196,7 +1323,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020088"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected M08 Thurles/Cashel corridor counters; address added from curated mapping."
+    "aadtBasisNote": "Average of selected M08 Thurles/Cashel corridor counters; address added from curated mapping.",
+    "actualHardwareSummary": "1 × Axon Easy 180 kW",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 180
   },
   {
     "id": "euro_business_park",
@@ -1223,17 +1353,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 360
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Axon Easy 180 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 171522,
@@ -1243,7 +1375,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020258"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected N25/N28 Little Island corridor counters."
+    "aadtBasisNote": "Average of selected N25/N28 Little Island corridor counters.",
+    "actualHardwareSummary": "2 × Axon Easy 180 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 360
   },
   {
     "id": "castleknock_hotel",
@@ -1270,17 +1405,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 200
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "1 × Autel MaxiCharger DC DH240 / 200 kW mapped to Autel DH240 equivalent (2 plugs)",
     "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 133072,
@@ -1290,7 +1427,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000001508"
     ],
     "aadtAggregationMethod": "single_counter_high_corridor_proxy",
-    "aadtBasisNote": "Selected M50 Castleknock corridor counter; high proxy moderated by hotel/destination factors."
+    "aadtBasisNote": "Selected M50 Castleknock corridor counter; high proxy moderated by hotel/destination factors.",
+    "actualHardwareSummary": "1 × Autel MaxiCharger DC DH240 - 200 kW",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 200
   },
   {
     "id": "corrib_oil_swinford",
@@ -1314,28 +1454,35 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
-      "platform": "Autel Distributed",
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
-      "selectedMicKva": 199,
-      "chargerModel": "N/A",
-      "chargerCount": "N/A",
-      "cabinetType": "Autel Single Cabinet",
-      "dispenserCount": 2,
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH480 — 480 kW",
+      "chargerCount": 1,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 480
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "Autel Single Cabinet + 2 dual dispensers (DH480 4-connector equivalent)",
-    "modelEquivalentPlugs": 4,
+    "modelEquivalentSummary": "1 × Autel MaxiCharger DC DH480 standalone (2 plugs)",
+    "modelEquivalentPlugs": 2,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "aadtCounterIds": [
       "000000001053",
       "000000001058"
     ],
     "aadtAggregationMethod": "same_corridor_average",
-    "aadtBasisNote": "Average of selected N05 Swinford approach counters."
+    "aadtBasisNote": "Average of selected N05 Swinford approach counters.",
+    "actualHardwareSummary": "1 × Autel MaxiCharger DC DH480",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 480,
+    "actualCapexExVat": 99945,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "o_brien_s_larkin_s_cross",
@@ -1359,27 +1506,34 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
-      "platform": "Autel Distributed",
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
-      "selectedMicKva": 199,
-      "chargerModel": "N/A",
-      "chargerCount": "N/A",
-      "cabinetType": "Autel Single Cabinet",
-      "dispenserCount": 4,
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH480 — 480 kW",
+      "chargerCount": 2,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 960
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "Autel Single Cabinet + 4 dual dispensers (DH480-equivalent, 8 plugs)",
-    "modelEquivalentPlugs": 8,
+    "modelEquivalentSummary": "2 × Autel MaxiCharger DC DH480 standalone (4 plugs)",
+    "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "aadtCounterIds": [
       "000000020252"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected N25 Carrickbyrne counter."
+    "aadtBasisNote": "Selected N25 Carrickbyrne counter.",
+    "actualHardwareSummary": "2 × Autel MaxiCharger DC DH480",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 960,
+    "actualCapexExVat": 111915,
+    "capexSource": "Verified hardware/CAPEX mapping dataset"
   },
   {
     "id": "corrib_oil_fermoy",
@@ -1406,17 +1560,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 360
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Axon Easy 180 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 158644,
@@ -1425,7 +1581,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020086"
     ],
     "aadtAggregationMethod": "single_counter",
-    "aadtBasisNote": "Selected M08 Mitchelstown-Fermoy counter."
+    "aadtBasisNote": "Selected M08 Mitchelstown-Fermoy counter.",
+    "actualHardwareSummary": "2 × Axon Easy 180 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 360
   },
   {
     "id": "malahide_afc",
@@ -1452,17 +1611,19 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
       "dispenserCount": "N/A",
-      "serviceLevel": "Premium",
-      "chargerWarrantyYears": 0,
-      "batteryWarrantyYears": 0
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 400
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Autel MaxiCharger DC DH240 / 200 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "sourceNote": "Operating hub portfolio back-test mapping; battery set to No battery.",
     "actualCapexExVat": 141297,
@@ -1471,7 +1632,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020011"
     ],
     "aadtAggregationMethod": "single_counter_medium_confidence",
-    "aadtBasisNote": "Selected M01 Airport-Swords corridor counter; medium confidence because this is a local/community site and model cap applies strongly."
+    "aadtBasisNote": "Selected M01 Airport-Swords corridor counter; medium confidence because this is a local/community site and model cap applies strongly.",
+    "actualHardwareSummary": "2 × Autel MaxiCharger DC DH240 - 200 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 400
   },
   {
     "id": "aldi_donabate",
@@ -1543,20 +1707,22 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
       "batteryWarrantyYears": 0,
-      "platform": "Autel Standalone",
-      "selectedMicKva": 50,
+      "selectedMicKva": 49,
       "chargerModel": "Autel DC Compact 50 — 50 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
-      "dispenserCount": "N/A"
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 47
     },
-    "realMicKva": 50,
-    "modelEquivalentSummary": "1 × Autel DC Compact 50 / 50 kW standalone",
+    "realMicKva": 49,
+    "modelEquivalentSummary": "1 × Autel MaxiCharger DC 47 kW pedestal (2 plugs)",
     "modelEquivalentPlugs": 2,
     "categoryKey": "local_community",
     "sourceNote": "Added static setup in CAPEX/live calibration revision. Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
@@ -1567,7 +1733,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000001282"
     ],
     "aadtAggregationMethod": "single_counter_dc50_class",
-    "aadtBasisNote": "Selected N28 Ringaskiddy-Shannonpark counter; small DC50 class and not part of high-power hub benchmark."
+    "aadtBasisNote": "Selected N28 Ringaskiddy-Shannonpark counter; small DC50 class and not part of high-power hub benchmark.",
+    "actualHardwareSummary": "1 × Autel MaxiCharger DC 47 kW Pedestal",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 47
   },
   {
     "id": "scg_dundalk_golf_club",
@@ -1591,20 +1760,22 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
       "batteryWarrantyYears": 0,
-      "platform": "Autel Standalone",
-      "selectedMicKva": 50,
+      "selectedMicKva": 49,
       "chargerModel": "Autel DC Compact 50 — 50 kW",
       "chargerCount": 1,
       "cabinetType": "N/A",
-      "dispenserCount": "N/A"
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 47
     },
-    "realMicKva": 50,
-    "modelEquivalentSummary": "1 × Autel DC Compact 50 / 50 kW standalone",
+    "realMicKva": 49,
+    "modelEquivalentSummary": "1 × Autel MaxiCharger DC 47 kW pedestal (2 plugs)",
     "modelEquivalentPlugs": 2,
     "categoryKey": "local_community",
     "sourceNote": "Added static setup in CAPEX/live calibration revision. Small DC50 class; excluded from main high-power hub benchmark but loadable for future DC50 modelling.",
@@ -1615,7 +1786,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020525"
     ],
     "aadtAggregationMethod": "selected_local_counter_dc50_class",
-    "aadtBasisNote": "Uses N52 Dundalk Southlink as the local/access proxy; M01 counter is retained only as wider context."
+    "aadtBasisNote": "Uses N52 Dundalk Southlink as the local/access proxy; M01 counter is retained only as wider context.",
+    "actualHardwareSummary": "1 × Autel MaxiCharger DC 47 kW Pedestal",
+    "activeDcPlugs": 2,
+    "actualInstalledPowerKw": 47
   },
   {
     "id": "douglas_court",
@@ -1639,20 +1813,22 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
+      "platform": "Autel Distributed",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
       "batteryWarrantyYears": 0,
-      "platform": "Autel Distributed",
       "selectedMicKva": 199,
       "chargerModel": "N/A",
       "chargerCount": "N/A",
       "cabinetType": "Autel Single Cabinet",
-      "dispenserCount": 4
+      "dispenserCount": 2,
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 480
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "1 × Autel DS480 + 4 dual dispensers (4 active DC points)",
+    "modelEquivalentSummary": "1 × Autel DS480 with 4 active plugs (physical 8-connector site retained as inactive capacity)",
     "modelEquivalentPlugs": 4,
     "categoryKey": "retail",
     "sourceNote": "Added static setup in CAPEX/live calibration revision. 1 DS480 + 4 dual dispensers; actual CAPEX provided.",
@@ -1665,7 +1841,10 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000001283"
     ],
     "aadtAggregationMethod": "single_counter_retail_proxy",
-    "aadtBasisNote": "Selected N28 N40-Rochestown counter; retail category cap moderates the high corridor value."
+    "aadtBasisNote": "Selected N28 N40-Rochestown counter; retail category cap moderates the high corridor value.",
+    "activeDcPlugs": 4,
+    "actualHardwareSummary": "1 × Autel MaxiCharger DC DS480 - 8 connectors; 4 active plugs modelled",
+    "actualInstalledPowerKw": 480
   },
   {
     "id": "banner_plaza_ennis_junction_12",
@@ -1699,11 +1878,13 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "chargerModel": "N/A",
       "chargerCount": "N/A",
       "cabinetType": "Kempower Triple Cabinet",
-      "dispenserCount": 4
+      "kempowerTripleCabinetCount": 1,
+      "dispenserCount": 2,
+      "actualInstalledPowerKwOverride": 600
     },
     "realMicKva": 150,
-    "modelEquivalentSummary": "Kempower 2 triple cabinets + 4 dual dispensers + Polarium large skid battery",
-    "modelEquivalentPlugs": 8,
+    "modelEquivalentSummary": "Current active: 1 × Kempower triple cabinet + 2 dual satellites / 4 plugs; full design retained as 2 triple cabinets + 8 plugs",
+    "modelEquivalentPlugs": 4,
     "categoryKey": "motorway_plaza",
     "sourceNote": "Added static setup in CAPEX/live calibration revision. Large skid battery + major infrastructure benchmark; do not mix into normal works benchmark.",
     "actualCapexExVat": 865368,
@@ -1715,7 +1896,16 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000020182"
     ],
     "aadtAggregationMethod": "selected_junction_counter_special",
-    "aadtBasisNote": "Uses Ennis South/Junction 12 M18 counter because the site is Junction 12 / Clarecastle side; special battery/major infrastructure class."
+    "aadtBasisNote": "Uses Ennis South/Junction 12 M18 counter because the site is Junction 12 / Clarecastle side; special battery/major infrastructure class.",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 600,
+    "actualHardwareSummary": "Current active live state: 1 × Kempower triple power cabinet + 2 dual satellites / 4 plugs. Full installed design: 2 × triple cabinets + 4 dual satellites / 8 plugs + Polarium large skid battery.",
+    "fullBuildConfig": {
+      "kempowerTripleCabinetCount": 2,
+      "dispenserCount": 4,
+      "plugs": 8,
+      "cabinetPowerKw": 1200
+    }
   },
   {
     "id": "texaco_newcastle",
@@ -1739,20 +1929,22 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "comparisonYearIndex": 1
     },
     "modelConfig": {
+      "platform": "Autel Standalone",
       "batteryStrategy": "Grid only",
       "batterySize": "No battery",
       "serviceLevel": "Premium",
       "chargerWarrantyYears": 0,
       "batteryWarrantyYears": 0,
-      "platform": "Autel Standalone",
       "selectedMicKva": 199,
       "chargerModel": "Autel DH240 — 240 kW",
       "chargerCount": 2,
       "cabinetType": "N/A",
-      "dispenserCount": "N/A"
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 400
     },
     "realMicKva": 199,
-    "modelEquivalentSummary": "2 × Autel DH240 / 240 kW standalone equivalent",
+    "modelEquivalentSummary": "2 × Autel MaxiCharger DC DH240 / 200 kW mapped to Autel DH240 equivalent (4 plugs)",
     "modelEquivalentPlugs": 4,
     "categoryKey": "urban_service",
     "sourceNote": "Added static setup in CAPEX/live calibration revision. Actual CAPEX provided.",
@@ -1765,6 +1957,49 @@ export const PORTFOLIO_CALIBRATION_SITES = [
       "000000200723"
     ],
     "aadtAggregationMethod": "single_counter_medium_confidence",
-    "aadtBasisNote": "Selected N07 Newcastle/Kilteel counter; high corridor proxy moderated by service-station factors."
+    "aadtBasisNote": "Selected N07 Newcastle/Kilteel counter; high corridor proxy moderated by service-station factors.",
+    "actualHardwareSummary": "2 × Autel MaxiCharger DC DH240 - 200 kW",
+    "activeDcPlugs": 4,
+    "actualInstalledPowerKw": 400
+  },
+  {
+    "id": "killashee_house_hotel",
+    "name": "Killashee House Hotel",
+    "address": "Kilcullen Rd, Killashee, Naas, Co. Kildare, W91 DC98",
+    "aadt": 0,
+    "aadtConfidence": "setup required",
+    "aadtCounter": "AADT not yet mapped for future live-data site",
+    "actual": {},
+    "maturity": {
+      "label": "Future hardware record",
+      "tier": "review",
+      "dataDays": 0,
+      "comparisonYearIndex": 1
+    },
+    "modelConfig": {
+      "platform": "Autel Standalone",
+      "batteryStrategy": "Grid only",
+      "batterySize": "No battery",
+      "serviceLevel": "Premium",
+      "chargerWarrantyYears": 0,
+      "batteryWarrantyYears": 0,
+      "selectedMicKva": 199,
+      "chargerModel": "Autel DH240 — 240 kW",
+      "chargerCount": 1,
+      "cabinetType": "N/A",
+      "dispenserCount": "N/A",
+      "kempowerTripleCabinetCount": "N/A",
+      "actualInstalledPowerKwOverride": 200
+    },
+    "realMicKva": 199,
+    "modelEquivalentSummary": "Future-only verified hardware record: 1 × Autel DH240 / 200 kW equivalent (2 plugs)",
+    "modelEquivalentPlugs": 2,
+    "actualHardwareSummary": "1 × Autel MaxiCharger DC DH240 - 200 kW",
+    "actualCapexExVat": 128154,
+    "capexSource": "Verified hardware/CAPEX mapping dataset",
+    "displayInPortfolio": false,
+    "includeWhenLiveUploaded": true,
+    "uploadedNeedsSetup": true,
+    "loadBlockReason": "Future-only verified hardware record. Add/review AADT before loading as an investment scenario."
   }
 ];

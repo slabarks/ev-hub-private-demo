@@ -391,7 +391,9 @@ export function compareExcelScenarios(inputs, demand, horizon) {
   feasible.forEach((s, i) => { s.rank = i + 1; s.roiRank = i + 1; });
   infeasible.forEach((s, i) => { s.rank = feasible.length + i + 1; s.roiRank = feasible.length + i + 1; });
   const scenarios = [...feasible, ...infeasible].map((s, i) => ({ ...s, id: `S${i + 1}`, suggestedFix: suggestedFixForScenario(s, demand, inputs) }));
-  const recommended = feasible[0] || null;
+  // recommended must point to the same fully-formed object as scenarios[0] so that
+  // recommended.id and recommended.suggestedFix are consistent with the scenarios array.
+  const recommended = feasible.length ? scenarios[0] : null;
   return {
     totalCombinationsGenerated: familyResults.length,
     totalCandidateConfigurationsGenerated: familyResults.reduce((a, s) => a + (s.candidatesTested || 1), 0),

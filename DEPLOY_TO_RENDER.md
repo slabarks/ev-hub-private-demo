@@ -19,7 +19,7 @@ Render Web Service, because this app uses the included Python server.
 5. Use:
    - Environment: `Python`
    - Build command: leave blank
-   - Start command: `python local_site_location_server.py`
+   - Start command: `python server.py`
 6. Add environment variables:
    - `DEMO_PASSWORD` = your chosen demo password
    - `DEMO_SESSION_SECRET` = a long random secret string
@@ -36,6 +36,6 @@ Render Web Service, because this app uses the included Python server.
 
 ## Local test with password
 ```bash
-DEMO_PASSWORD=test123 DISABLE_BROWSER_OPEN=1 python local_site_location_server.py
+DEMO_PASSWORD=test123 DISABLE_BROWSER_OPEN=1 python server.py
 ```
 Then open http://localhost:10314/ and log in with `test123`.

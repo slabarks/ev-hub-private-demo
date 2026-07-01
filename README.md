@@ -10,7 +10,7 @@ This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Po
 - Status logic is unified around matched variance first, then capacity, AADT/category review and peer-productivity diagnostics.
 - Export/PDF portfolio tables now use the same ±15% matched-variance rules; the investor PDF also hides the noisy Model basis column.
 
-Run locally with `python3 local_site_location_server.py`.
+Run locally with `python3 server.py`.
 
 # EV Charging Hub Investment Tool — v34.2 Design Verified
 

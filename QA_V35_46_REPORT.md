@@ -28,7 +28,7 @@
 - `node --check js/data/civilElectricalCostLibrary.js`
 - `node --check js/data/platformLibrary.js`
 - `node --check js/data/operatingHubCalibrationLibrary.js`
-- `python -m py_compile local_site_location_server.py`
+- `python -m py_compile server.py`
 - `npm test`
 - All static `.mjs` tests:
   - AADT mapping

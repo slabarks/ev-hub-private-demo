@@ -536,6 +536,10 @@ const DEMAND_BENCHMARK_PROFILES = {
     label: "Urban service station", shortLabel: "Urban service", relevance: 0.22, capture: 0.16, targetSessionsPer1000Aadt: 0.19, highPlugTargetSessionsPer1000Aadt: 0.36, effectiveAadtCap: 35000,
     basis: "local corridor / fuel-stop behaviour", note: "Best for fuel-stop and local corridor sites where access, signage and local competition matter strongly."
   },
+  town_hub_forecourt: {
+    label: "Town hub / community forecourt", shortLabel: "Town hub forecourt", relevance: 0.28, capture: 0.18, targetSessionsPer1000Aadt: 0.45, effectiveAadtCap: 20000,
+    basis: "catchment-led / uncontested town forecourt", note: "Best for forecourt sites that are the primary fuel/EV stop for a town or area with no other DC charger within 15 km. AADT understates catchment — auto-classified when competition check confirms no nearby DC chargers."
+  },
   hotel_destination: {
     label: "Hotel / destination", shortLabel: "Hotel / destination", relevance: 0.12, capture: 0.12, targetSessionsPer1000Aadt: 0.34, effectiveAadtCap: 12000,
     basis: "destination-led demand", note: "Best for hotels, resorts, tourist or dwell-led locations where AADT can understate destination demand."
@@ -549,7 +553,7 @@ const DEMAND_BENCHMARK_PROFILES = {
     basis: "manual review required", note: "Use where the address has mixed signals or the AADT counter may not reflect the site entrance."
   }
 };
-const DEMAND_PROFILE_ORDER = ["motorway_plaza", "retail", "urban_service", "hotel_destination", "local_community", "review"];
+const DEMAND_PROFILE_ORDER = ["motorway_plaza", "retail", "urban_service", "town_hub_forecourt", "hotel_destination", "local_community", "review"];
 function demandBenchmarkProfile(key) {
   return DEMAND_BENCHMARK_PROFILES[key] || DEMAND_BENCHMARK_PROFILES.review;
 }
@@ -1434,6 +1438,11 @@ const PORTFOLIO_CATEGORY_FACTORS = {
     benchmarkWeight: "local corridor / fuel-stop behaviour",
     note: "Fuel-stop/local corridor behaviour; watch visibility, access and local competition before expansion."
   },
+  town_hub_forecourt: {
+    label: "Town hub / community forecourt", relevance: 0.28, capture: 0.18, targetSessionsPer1000Aadt: 0.45, effectiveAadtCap: 20000,
+    benchmarkWeight: "catchment-led / uncontested town forecourt",
+    note: "Forecourt serving town catchment with no DC competitor within 15 km. AADT understates real demand — auto-classified by competition check. Empirical basis: Corrib Oil Swinford (0.52), Walsh Centra Roscommon (0.47), Aherns Castlemartyr (0.47)."
+  },
   hotel_destination: {
     label: "Hotel / destination", relevance: 0.12, capture: 0.12, targetSessionsPer1000Aadt: 0.34, effectiveAadtCap: 12000, destinationMonthlyFloorKwh: 3000, destinationFloorMaxAadt: 10000,
     benchmarkWeight: "destination-led demand",
@@ -1457,6 +1466,7 @@ function portfolioCategoryKey(site) {
   if (/(retail|shopping|cope|supervalu|southgate|newbridge|leopardstown|axis)/.test(n)) return "retail";
   if (/(hotel|brehon|greenhills|charleville|castletroy|newtown)/.test(n)) return "hotel_destination";
   if (/(corrib|circle k|centra|walsh|dungarvan|fermoy|tralee|roscommon)/.test(n)) return "urban_service";
+  if (/(town.hub|community.forecourt)/.test(n)) return "town_hub_forecourt";
   if (/(afc|community|gaa|sports)/.test(n)) return "local_community";
   return "review";
 }

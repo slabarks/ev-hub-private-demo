@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: ""
-    startCommand: "python local_site_location_server.py"
+    startCommand: "python server.py"
     envVars:
       - key: DEMO_PASSWORD
         sync: false

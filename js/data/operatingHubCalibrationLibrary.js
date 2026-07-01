@@ -1,4 +1,4 @@
-// Auto-generated portfolio calibration library for v35.46.
+// Auto-generated portfolio calibration library for v35.46 + firstActiveDate patch.
 // Each site is mapped to active model configuration plus verified actual-hardware metadata where available.
 export const PORTFOLIO_CALIBRATION_SITES = [
   {
@@ -418,6 +418,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001225/000000001703",
     "actual": {
+      "firstActiveDate": "2025-10-01",
       "rolling30NetRevenue": 4725.43,
       "rolling30Kwh": 7174.576099470119,
       "rolling30Sessions": 235.81840818601233,
@@ -571,6 +572,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001019",
     "actual": {
+      "firstActiveDate": "2025-09-01",
       "rolling30NetRevenue": 7245.48,
       "rolling30Kwh": 11000.74440573424,
       "rolling30Sessions": 361.5792764136996,
@@ -622,6 +624,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000032502/000000001243",
     "actual": {
+      "firstActiveDate": "2025-10-01",
       "rolling30NetRevenue": 2224.87,
       "rolling30Kwh": 3377.9992776166573,
       "rolling30Sessions": 111.0301711845934,
@@ -675,6 +678,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001252",
     "actual": {
+      "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 4405.62,
       "rolling30Kwh": 6689.011572565362,
       "rolling30Sessions": 219.85857275897845,
@@ -726,6 +730,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020256",
     "actual": {
+      "firstActiveDate": "2025-10-01",
       "rolling30NetRevenue": 3459.36,
       "rolling30Kwh": 5252.313879469794,
       "rolling30Sessions": 172.63630368926502,
@@ -777,6 +782,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001201",
     "actual": {
+      "firstActiveDate": "2025-11-01",
       "rolling30NetRevenue": 4154.99,
       "rolling30Kwh": 6308.482391557455,
       "rolling30Sessions": 207.35110409609268,
@@ -828,6 +834,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000200722",
     "actual": {
+      "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 5143.05,
       "rolling30Kwh": 7808.644633055572,
       "rolling30Sessions": 256.6593652262483,
@@ -879,6 +886,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020204",
     "actual": {
+      "firstActiveDate": "2025-11-01",
       "rolling30NetRevenue": 12005.31,
       "rolling30Kwh": 18227.54970293277,
       "rolling30Sessions": 599.1143861996931,
@@ -930,6 +938,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001312",
     "actual": {
+      "firstActiveDate": "2026-01-01",
       "rolling30NetRevenue": 4484.29,
       "rolling30Kwh": 6808.455496556474,
       "rolling30Sessions": 223.78452958660975,
@@ -981,6 +990,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001072",
     "actual": {
+      "firstActiveDate": "2026-01-01",
       "rolling30NetRevenue": 1827.4,
       "rolling30Kwh": 2774.5243002587476,
       "rolling30Sessions": 91.1947820873696,
@@ -1032,6 +1042,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020045/000000001057",
     "actual": {
+      "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 6389.82,
       "rolling30Kwh": 9701.603843865247,
       "rolling30Sessions": 318.8783202788202,
@@ -1084,6 +1095,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020801",
     "actual": {
+      "firstActiveDate": "2026-01-01",
       "rolling30NetRevenue": 5744.37,
       "rolling30Kwh": 8721.623155673275,
       "rolling30Sessions": 286.66770842684866,
@@ -1135,6 +1147,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001241",
     "actual": {
+      "firstActiveDate": "2026-03-01",
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
       "rolling30Sessions": 0,
@@ -1186,6 +1199,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020252",
     "actual": {
+      "firstActiveDate": "2026-03-01",
       "rolling30NetRevenue": 6471,
       "rolling30Kwh": 9824.858677341774,
       "rolling30Sessions": 322.92953643831055,
@@ -1237,6 +1251,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020074/000000020075",
     "actual": {
+      "firstActiveDate": "2025-10-01",
       "rolling30NetRevenue": 6273.26,
       "rolling30Kwh": 9524.6318878413,
       "rolling30Sessions": 313.06149648539576,
@@ -1284,6 +1299,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020087/000000020088",
     "actual": {
+      "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 2538.26,
       "rolling30Kwh": 3853.8163786662853,
       "rolling30Sessions": 126.66962218511918,
@@ -1336,6 +1352,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020257/000000020258",
     "actual": {
+      "firstActiveDate": "2025-12-01",
       "rolling30NetRevenue": 10558.06,
       "rolling30Kwh": 16030.203586291931,
       "rolling30Sessions": 526.8906539156033,
@@ -1388,6 +1405,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001508",
     "actual": {
+      "firstActiveDate": "2026-04-01",
       "rolling30NetRevenue": 236.21,
       "rolling30Kwh": 358.6354300996601,
       "rolling30Sessions": 11.787851306149486,
@@ -1440,6 +1458,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001053/000000001058",
     "actual": {
+      "firstActiveDate": "2026-02-01",
       "rolling30NetRevenue": 2284.81,
       "rolling30Kwh": 3469.005618077153,
       "rolling30Sessions": 114.02142391432795,
@@ -1492,6 +1511,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020252",
     "actual": {
+      "firstActiveDate": "2026-04-01",
       "rolling30NetRevenue": 580.46,
       "rolling30Kwh": 881.3069800416946,
       "rolling30Sessions": 28.9673433350304,
@@ -1543,6 +1563,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020086",
     "actual": {
+      "firstActiveDate": "2026-03-01",
       "rolling30NetRevenue": 2659.71,
       "rolling30Kwh": 4038.21277587895,
       "rolling30Sessions": 132.73047710714556,
@@ -1594,6 +1615,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "Medium",
     "aadtCounter": "TII 2026 · 000000020011",
     "actual": {
+      "firstActiveDate": "2026-02-01",
       "rolling30NetRevenue": 3889.49,
       "rolling30Kwh": 5905.376228857062,
       "rolling30Sessions": 194.10156122414529,
@@ -1645,6 +1667,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001015",
     "actual": {
+      "firstActiveDate": "2026-06-01",
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
       "rolling30Sessions": 0,
@@ -1799,6 +1822,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001283",
     "actual": {
+      "firstActiveDate": "2026-05-01",
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
       "rolling30Sessions": 0,
@@ -1854,6 +1878,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000020182",
     "actual": {
+      "firstActiveDate": "2026-01-01",
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
       "rolling30Sessions": 0,
@@ -1916,6 +1941,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "Medium",
     "aadtCounter": "TII 2026 · 000000200723",
     "actual": {
+      "firstActiveDate": "2026-04-01",
       "rolling30NetRevenue": 0,
       "rolling30Kwh": 0,
       "rolling30Sessions": 0,
@@ -1970,7 +1996,8 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadt": 0,
     "aadtConfidence": "setup required",
     "aadtCounter": "AADT not yet mapped for future live-data site",
-    "actual": {},
+    "actual": {
+      "firstActiveDate": "2026-05-01",},
     "maturity": {
       "label": "Future hardware record",
       "tier": "review",

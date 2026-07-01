@@ -6,5 +6,5 @@ echo.
 echo If an old Site Location-only dashboard is open on port 8000, ignore it and use port 10314.
 echo.
 start http://localhost:10314/
-python local_site_location_server.py
+python server.py
 pause

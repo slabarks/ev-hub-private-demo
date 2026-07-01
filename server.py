@@ -2254,6 +2254,49 @@ def tii_aadt_for_site(site, address: str = "", mode: str = "balanced"):
     raise RuntimeError(f"TII counter data was located but no usable automatic AADT could be calculated. Last error: {last_error}; candidates checked: {len(evaluated)}")
 
 
+
+def classify_hotel_subcategory(traffic: dict) -> dict:
+    """
+    Auto-promote a hotel site from hotel_destination to motorway_plaza when the
+    matched TII counter indicates the site sits on a motorway corridor.
+
+    Rule (empirically derived from portfolio data):
+      M-road or motorway-junction counter description AND AADT > 25,000
+      → suggestedCategoryKey = "motorway_plaza"
+
+    Basis:
+      - True destination hotels (Brehon 14k AADT, Greenhills 22.5k AADT) have
+        implied effective caps of 10,000–11,000 — well below the threshold.
+      - Road/motorway hotels (Castletroy M07 32k, Charleville N20 11k outperformer)
+        have implied caps of 34,000–42,000 — well above.
+      - Threshold of 25,000 sits cleanly between the two groups with no ambiguous cases
+        in the current portfolio.
+    """
+    import re as _re
+
+    desc = str(traffic.get("description") or traffic.get("counter_name") or "").lower()
+    aadt = int(traffic.get("aadt") or 0)
+
+    M_ROAD_PATTERNS = [
+        r"\bm0[1-9]\b", r"\bm[1-9][0-9]\b",   # M01–M99
+        r"\bjn\b", r"\bjn\d", r"junction",        # junction references
+        r"/m0", r"/m1", r"/m2",                        # counter codes like N24/M7
+    ]
+    is_motorway = any(_re.search(p, desc) for p in M_ROAD_PATTERNS)
+    AADT_THRESHOLD = 25000
+
+    if is_motorway and aadt > AADT_THRESHOLD:
+        return {
+            "suggestedCategoryKey": "motorway_plaza",
+            "suggestedCategoryLabel": "Motorway / plaza",
+            "categoryAutoClassified": True,
+            "categoryConfidence": "high",
+            "categoryBasis": f"Hotel on motorway corridor: {desc[:80]}; AADT {aadt:,} > {AADT_THRESHOLD:,} threshold",
+            "hotelOnMotorway": True,
+        }
+    return {}
+
+
 def classify_urban_service_subcategory(site: dict, traffic: dict, live_chargers: list) -> dict:
     """
     Automatically classify an urban-service-station address as either:
@@ -2497,6 +2540,14 @@ def search_coordinates(lat, lon, radius_km, address="Manual map point"):
         if is_service_station:
             cat_hint = classify_urban_service_subcategory(site, traffic, live_chargers)
             traffic = {**traffic, **cat_hint}
+        else:
+            is_hotel = any(k in addr_lower for k in [
+                "hotel", "resort", "lodge", "inn", "house hotel", "park hotel"
+            ])
+            if is_hotel:
+                hotel_hint = classify_hotel_subcategory(traffic)
+                if hotel_hint:
+                    traffic = {**traffic, **hotel_hint}
     except Exception:
         pass
     return {
@@ -2614,6 +2665,14 @@ def search(address, radius_km):
         if is_service_station:
             cat_hint = classify_urban_service_subcategory(site, traffic, live_chargers)
             traffic = {**traffic, **cat_hint}
+        else:
+            is_hotel = any(k in addr_lower for k in [
+                "hotel", "resort", "lodge", "inn", "house hotel", "park hotel"
+            ])
+            if is_hotel:
+                hotel_hint = classify_hotel_subcategory(traffic)
+                if hotel_hint:
+                    traffic = {**traffic, **hotel_hint}
     except Exception:
         pass
 

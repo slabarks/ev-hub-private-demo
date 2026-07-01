@@ -2138,7 +2138,11 @@ function portfolioSiteResults(site, benchmarks = portfolioBenchmarksByCategory()
   const benchmark = benchmarks[categoryKey] || benchmarks.review;
   const benchmarkRange = portfolioBenchmarkKwhRange(site, benchmark);
   const doNothing = portfolioDoNothingPath(site, metrics, calibrated.yearByYear?.derived, calibrated.inputs);
-  const annualKwhVariance = variance(matchedModel.modelKwh, annualActual.annualKwh);
+  // Suppress variance for sites with insufficient actual data (< 500 kWh rolling30).
+  // Aldi Donabate, SCG clubs etc. show +14,000% which is meaningless noise and
+  // confuses the portfolio table. null variance renders as "No actual" badge.
+  const hasEnoughData = annualActual.annualKwh >= 500 * 365 / 30;
+  const annualKwhVariance = hasEnoughData ? variance(matchedModel.modelKwh, annualActual.annualKwh) : null;
   const assessment = portfolioSiteAssessment(site, metrics, benchmark, benchmarkRange, doNothing, {
     annualVariance: annualKwhVariance,
     actualAnnualKwh: annualActual.annualKwh,

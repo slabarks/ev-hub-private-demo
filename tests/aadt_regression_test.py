@@ -33,8 +33,8 @@ print("── 1. Tesco Eircode curated matching ──")
 TESCO = [
     ("W91R2EF","Monread Road, Naas",87360), ("D17AP80","Clarehall SC, Coolock",61104),
     ("D11XY4E","Finglas Clearwater",146632), ("W23W6X3","Dublin Road, Maynooth",52976),
-    ("K32CK84","Millfield, Balbriggan",79162), ("R32EA92","JFL Avenue, Portlaoise",29622),
-    ("A92YV84","Donore Road, Drogheda",41287), ("A91HW97","Avenue Road, Dundalk",11555),
+    ("K32CK84","Millfield, Balbriggan",79162), ("R32YP86","JFL Avenue, Portlaoise",29622),
+    ("A92X820","Donore Road, Drogheda",41287), ("A91PK74","Avenue Road, Dundalk",11555),
 ]
 for ec, label, expect_aadt in TESCO:
     try:
@@ -83,6 +83,24 @@ if db_path.exists():
     check(f"coverage {with_coords}/{len(recs)} = {cov*100:.0f}%", cov >= 0.70)
     with_class = sum(1 for r in recs if r.get("route_class") in ("M","N","R"))
     check(f"route_class present {with_class}/{len(recs)}", with_class >= len(recs)*0.9)
+
+
+print("── 6. Endpoint waterfall order: curated/Eircode before text/geocode ──")
+WATERFALL_CASES = [
+    ("Booth Road, Clondalkin, Dublin 22 D22 K3E5", 29156, "curated-exact"),
+    ("South Lotts Road, Bath Avenue Place, Dublin 4 D04 DH94", 18000, "curated-exact"),
+    ("New site Fermoy", None, "strict-text-fallback"),
+    ("generic Dublin retail site", None, "strict-text-fallback"),
+]
+for addr, expected, layer in WATERFALL_CASES:
+    try:
+        r = srv.resolve_auto_tii_aadt(addr, params={}, mode="balanced")
+        if expected is not None:
+            check(f"waterfall '{addr[:34]}...' AADT", r.get("aadt") == expected and r.get("aadt_method_layer") == layer, f"got {r.get('aadt')} / {r.get('aadt_method_layer')}")
+        else:
+            check(f"waterfall '{addr[:34]}...' safe fallback", r.get("aadt_method_layer") == layer and "Review required" in r.get("confidence", ""), f"got {r.get('aadt')} / {r.get('aadt_method_layer')} / {r.get('confidence')}")
+    except Exception as e:
+        check(f"waterfall '{addr[:34]}...'", False, str(e))
 
 print(f"\n══ RESULT: {PASS} passed, {FAIL} failed ══")
 sys.exit(1 if FAIL else 0)

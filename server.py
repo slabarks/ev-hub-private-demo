@@ -1082,13 +1082,18 @@ def load_local_tii_aadt_records() -> list[dict]:
             sid = normalise_cosit(rec.get("site_id")) or str(rec.get("site_id", ""))
             if sid in AADT_COUNTER_COORD_OVERRIDES:
                 rec.update(AADT_COUNTER_COORD_OVERRIDES[sid])
-        # Best-effort enrichment: attach WGS84 coordinates from the official TII
-        # traffic counter location file when that source is reachable. The app
-        # still works with text matching if the online location file is blocked.
-        try:
-            _try_enrich_local_aadt_records_with_tii_locations(records)
-        except Exception as enrich_exc:
-            TII_LOCATION_ENRICHMENT_CACHE.update({"attempted": True, "error": str(enrich_exc), "matched": 0, "source": None})
+        # Coordinate-enriched packages are designed to work offline. Avoid a
+        # blocking online enrichment attempt when the local geocoded DB is present;
+        # only try the TII online location file if we had to fall back to the
+        # non-geocoded JSON.
+        if src_path != TII_LOCAL_AADT_GEOCODED_JSON:
+            try:
+                _try_enrich_local_aadt_records_with_tii_locations(records)
+            except Exception as enrich_exc:
+                TII_LOCATION_ENRICHMENT_CACHE.update({"attempted": True, "error": str(enrich_exc), "matched": 0, "source": None})
+        else:
+            with_coords = sum(1 for r in records if r.get("lat") and r.get("lon"))
+            TII_LOCATION_ENRICHMENT_CACHE.update({"attempted": False, "error": None, "matched": with_coords, "source": str(TII_LOCAL_AADT_GEOCODED_JSON.name)})
         TII_LOCAL_AADT_CACHE.update({"loaded": True, "records": records, "error": None})
         return records
     except Exception as exc:
@@ -1313,9 +1318,12 @@ def _aadt_rule_matches_address(rule: dict, address: str) -> bool:
                 return True
             continue
         ttoks = [t for t in _aadt_normalise_text(term).split() if t]
-        # 2. Multi-word alias — all words must appear
+        # 2. Multi-word alias — require the phrase/compact phrase, not loose
+        # token co-occurrence. Loose tokens such as "dublin" + "road" caused a
+        # Maynooth curated rule to catch unrelated Dublin addresses before their
+        # exact Eircode rule. This keeps curated matching investment-grade.
         if len(ttoks) >= 2:
-            if set(ttoks).issubset(norm_tokens) or tcompact in compact:
+            if tcompact in compact:
                 return True
             continue
         # 3. Single-word term — only distinctive site aliases, never bare towns
@@ -1364,8 +1372,22 @@ def _curated_aadt_result(rule: dict, site: dict | None = None) -> dict:
                 except Exception:
                     pass
         candidates.append(candidate)
+    effective_aadt = int(rule.get("aadt") or 0)
+    raw_values = []
+    for rec in records:
+        try:
+            v = float(rec.get("latest_aadt") or 0)
+            if v > 0:
+                raw_values.append(v)
+        except Exception:
+            pass
+    raw_counter_aadt = int(round(sum(raw_values) / len(raw_values))) if raw_values else effective_aadt
+    curated_override = bool(raw_values and abs(raw_counter_aadt - effective_aadt) > max(1, effective_aadt * 0.02))
     return {
-        "aadt": int(rule.get("aadt") or 0),
+        "aadt": effective_aadt,
+        "raw_tii_aadt": raw_counter_aadt,
+        "effective_model_aadt": effective_aadt,
+        "curated_effective_override": curated_override,
         "source": f"Curated TII AADT mapping · {'/'.join(ids) if ids else 'manual'}",
         "confidence": rule.get("confidence") or "high / curated TII mapping",
         "provider": "Curated site-to-AADT mapping workbook",
@@ -3656,6 +3678,143 @@ def _login_page(error: str = "") -> bytes:
     return html.encode("utf-8")
 
 
+
+def _aadt_confidence_label(confidence: str) -> str:
+    text = str(confidence or "").lower()
+    if "curated" in text or "golden" in text:
+        return "Curated"
+    if "direct counter" in text or "within 5km" in text:
+        return "Direct counter"
+    if "same-corridor" in text:
+        return "Same-corridor average"
+    if "corridor proxy" in text or "coordinate-ranked" in text:
+        return "Corridor proxy"
+    if "review required" in text or "manual" in text:
+        return "Review required"
+    if "fallback" in text:
+        return "Fallback"
+    return "Automatic"
+
+
+def _normalise_aadt_response(traffic: dict, *, layer: str, geocode_site: dict | None = None) -> dict:
+    """Attach a consistent AADT audit envelope without changing the chosen AADT.
+
+    raw_tii_aadt and effective_model_aadt are intentionally the same here. Category
+    caps and demand-model effective AADT are applied later in the front-end model.
+    """
+    out = dict(traffic or {})
+    try:
+        aadt = int(round(float(out.get("aadt") or 0)))
+    except Exception:
+        aadt = 0
+    out.setdefault("raw_tii_aadt", aadt)
+    out.setdefault("effective_model_aadt", aadt)
+    out.setdefault("aadt_confidence_label", _aadt_confidence_label(out.get("confidence")))
+    out["aadt_method_layer"] = layer
+    if geocode_site:
+        out.setdefault("geocode_source", geocode_site.get("source"))
+        out.setdefault("geocode_confidence", geocode_site.get("confidence"))
+        out.setdefault("geocode_match_type", geocode_site.get("match_type"))
+        out.setdefault("site_lat", geocode_site.get("lat"))
+        out.setdefault("site_lon", geocode_site.get("lon"))
+    return out
+
+
+def _manual_site_from_params(address: str, params: dict) -> dict | None:
+    try:
+        lat = float(params.get("lat", [""])[0])
+        lon = float(params.get("lon", [""])[0])
+        return {"name": address or "Selected site", "lat": lat, "lon": lon, "source": "manual/geocoded site coordinates", "confidence": "provided coordinates", "match_type": "manual-or-client-geocode"}
+    except Exception:
+        return None
+
+
+def resolve_auto_tii_aadt(address: str, *, params: dict | None = None, mode: str = "balanced") -> dict:
+    """Investment-grade AADT waterfall used by /api/auto-tii-aadt.
+
+    v35.57 strict order:
+      1. golden reference only (legacy validation case)
+      2. exact curated/Eircode/site-alias match
+      3. manual/client coordinates -> offline coordinate-ranked TII lookup
+      4. Eircode/address geocode -> offline coordinate-ranked TII lookup
+      5. TII public/daily coordinate lookup when local coordinate match fails
+      6. priority place rules for special anchors
+      7. strict text/route lookup as low-confidence fallback only
+
+    Text matching is intentionally last so generic Dublin/suburban addresses cannot
+    beat curated rules or coordinate-ranked counters.
+    """
+    params = params or {}
+    safe_mode = mode if mode in {"quick", "balanced", "full"} else "balanced"
+    errors: list[str] = []
+
+    # Preserve only the explicit Excel golden reference. Other LOCAL_DATASET traffic
+    # fallbacks are for site search/map centering and must not outrank curated AADT.
+    dataset = local_match(address) if address else None
+    if dataset and dataset.get("traffic", {}).get("confidence") == "golden-reference":
+        traffic = dict(dataset["traffic"])
+        traffic.update({
+            "provider": "Excel model / TII N40 reference",
+            "method_note": "Golden reference case preserved from the Excel production model.",
+            "reference": "https://trafficdata.tii.ie/publicmultinodemap.asp",
+        })
+        return _normalise_aadt_response(traffic, layer="golden-reference")
+
+    # 1. Exact curated rule / Eircode / approved alias.
+    if address:
+        try:
+            return _normalise_aadt_response(tii_aadt_from_curated_portfolio_mapping(address), layer="curated-exact")
+        except Exception as exc:
+            errors.append(f"curated: {exc}")
+
+    # 2. Manual pin or client geocode coordinates.
+    site = _manual_site_from_params(address, params)
+    if site:
+        try:
+            return _normalise_aadt_response(tii_aadt_from_local_excel_nearest_coordinate(site, address), layer="manual-coordinate", geocode_site=site)
+        except Exception as exc:
+            errors.append(f"manual-coordinate local TII: {exc}")
+        try:
+            return _normalise_aadt_response(tii_aadt_for_site(site, address=address, mode=safe_mode), layer="manual-coordinate-tii-public", geocode_site=site)
+        except Exception as exc:
+            errors.append(f"manual-coordinate TII public: {exc}")
+
+    # 3. Eircode/address geocode before text lookup.
+    geocoded_site = None
+    if address:
+        try:
+            geocoded_site, _attempts = geocode(address)
+        except Exception as exc:
+            errors.append(f"geocode: {exc}")
+    if geocoded_site:
+        try:
+            return _normalise_aadt_response(tii_aadt_from_local_excel_nearest_coordinate(geocoded_site, address), layer="geocode-coordinate", geocode_site=geocoded_site)
+        except Exception as exc:
+            errors.append(f"geocode-coordinate local TII: {exc}")
+        try:
+            return _normalise_aadt_response(tii_aadt_for_site(geocoded_site, address=address, mode=safe_mode), layer="geocode-coordinate-tii-public", geocode_site=geocoded_site)
+        except Exception as exc:
+            errors.append(f"geocode-coordinate TII public: {exc}")
+
+    # 4. Special place anchors only after exact curated/coordinate routes fail.
+    if address:
+        try:
+            return _normalise_aadt_response(tii_aadt_priority_counter_lookup(address, geocoded_site), layer="priority-anchor")
+        except Exception as exc:
+            errors.append(f"priority: {exc}")
+
+    # 5. Strict text fallback — always carries the confidence returned by the text
+    # engine. Bare place-token results are labelled Review required.
+    if address:
+        try:
+            traffic = tii_aadt_from_local_excel_name_lookup(address)
+            traffic.setdefault("waterfall_errors", errors[-6:])
+            return _normalise_aadt_response(traffic, layer="strict-text-fallback", geocode_site=geocoded_site)
+        except Exception as exc:
+            errors.append(f"text: {exc}")
+
+    raise RuntimeError("No credible AADT could be calculated. " + " | ".join(errors[-8:]))
+
 class Handler(BaseHTTPRequestHandler):
     def _auth_enabled(self):
         return bool(DEMO_PASSWORD)
@@ -3730,37 +3889,7 @@ class Handler(BaseHTTPRequestHandler):
             address = params.get("address", [""])[0]
             mode = params.get("mode", ["balanced"])[0]
             try:
-                dataset = local_match(address) if address else None
-                if dataset and dataset.get("traffic", {}).get("confidence") == "golden-reference":
-                    traffic = dict(dataset["traffic"])
-                    traffic.update({
-                        "provider": "Excel model / TII N40 reference",
-                        "method_note": "Golden reference case preserved from the Excel production model.",
-                        "reference": "https://trafficdata.tii.ie/publicmultinodemap.asp",
-                    })
-                    return self._send_json({"ok": True, "traffic": traffic})
-                site = None
-                try:
-                    lat = float(params.get("lat", [""])[0])
-                    lon = float(params.get("lon", [""])[0])
-                    site = {"name": address or "Selected site", "lat": lat, "lon": lon, "source": "current site coordinates"}
-                except Exception:
-                    pass
-                if site:
-                    try:
-                        traffic = tii_aadt_from_local_excel_nearest_coordinate(site, address)
-                    except Exception:
-                        traffic = tii_aadt_from_local_excel_name_lookup(address)
-                else:
-                    # Do not require geocoding just to get an AADT text match.
-                    try:
-                        traffic = tii_aadt_from_local_excel_name_lookup(address)
-                    except Exception:
-                        site, _ = geocode(address)
-                        try:
-                            traffic = tii_aadt_from_local_excel_nearest_coordinate(site, address)
-                        except Exception:
-                            traffic = tii_aadt_for_site(site, address=address, mode=mode if mode in {"quick", "balanced", "full"} else "balanced")
+                traffic = resolve_auto_tii_aadt(address, params=params, mode=mode)
                 return self._send_json({"ok": True, "traffic": traffic})
             except Exception as exc:
                 return self._send_json({"ok": False, "error": str(exc)})
@@ -3827,37 +3956,7 @@ class Handler(BaseHTTPRequestHandler):
             address = params.get("address", [""])[0]
             mode = params.get("mode", ["balanced"])[0]
             try:
-                dataset = local_match(address) if address else None
-                if dataset and dataset.get("traffic", {}).get("confidence") == "golden-reference":
-                    traffic = dict(dataset["traffic"])
-                    traffic.update({
-                        "provider": "Excel model / TII N40 reference",
-                        "method_note": "Golden reference case preserved from the Excel production model.",
-                        "reference": "https://trafficdata.tii.ie/publicmultinodemap.asp",
-                    })
-                    return self._send_json({"ok": True, "traffic": traffic})
-                site = None
-                try:
-                    lat = float(params.get("lat", [""])[0])
-                    lon = float(params.get("lon", [""])[0])
-                    site = {"name": address or "Selected site", "lat": lat, "lon": lon, "source": "current site coordinates"}
-                except Exception:
-                    pass
-                if site:
-                    try:
-                        traffic = tii_aadt_from_local_excel_nearest_coordinate(site, address)
-                    except Exception:
-                        traffic = tii_aadt_from_local_excel_name_lookup(address)
-                else:
-                    # Do not require geocoding just to get an AADT text match.
-                    try:
-                        traffic = tii_aadt_from_local_excel_name_lookup(address)
-                    except Exception:
-                        site, _ = geocode(address)
-                        try:
-                            traffic = tii_aadt_from_local_excel_nearest_coordinate(site, address)
-                        except Exception:
-                            traffic = tii_aadt_for_site(site, address=address, mode=mode if mode in {"quick", "balanced", "full"} else "balanced")
+                traffic = resolve_auto_tii_aadt(address, params=params, mode=mode)
                 return self._send_json({"ok": True, "traffic": traffic})
             except Exception as exc:
                 return self._send_json({"ok": False, "error": str(exc)})

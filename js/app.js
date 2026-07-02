@@ -1535,8 +1535,18 @@ const PORTFOLIO_CURATED_SITE_PROFILES = {
     note: "Conservative strong-town-catchment modifier applied and capped. Residual variance should still be reviewed."
   }
 };
+function portfolioCuratorSlug(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
 function portfolioSiteCuratorKey(site) {
-  return portfolioToken(site?.name || "");
+  return portfolioCuratorSlug(site?.name || "");
 }
 function portfolioCategoryCompactLabel(key, label) {
   const map = {

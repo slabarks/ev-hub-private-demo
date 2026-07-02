@@ -28,5 +28,5 @@ for (const token of requiredCssTokens) {
   if (!css.includes(token)) throw new Error(`Missing compact portfolio rendering CSS token: ${token}`);
 }
 
-if (!html.includes('35.54-active-curator')) throw new Error('Compact rendering cache-busting version tag missing.');
+if (!html.includes('35.55-curator-key-fix')) throw new Error('Compact rendering cache-busting version tag missing.');
 console.log('Portfolio compact rendering static regression passed.');

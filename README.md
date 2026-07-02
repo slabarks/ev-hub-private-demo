@@ -1,4 +1,4 @@
-# EV Hub Investment Tool — v35.54 active curator calibration
+# EV Hub Investment Tool — v35.55 active curator key fix
 
 This build keeps the v35.39 curated AADT relevance engine, the v35.40 matched Portfolio Calibration benchmark logic, adds the v35.42 table clarity fix, the v35.44 grant render fix, and the v35.45 mapping/upload/Kempower update:
 
@@ -14,13 +14,13 @@ Run locally with `python3 server.py`.
 
 # EV Charging Hub Investment Tool
 
-Current review build: **v35.54 Active Curator Calibration** — v34.2 Design Verified
+Current review build: **v35.55 Active Curator Key Fix** — v34.2 Design Verified
 
 This clean build includes the agreed design refinements, cache-busted CSS/JS, the redesigned workflow guide, refreshed icons, and Scenario Ranking layout polish.
 
 # EV Charging Hub Investment Tool
 
-Current review build: **v35.54 Active Curator Calibration** — HTML/JavaScript Demo v33
+Current review build: **v35.55 Active Curator Key Fix** — HTML/JavaScript Demo v33
 
 This package is a local-first browser demo built from the uploaded **Financial Modelling - EV Hub - DUT . V13.xlsx** workbook and the uploaded Site Location Dashboard package.
 
@@ -241,3 +241,11 @@ This build embeds a ZEVI funding database from the matched site funding file and
 - Added a neutral curator framework audit with catchment, competition, destination and access/visibility modifiers defaulting to 1.00x. No demand output changes until a modifier is explicitly reviewed.
 - Variance popover now shows the curator audit trail.
 - Fixed stale actual-installed-power override behavior: changing charger hardware clears verified-site output overrides and recalculates from the selected hardware library.
+
+
+## v35.55 active curator key fix
+
+- Fixed Portfolio Calibration curator matching by normalising site names to slug keys before lookup.
+- Reviewed site modifiers now resolve for The Cope Shopping Centre, Greenhills Hotel, Walsh’s Centra Roscommon, Corrib Oil Cork City and Corrib Oil Swinford.
+- No category factors were changed; this only makes the previously reviewed curator profiles apply correctly.
+- Added a regression check so curator profile lookups cannot fall back to raw lowercase names again.

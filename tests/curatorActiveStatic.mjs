@@ -18,6 +18,11 @@ for (const siteKey of [
 assert.ok(app.includes('modelKwh *= curatorMultiplier'), 'Portfolio model kWh must be multiplied by active curator multiplier.');
 assert.ok(app.includes('modelSessions *= curatorMultiplier'), 'Portfolio model sessions must be multiplied by active curator multiplier.');
 assert.ok(app.includes('Reviewed modifier active'), 'Variance popover should identify active reviewed modifiers.');
+
+assert.ok(app.includes('function portfolioCuratorSlug'), 'App must normalize site names to curator slugs.');
+assert.ok(app.includes('return portfolioCuratorSlug(site?.name || "")'), 'Curator profile lookup must use slugged site names, not raw lowercase names.');
+assert.ok(app.includes('replace(/[^a-z0-9]+/g, "_")'), 'Curator slug must convert punctuation/spaces to underscores for reviewed profile keys.');
+assert.ok(exportEngine.includes('function pdfPortfolioToken'), 'Export engine must retain slugged curator lookup.');
 assert.ok(exportEngine.includes('modelKwh *= curatorMultiplier'), 'Export model kWh must be multiplied by active curator multiplier.');
 assert.ok(exportEngine.includes('pdfPortfolioCuratorNote'), 'XLSX export should include active curator audit notes.');
 

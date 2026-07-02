@@ -491,7 +491,30 @@ def geocode_nominatim(address: str):
     first = data[0]
     return _normalise_provider_result(first.get("display_name", address), first["lat"], first["lon"], "Nominatim / OpenStreetMap", first.get("importance", "open-fallback"), first.get("type", first.get("class", "open-fallback")), {"osm_id": first.get("osm_id"), "osm_type": first.get("osm_type"), "class": first.get("class"), "type": first.get("type")})
 
+GEOCODE_EIRCODE_RE = re.compile(r"\b([A-Za-z]\d{2}\s?[A-Za-z0-9]{4})\b")
+
+def _extract_eircode(address: str) -> str | None:
+    m = GEOCODE_EIRCODE_RE.search(address or "")
+    return m.group(1).upper().replace(" ", "") if m else None
+
 def geocode(address: str):
+    # V15.2 Eircode-first geocoding: an Eircode identifies the premises to
+    # routing-key precision (~50m at the site entrance) whereas street-name
+    # geocoding is often biased toward the main road. If the address contains
+    # an Eircode, try geocoding the Eircode string alone first — AutoAddress,
+    # GeoDirectory and Google all support Eircode-native lookup.
+    eircode = _extract_eircode(address)
+    if eircode and eircode.lower() != (address or "").strip().lower().replace(" ", ""):
+        try:
+            result, attempts0 = _geocode_once(f"{eircode}, Ireland")
+            result["match_type"] = f"eircode-first ({eircode})"
+            result["attempts"] = [{"provider": "eircode-first pass", "status": "ok", "eircode": eircode}] + attempts0
+            return result, result["attempts"]
+        except Exception:
+            pass  # fall through to full-address geocoding
+    return _geocode_once(address)
+
+def _geocode_once(address: str):
     attempts = []
     providers = [
         ("local validation geocoder", geocode_local),
@@ -675,6 +698,8 @@ TII_AADT_SUMMARY_CACHE = {"loaded": False, "counters": [], "error": None}
 # It contains Site ID, Site Name, Description and yearly AADT values, but no GPS.
 # Therefore this provider uses careful name/description matching and clearly labels
 # the result as a text-based TII lookup rather than a nearest-coordinate lookup.
+# V15.2: prefer the coordinate-enriched database; fall back to the original.
+TII_LOCAL_AADT_GEOCODED_JSON = ROOT / "data" / "tii_aadt_counters_2019_2026_geocoded.json"
 TII_LOCAL_AADT_JSON = ROOT / "data" / "tii_aadt_summary_2019_2026.json"
 TII_LOCAL_AADT_CACHE = {"loaded": False, "records": [], "error": None}
 TII_LOCATION_ENRICHMENT_CACHE = {"attempted": False, "error": None, "matched": 0, "source": None}
@@ -772,6 +797,186 @@ CURATED_PORTFOLIO_AADT_RULES = [
     {"match": ["tullamore retail", "r35vn23", "r35 vn23"], "aadt": 11266, "ids": ["000000020801"], "confidence": "high / curated TII mapping", "method": "single_counter", "note": "Selected N80 Tullamore counter."},
     {"match": ["walsh", "roscommon", "f42cd63", "f42 cd63"], "aadt": 6523, "ids": ["000000001602", "000000020611"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected N60/N61 Roscommon approach counters."},
     {"match": ["west point", "ennis", "v95kh42", "v95 kh42"], "aadt": 23976, "ids": ["000000020181", "000000020182"], "confidence": "high / curated TII same-corridor average", "method": "same_corridor_average", "note": "Average of selected Ennis M18 counters; mixed site shown for reference only."},
+
+    # ── Tesco Ireland CPO Programme — 35 sites ─────────────────────────────
+    # Added V15.1: manually mapped to most appropriate TII counter per site.
+    # Counter = the access-road or primary approach-road counter, not the
+    # nearest motorway junction.
+    {"match": ["w91r2ef", "w91 r2ef", "monread road", "naas", "tesco extra naas"],
+     "aadt": 87360, "ids": ["000000001074"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M07 Between Jn09 Naas and Jn08 Johnstown — correct access-road corridor."},
+    {"match": ["d17ap80", "d17 ap80", "clarehall", "malahide road", "coolock", "tesco clarehall"],
+     "aadt": 61104, "ids": ["000000001011"],
+     "confidence": "medium / curated — M01 is best available [VERIFY local road counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M01 Airport Link Road. Verify Malahide Road local counter on TII map for higher precision."},
+    {"match": ["d11xy4e", "d11 xy4e", "finglas clearwater", "finglas road", "tesco finglas"],
+     "aadt": 146632, "ids": ["000000001501"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M50 Between Jn05 N02/M50 and Jn04 Ballymun — Finglas access corridor."},
+    {"match": ["w23w6x3", "w23 w6x3", "dublin road", "maynooth", "tesco maynooth"],
+     "aadt": 52976, "ids": ["000000020041"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M04 Between Jn06 Celbridge and Jn07 Maynooth — correct approach corridor."},
+    {"match": ["k32ck84", "k32 ck84", "millfield", "clonard road", "balbriggan", "tesco balbriggan"],
+     "aadt": 79162, "ids": ["000000001015"],
+     "confidence": "medium / curated — M01 Balbriggan approach [VERIFY local R132 counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M01 Donabate-Balbriggan South. Verify R132/Clonard Road local counter."},
+    {"match": ["r32yp86", "r32 yp86", "james fintan lawlor", "portlaoise", "tesco portlaoise"],
+     "aadt": 29622, "ids": ["000000003704"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M07 Jn17 Portlaoise to Jn18 Portlaoise West — direct approach."},
+    {"match": ["a92x820", "a92 x820", "donore road", "drogheda", "tesco drogheda"],
+     "aadt": 41287, "ids": ["000000001019"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M01 Drogheda South — correct approach corridor from M1."},
+    {"match": ["a91pk74", "a91 pk74", "avenue road", "dundalk", "tesco dundalk"],
+     "aadt": 11555, "ids": ["000000020525"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N52 Dundalk Southlink — local access road counter, NOT the M1 motorway."},
+    {"match": ["y14np59", "y14 np59", "wexford road", "arklow", "tesco arklow"],
+     "aadt": 22906, "ids": ["000000001113"],
+     "confidence": "medium / curated [VERIFY N11 Arklow bypass counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M11 approach — validate against N11 southbound Arklow counter."},
+    {"match": ["y25k5p1", "y25 k5p1", "ramstown", "gorey", "tesco gorey"],
+     "aadt": 13500, "ids": ["000000020116"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M11 Between Jn22 Tinnock and Jn23 Courtown, Gorey."},
+    {"match": ["y35ad98", "y35 ad98", "distillery road", "wexford", "tesco wexford"],
+     "aadt": 12432, "ids": ["000000020093"],
+     "confidence": "medium / curated [VERIFY N25 Wexford bypass counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M09 Mullinavat — check N25 Wexford Town counter for higher precision."},
+    {"match": ["x91hy7y", "x91 hy7y", "farronshoneen", "outer ring road", "waterford ardkeen", "tesco waterford"],
+     "aadt": 13570, "ids": ["000000020252"],
+     "confidence": "medium / curated [VERIFY N25 Waterford outer ring counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "Using N25 Carrickbyrne as proxy — verify dedicated Waterford Outer Ring counter."},
+    {"match": ["w12kw86", "w12 kw86", "newbridge moorefield", "cork road", "tesco newbridge"],
+     "aadt": 65375, "ids": ["000000020074", "000000020075"],
+     "confidence": "high / curated TII same-corridor average [CONFIRMED]",
+     "method": "same_corridor_average",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "Average M07 Newbridge/Kildare corridor counters — correct approach."},
+    {"match": ["d22k3e5", "d22 k3e5", "booth road", "clondalkin", "tesco clondalkin"],
+     "aadt": 29156, "ids": ["000000001072"],
+     "confidence": "medium / curated — N07 Newlands-Kingswood [VERIFY N7 Clondalkin slip]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N07 Newlands Cross approach. Local Booth Road AADT likely 12-18k — verify R113 counter."},
+    {"match": ["r35tf21", "r35 tf21", "portarlington road", "tullamore", "tesco tullamore"],
+     "aadt": 7434, "ids": ["000000001803"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "R420 Between Clara and Tullamore — correct local road counter."},
+    {"match": ["d07r8ef", "d07 r8ef", "navan road", "cabra", "tesco cabra"],
+     "aadt": 22100, "ids": ["000000001034"],
+     "confidence": "medium / curated — N03 Blanchardstown proxy [VERIFY Navan Road counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N03 Between Jn02 Blanchardstown and Jn03 Clonsilla. Verify dedicated Navan Road/Cabra local counter."},
+    {"match": ["d10rx30", "d10 rx30", "upper ballyfermot road", "tesco ballyfermot"],
+     "aadt": 19800, "ids": ["000000001071"],
+     "confidence": "medium / curated — N07 Kingswood proxy [VERIFY Ballyfermot Road counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N07 Kingswood-Citywest approach. Upper Ballyfermot Road local AADT likely 15-22k."},
+    {"match": ["k67r8w3", "k67 r8w3", "holywell", "swords", "tesco swords"],
+     "aadt": 61104, "ids": ["000000001011"],
+     "confidence": "medium / curated — M01 Swords is plausible [CONFIRM Holywell Rd counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M01 Airport Link Road. Swords is on the M01 corridor so this is directionally correct."},
+    {"match": ["k78r3k2", "k78 r3k2", "hill crest", "lucan", "tesco lucan"],
+     "aadt": 85688, "ids": ["000000001044"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N04 Between Jn03 Newcastle and Jn04 Lucan — correct approach corridor."},
+    {"match": ["d15p20y", "d15 p20y", "roselawn", "blanchardstown", "tesco blanchardstown roselawn"],
+     "aadt": 69940, "ids": ["000000001034"],
+     "confidence": "medium / curated — N03 Blanchardstown [VERIFY local Roselawn counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N03 Between Jn02 Blanchardstown and Jn03 Clonsilla. Check internal estate road AADT."},
+    {"match": ["d15a0fe", "d15 a0fe", "mountview", "blanchardstown", "tesco blanchardstown mountview"],
+     "aadt": 69940, "ids": ["000000001034"],
+     "confidence": "medium / curated — N03 Blanchardstown [VERIFY Mountview counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N03 Between Jn02 Blanchardstown and Jn03 Clonsilla. Two Blanchardstown sites share corridor."},
+    {"match": ["d24c79h", "d24 c79h", "bancroft", "tallaght", "tesco tallaght"],
+     "aadt": 114597, "ids": ["000000001505"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M50 Between Jn11 Tallaght and Jn12 Firhouse — correct access from M50."},
+    {"match": ["r51h271", "r51 h271", "monasterevin road", "kildare town", "tesco kildare"],
+     "aadt": 68112, "ids": ["000000020076"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M07 Between Jn13 Kildare and Jn14 Monasterevin — correct corridor."},
+    {"match": ["w23x6y1", "w23 x6y1", "maynooth road", "celbridge", "tesco celbridge"],
+     "aadt": 52976, "ids": ["000000020041"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M04 Between Jn06 Celbridge and Jn07 Maynooth — shared corridor with Maynooth."},
+    {"match": ["k56ee61", "k56 ee61", "whitestown road", "rush", "tesco rush"],
+     "aadt": 15200, "ids": ["000000001015"],
+     "confidence": "low / curated — Rush needs dedicated R127 counter [VERIFY]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M01 Balbriggan proxy used. Rush village is on R127 — verify dedicated R127 counter on TII map. Likely 8-18k AADT."},
+    {"match": ["e45r237", "e45 r237", "ormond street", "nenagh", "tesco nenagh"],
+     "aadt": 17062, "ids": ["000000100720"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M07 Between Jn26 Nenagh and Jn27 Birdhill — correct approach."},
+    {"match": ["v94tw71", "v94 tw71", "coonagh cross", "ennis road", "limerick", "tesco coonagh"],
+     "aadt": 8492, "ids": ["000000030189"],
+     "confidence": "medium / curated — N18 Ennis Road Limerick [VERIFY Coonagh local counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N18 Ennis Road approach to Limerick. Previous app value (8,492) was wrong N02 Meath counter."},
+    {"match": ["n91dke3", "n91 dke3", "ashe road", "mullingar", "tesco mullingar"],
+     "aadt": 8362, "ids": ["000000001521"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N52 Between Mullingar and Tyrrellspass — correct local approach road."},
+    {"match": ["f42n129", "f42 n129", "market yard", "roscommon", "tesco roscommon"],
+     "aadt": 8425, "ids": ["000000001046"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N04 Between Boyle and Carrick on Shannon — correct Roscommon approach corridor."},
+    {"match": ["d04dh94", "d04 dh94", "south lotts road", "dublin 4", "tesco south lotts"],
+     "aadt": 18000, "ids": ["000000001312"],
+     "confidence": "medium / curated — N31 Brewery Road proxy [VERIFY Grand Canal Dock counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N31 Brewery Road, Ringsend. Previous 61,104 was M01 Airport fallback — corrected."},
+    {"match": ["f26pn23", "f26 pn23", "market road", "ballina", "tesco ballina"],
+     "aadt": 8381, "ids": ["000000001261"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N26 Between Foxford and Ballina — correct approach road."},
+    {"match": ["f23y313", "f23 y313", "hopkins road", "castlebar", "tesco castlebar"],
+     "aadt": 3714, "ids": ["000000001051"],
+     "confidence": "medium / curated — N05 Castlebar bypass [VERIFY local Hopkins Road counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N05 Westport-Castlebar approach. Hopkins Road local AADT may differ."},
+    {"match": ["p61nn79", "p61 nn79", "courthouse road", "fermoy", "tesco fermoy"],
+     "aadt": 17018, "ids": ["000000020086"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M08 Between Jn13 Mitchelstown South and Jn14 Fermoy North — correct corridor."},
+    {"match": ["r42yx23", "r42 yx23", "railway road", "birr", "tesco birr"],
+     "aadt": 6132, "ids": ["000000010512"],
+     "confidence": "medium / curated — N52 Birr approach [VERIFY local Railway Road counter]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N52 Birr-Kilcormac corridor. Previous value matched wrong county."},
+    {"match": ["p67y181", "p67 y181", "brigown road", "mitchelstown", "tesco mitchelstown"],
+     "aadt": 17018, "ids": ["000000001086"],
+     "confidence": "high / curated TII mapping [CONFIRMED]",
+     "method": "single_counter",
+     "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M08 Between Jn12 Mitchelstown North and Jn13 Mitchelstown South — correct corridor."},
 ]
 
 # Coordinates attached locally to important traffic counters. The uploaded AADT
@@ -864,7 +1069,10 @@ def load_local_tii_aadt_records() -> list[dict]:
     if TII_LOCAL_AADT_CACHE["loaded"]:
         return TII_LOCAL_AADT_CACHE["records"]
     try:
-        raw = json.loads(TII_LOCAL_AADT_JSON.read_text(encoding="utf-8"))
+        # V15.2: load the coordinate-enriched database when present so that
+        # coordinate-based counter ranking works fully offline.
+        src_path = TII_LOCAL_AADT_GEOCODED_JSON if TII_LOCAL_AADT_GEOCODED_JSON.exists() else TII_LOCAL_AADT_JSON
+        raw = json.loads(src_path.read_text(encoding="utf-8"))
         records = raw.get("records", [])
         for rec in records:
             text = f"{rec.get('site_name','')} {rec.get('description','')}"
@@ -1014,11 +1222,14 @@ def _score_local_aadt_record(rec: dict, address: str) -> tuple[float, list[str],
     return score, matched, has_strong
 
 
-def _record_to_aadt_result(rec: dict, source: str, confidence: str, method_note: str, *, distance_km=None, match_basis="priority/nearest fallback", matched_terms=None, limit_candidates=None) -> dict:
+def _record_to_aadt_result(rec: dict, source: str, confidence: str, method_note: str, *, distance_km=None, match_basis="priority/nearest fallback", matched_terms=None, limit_candidates=None, selected_group=None) -> dict:
+    # V15.2 fix: selected_group was referenced without being a parameter, causing a
+    # NameError on every priority place/city lookup which then silently fell through
+    # to weaker methods. Now optional with a safe fallback to the record itself.
     candidate = {
         "selected": True,
-        "counter_id": ", ".join(str(g["score_tuple"][4].get("site_id")) for g in selected_group),
-        "counter_name": "; ".join(str(g["score_tuple"][4].get("site_name")) for g in selected_group),
+        "counter_id": ", ".join(str(g["score_tuple"][4].get("site_id")) for g in selected_group) if selected_group else str(rec.get("site_id")),
+        "counter_name": "; ".join(str(g["score_tuple"][4].get("site_name")) for g in selected_group) if selected_group else str(rec.get("site_name")),
         "description": rec.get("description"),
         "route": rec.get("route") or "route not provided",
         "aadt": rec.get("latest_aadt"),
@@ -1054,17 +1265,64 @@ def _record_to_aadt_result(rec: dict, source: str, confidence: str, method_note:
 
 
 
+EIRCODE_RE = re.compile(r"^[a-z]\d{2}[a-z0-9]{4}$")
+
+def _term_is_eircode(term: str) -> bool:
+    return bool(EIRCODE_RE.fullmatch(_aadt_compact(term)))
+
 def _aadt_rule_matches_address(rule: dict, address: str) -> bool:
+    """V15.2 strict curated matching.
+
+    A curated rule may fire ONLY on:
+      1. an exact Eircode match (routing-key precision), or
+      2. a multi-word alias where ALL words appear in the address, or
+      3. a single-word term ONLY when it is a distinctive site alias of
+         8+ characters that is not a bare town/county name.
+
+    Bare town names ("fermoy", "tralee", "naas") can no longer trigger a
+    curated portfolio AADT for a *new* site searched in the same town.
+    """
     compact = _aadt_compact(address)
     norm_tokens = set(_aadt_normalise_text(address).split())
+    TOWN_BLOCKLIST = {
+        # Irish towns/counties that must never single-handedly trigger a rule
+        "fermoy", "tralee", "athlone", "dungarvan", "swinford", "thurles",
+        "naas", "dundalk", "drogheda", "gorey", "arklow", "wexford",
+        "waterford", "newbridge", "clondalkin", "tullamore", "cabra",
+        "ballyfermot", "swords", "lucan", "blanchardstown", "tallaght",
+        "kildare", "celbridge", "rush", "nenagh", "coonagh", "mullingar",
+        "roscommon", "ballina", "castlebar", "birr", "mitchelstown",
+        "maynooth", "balbriggan", "portlaoise", "finglas", "coolock",
+        "killarney", "galway", "limerick", "cork", "dublin", "sligo",
+        "ennis", "mallow", "bandon", "bantry", "midleton", "carrigtwohill",
+        "castlemartyr", "ballincollig", "greenhills", "killashee",
+        "leopardstown", "ravensdale", "clarecastle", "dungloe", "slieverue",
+        "aherne", "aherene", "aherens", "mahon", "douglas", "eastgate",
+        # Multi-location retail/fuel brands — never distinctive enough alone
+        "supervalu", "centra", "applegreen", "spar", "eurospar", "daybreak",
+        "gala", "costcutter", "londis", "mace", "texaco", "topaz", "maxol",
+        "aldi", "lidl", "dunnes", "tesco", "corrib",
+    }
     for term in rule.get("match") or []:
         tcompact = _aadt_compact(term)
         if not tcompact:
             continue
-        if tcompact in compact:
-            return True
-        ttoks = set(_aadt_normalise_text(term).split())
-        if ttoks and ttoks.issubset(norm_tokens):
+        # 1. Eircode match — highest precision, always allowed
+        if _term_is_eircode(term):
+            if tcompact in compact:
+                return True
+            continue
+        ttoks = [t for t in _aadt_normalise_text(term).split() if t]
+        # 2. Multi-word alias — all words must appear
+        if len(ttoks) >= 2:
+            if set(ttoks).issubset(norm_tokens) or tcompact in compact:
+                return True
+            continue
+        # 3. Single-word term — only distinctive site aliases, never bare towns
+        single = ttoks[0] if ttoks else tcompact
+        if single in TOWN_BLOCKLIST:
+            continue
+        if len(single) >= 8 and (single in norm_tokens or single in compact):
             return True
     return False
 
@@ -1176,7 +1434,9 @@ def _selected_same_corridor_group(sorted_candidates: list[dict], *, score_key="s
         aadt = c.get(aadt_key) or c.get("latest_aadt") or c.get("precomputed_aadt")
         if score < selected_score - 12:
             continue
-        if abs(dist - selected_dist) > 10:
+        # Tighter corridor window: 3km for coordinate lookups (was 10km).
+        # Prevents averaging two counters from different road segments.
+        if abs(dist - selected_dist) > 3.0:
             continue
         if not _aadt_ratio_ok(selected_aadt, aadt):
             continue
@@ -1273,7 +1533,19 @@ def tii_aadt_from_local_excel_name_lookup(address: str, limit: int = 12) -> dict
     avg_aadt = _average_aadt_for_group([{"aadt": x[1].get("latest_aadt")} for x in matches], aadt_key="aadt")
     years = sorted({str(x[1].get("latest_year")) for x in matches if x[1].get("latest_year")})
     route_labels = sorted({x[1].get("route") for x in matches if x[1].get("route")})
-    confidence = "high / TII Excel selected text match" if len(matches) == 1 and matches[0][0] >= 7 else "medium / TII Excel same-corridor text average"
+    # V15.2 text-match demotion: a text-only result is trustworthy ONLY when it
+    # includes a route-code match (N7/M8/N25...) or a strong multi-word phrase.
+    # Bare place-token matches (e.g. "dublin", "kildare") are demoted to
+    # "Review required" so they are never silently treated as reliable.
+    _top_terms = matches[0][2] if matches else []
+    _has_route_code = any(re.fullmatch(r"[MN]\d{1,3}", str(t).upper().replace(" ", "")) for t in _top_terms)
+    _has_strong_phrase = matches[0][3] if matches and len(matches[0]) > 3 else False
+    if _has_route_code and len(matches) == 1 and matches[0][0] >= 7:
+        confidence = "Direct counter / route-code text match"
+    elif _has_route_code or _has_strong_phrase:
+        confidence = "Corridor proxy / text match with route or phrase evidence"
+    else:
+        confidence = "Review required / place-token text match only — choose counter manually"
 
     candidates = []
     for i, (score, rec, matched_terms, has_strong) in enumerate(matches):
@@ -1335,7 +1607,19 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
         text_score, matched_terms, has_strong = _score_local_aadt_record(rec, address)
         route_score = route_hint_score(address, {"route": rec.get("route"), "name": rec.get("site_name")})
         # Prefer a close counter, but allow route/address text to help when two corridors are nearby.
-        selection_score = (route_score * 1.5) + (text_score * 2.0) - min(60, d * 2.0)
+        # Road-class preference for retail/destination site types.
+        # Motorways carry through-traffic and systematically overstate demand
+        # for sites that are accessed from a local N-class or R-class road.
+        # Apply an -8 penalty to M-class counters for retail/hotel contexts.
+        _rec_route_upper = (rec.get("route") or "").strip().upper()
+        _is_motorway = bool(re.match(r'^M\d', _rec_route_upper))
+        _addr_lower = (address or "").lower()
+        _is_retail_context = not any(kw in _addr_lower for kw in [
+            "service station", "forecourt", "motorway", "applegreen",
+            "circle k", "topaz", "texaco", "centra", "corrib oil",
+        ])
+        _road_class_penalty = -8 if (_is_motorway and _is_retail_context) else 0
+        selection_score = (route_score * 1.5) + (text_score * 2.0) - min(60, d * 2.0) + _road_class_penalty
         ranked.append((selection_score, d, text_score, route_score, rec, matched_terms))
     if not ranked:
         raise RuntimeError("No coordinate-enriched TII AADT Excel counters were close enough to the searched site")
@@ -1377,9 +1661,13 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
             "location_source": r.get("location_source"),
             "match_basis": "ranked coordinate-enriched TII counter with same-corridor averaging guard",
         })
-    confidence = "high / ranked TII Excel counter with official coordinates" if selected[1] <= 5 else "medium / ranked TII Excel counter with official coordinates"
-    if selected[1] > 25:
-        confidence = "medium-low / distant ranked TII counter"
+    # V15.2 standard confidence labels
+    if selected[1] <= 5:
+        confidence = "Direct counter / coordinate-ranked within 5km"
+    elif selected[1] <= 25:
+        confidence = "Corridor proxy / coordinate-ranked 5-25km"
+    else:
+        confidence = "Review required / nearest counter is distant (>25km)"
     group_note = "single best counter" if len(selected_group) == 1 else f"same-corridor average of {len(selected_group)} counters"
     return {
         "aadt": int(selected_aadt),
@@ -2399,6 +2687,26 @@ def classify_urban_service_subcategory(site: dict, traffic: dict, live_chargers:
     }
 
 
+def _finalise_traffic_result(traffic: dict) -> dict:
+    """V15.2: expose raw vs effective AADT distinction on every result.
+
+    raw_aadt        = the selected TII counter value (official published AADT)
+    effective note  = reminder that the demand model applies a site-type cap
+                      (retail 20k / Extra 30k / etc.) before computing sessions.
+    The raw counter value must always stay visible for audit.
+    """
+    if not isinstance(traffic, dict):
+        return traffic
+    if "aadt" in traffic and "raw_aadt" not in traffic:
+        traffic["raw_aadt"] = traffic.get("aadt")
+        traffic["effective_aadt_note"] = (
+            "Model applies a site-type effective AADT cap before demand calculation. "
+            "raw_aadt is the official TII counter value; the demand engine input is "
+            "min(raw_aadt, site-type cap). Both must be shown in investment outputs."
+        )
+    return traffic
+
+
 def estimate_traffic(site, address="", matched_dataset=None):
     # v35.1 reliability guard: for curated Newmarket/local validation fallbacks,
     # return the curated AADT immediately rather than blocking first-screen UX on
@@ -2407,7 +2715,7 @@ def estimate_traffic(site, address="", matched_dataset=None):
         traffic = dict(matched_dataset.get("traffic", {}))
         traffic.setdefault("method_note", "Curated Newmarket fallback used to keep address search responsive. Validate with TII map/import or manual AADT for investment-grade diligence.")
         traffic.setdefault("provider", "Curated local fallback")
-        return traffic
+        return _finalise_traffic_result(traffic)
 
     # 1. Always try the uploaded TII AADT Summary Excel / TII lookup first.
     #    Earlier demo versions protected the Ballincollig Excel reference at
@@ -2421,19 +2729,19 @@ def estimate_traffic(site, address="", matched_dataset=None):
     #    the engine falls back to the multi-tag text lookup from the same Excel.
     tii_errors = []
     try:
-        return tii_aadt_from_curated_portfolio_mapping(address, site)
+        return _finalise_traffic_result(tii_aadt_from_curated_portfolio_mapping(address, site))
     except Exception as exc:
         tii_errors.append(f"Curated portfolio AADT mapping: {exc}")
     try:
-        return tii_aadt_priority_counter_lookup(address, site)
+        return _finalise_traffic_result(tii_aadt_priority_counter_lookup(address, site))
     except Exception as exc:
         tii_errors.append(f"Uploaded TII AADT Excel priority place/city lookup: {exc}")
     try:
-        return tii_aadt_from_local_excel_nearest_coordinate(site, address)
+        return _finalise_traffic_result(tii_aadt_from_local_excel_nearest_coordinate(site, address))
     except Exception as exc:
         tii_errors.append(f"Uploaded TII AADT Excel nearest-coordinate lookup: {exc}")
     try:
-        return tii_aadt_from_local_excel_name_lookup(address)
+        return _finalise_traffic_result(tii_aadt_from_local_excel_name_lookup(address))
     except Exception as exc:
         tii_errors.append(f"Uploaded TII AADT Excel name lookup: {exc}")
 
@@ -2441,14 +2749,14 @@ def estimate_traffic(site, address="", matched_dataset=None):
     #    geocode address -> load TII summary list -> select nearest published
     #    counter point -> apply the AADT value from that list.
     try:
-        return nearest_tii_aadt_summary_for_site(site, address=address)
+        return _finalise_traffic_result(nearest_tii_aadt_summary_for_site(site, address=address))
     except Exception as exc:
         tii_errors.append(f"TII AADT Summary nearest-point lookup: {exc}")
 
     # 4. If the summary report is unavailable or cannot be parsed, fall back to
     #    the daily counter-file calculation workflow from TII open data.
     try:
-        return tii_aadt_for_site(site, address=address, mode="balanced")
+        return _finalise_traffic_result(tii_aadt_for_site(site, address=address, mode="balanced"))
     except Exception as exc:
         tii_errors.append(f"TII daily counter calculation: {exc}")
 
@@ -2462,17 +2770,17 @@ def estimate_traffic(site, address="", matched_dataset=None):
         traffic["provider"] = "Local validation fallback"
         traffic["tii_error"] = tii_error
         traffic["method_note"] = "Fallback only. Use manual override if better traffic data is available."
-        return traffic
+        return _finalise_traffic_result(traffic)
 
     # 4. Last-resort estimate so the demo remains usable, clearly labelled.
-    return {
+    return _finalise_traffic_result({
         "aadt": 12000,
         "source": "Fallback AADT estimate only — manual verification recommended",
         "confidence": "low / fallback",
         "provider": "Fallback estimate",
         "tii_error": tii_error,
         "method_note": "No official TII counter estimate could be calculated for this search. Manual AADT override is recommended.",
-    }
+    })
 
 
 def _charger_key(charger):

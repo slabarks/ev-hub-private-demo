@@ -189,10 +189,12 @@ export function calculateYearByYear(inputs, config, demand) {
     const duosStandingCharge = 1320.36;
     const duosCapacityCharge = selectedMicKva * 49.28;
     const groundRent = derived.groundRent;
-    const transactionProcessingFee = deliveredEnergyServedKwh * inputs.transactionProcessingFeePctRevenue;
+    const transactionProcessingFee = totalRevenue * inputs.transactionProcessingFeePctRevenue;
     const flatTransactionFee = sessionsServed * inputs.flatTransactionFeePerSession;
-    const landlordGpShare = grossProfit * inputs.landlordGpShare;
-    const landlordGrossSalesShare = deliveredEnergyServedKwh * inputs.landlordGrossSalesShare;
+    // Landlord GP share and gross-sales share are mutually exclusive commercial structures.
+    // If both inputs are non-zero, gross-sales share takes precedence to avoid double counting.
+    const landlordGrossSalesShare = inputs.landlordGrossSalesShare > 0 ? totalRevenue * inputs.landlordGrossSalesShare : 0;
+    const landlordGpShare = inputs.landlordGrossSalesShare > 0 ? 0 : Math.max(0, grossProfit) * inputs.landlordGpShare;
     const extendedChargerWarranty = config.chargerWarrantyYears === 0 ? 0 : (yearNumber <= config.chargerWarrantyYears ? derived.annualChargerWarrantyCost : 0);
     const extendedBatteryWarranty = (config.batteryWarrantyYears === 0 || config.batteryStrategy === "Grid only") ? 0 : (yearNumber <= config.batteryWarrantyYears ? totals.units * (derived.annualBatteryWarrantyCost / Math.max(1, envelope.unitsMax)) : 0);
     const totalOperatingCosts = chargerSlaPpmSupport + managedService + batteryAnnualService + duosStandingCharge + duosCapacityCharge + groundRent + transactionProcessingFee + flatTransactionFee + landlordGpShare + landlordGrossSalesShare + extendedChargerWarranty + extendedBatteryWarranty;

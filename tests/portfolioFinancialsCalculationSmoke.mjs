@@ -42,9 +42,18 @@ const summary = portfolioFinancialSummary(rows);
 
 assert.equal(rows.length, 37, 'Portfolio Financials should cover the same 37 active calibration sites');
 assert.ok(rows.every(r => Number.isFinite(r.modelCapex) && r.modelCapex >= 0), 'Every row should expose finite model CAPEX');
-assert.ok(rows.some(r => !r.hasActualCapex && r.status?.label === 'Not enough data'), 'Missing CAPEX sites should be labelled as not enough data');
+assert.ok(rows.some(r => !r.hasActualCapex), 'Rows with missing CAPEX should be retained for data-quality review');
 assert.ok(rows.some(r => r.revenueEstimated), 'Rows with missing revenue should use estimated revenue where kWh exists');
 assert.ok(rows.some(r => r.hasOperationalDays), 'Rows with confirmed operating days should remain usable');
+assert.ok(rows.some(r => r.hasActualCapex && r.hasOperationalDays && r.hasActualKwh && r.operatingCashflow <= 0 && r.paybackState?.label === 'No payback'), 'Negative cashflow rows should show No payback instead of Not enough data');
+assert.ok(rows.some(r => r.hasActualKwh && r.hasOperationalDays && !r.hasActualCapex ? r.status?.label !== 'Not enough data' : true), 'Missing CAPEX should not mask performance status where operating data exists');
+
+const cope = rows.find(r => /The Cope/i.test(r.site?.name || ""));
+assert.ok(cope, 'The Cope row should be present for OPEX regression');
+assert.equal(cope.landlordApplied, false, 'Portfolio OPEX should not assume landlord costs where site-level landlord terms are absent');
+assert.ok(String(cope.landlordNote || '').includes('Landlord costs excluded'), 'Portfolio OPEX should explain excluded landlord costs');
+assert.ok(cope.modelGroundRentExcluded > 0, 'Model ground rent should be tracked as excluded, not silently applied');
+
 assert.ok(summary.totalSites === 37, 'Portfolio financial summary site count should match active rows');
 for (const key of ['actualCapex', 'modelCapexForCapexRows', 'annualKwh', 'annualRevenue', 'annualOpex', 'operatingCashflow']) {
   assert.ok(Number.isFinite(summary[key]), `Summary ${key} should be finite`);

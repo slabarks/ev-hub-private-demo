@@ -11,7 +11,11 @@ const appTokens = [
   'function portfolioFinancialRow',
   'function portfolioOperationalDays',
   'function portfolioFinancialOpexFromActuals',
-  'Not enough data · CAPEX missing',
+  'function portfolioActualLandlordTerms',
+  'Landlord rent/share is excluded unless actual site-level landlord terms are provided',
+  'Medium · CAPEX missing',
+  'function portfolioFinancialPaybackState',
+  'Negative-cashflow sites show “No payback”',
   'OPEX / yr',
   'EBITDA proxy / yr',
   'portfolioPaybackLabel(summary.paybackYears)',
@@ -37,6 +41,7 @@ const cssTokens = [
   'v35.59 portfolio financial performance tab',
   '.portfolio-financial-table',
   '.portfolio-financial-muted',
+  '.portfolio-financial-partial',
   '.portfolio-financial-metric',
   '.portfolio-financial-sort-header'
 ];

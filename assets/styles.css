@@ -2504,3 +2504,20 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   top: 0;
   z-index: 1;
 }
+
+/* v17.4 portfolio financials: payback/data-quality audit clarity */
+.portfolio-financial-table tr.portfolio-financial-partial td {
+  background: rgba(255, 250, 240, 0.42);
+}
+.portfolio-financial-table tr.portfolio-financial-partial td:first-child strong {
+  color: #244438;
+}
+.portfolio-financial-table td:nth-child(8) .badge.bad,
+.portfolio-financial-table td:nth-child(8) .badge.neutral,
+.portfolio-financial-table td:nth-child(8) .badge.warn,
+.portfolio-financial-table td:nth-child(8) .badge.good {
+  display: inline-block;
+  min-width: 84px;
+}
+
+/* v17.5 portfolio financials: landlord OPEX audit and conservative pre-landlord payback labelling */

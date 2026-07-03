@@ -49,3 +49,11 @@ python server.py
 ## Prior actual-basis change retained
 
 No demand target recalibration or AADT override changes were made in this release. The prior trailing-365 / partial-cumulative actual-basis logic remains active.
+
+## V17.5 note
+Portfolio Financials was audited for landlord OPEX. Active-site OPEX now excludes landlord costs unless verified site-level landlord terms are present, and the table labels EBITDA/payback as pre-landlord where applicable.
+
+
+## V17.6 note
+
+Landlord GP share and landlord gross-sales share now default to 0 in the base model and reset state. They are applied only when the user manually populates them or site-level landlord terms exist. If both GP share and gross-sales share are populated, gross-sales share takes precedence to prevent double counting.

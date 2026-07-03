@@ -17,8 +17,9 @@ export const DEFAULT_INPUTS = {
   grantSupport: 0,
 
   groundRentPerEvSpace: 500,
-  landlordGpShare: 0.03,
-  landlordGrossSalesShare: 0.10,
+  // Landlord commercial shares default to zero. Populate manually only when site-specific terms exist.
+  landlordGpShare: 0,
+  landlordGrossSalesShare: 0,
   transactionProcessingFeePctRevenue: 0.008,
   flatTransactionFeePerSession: 0.25,
   managedServiceFeePerChargerAsset: 250,

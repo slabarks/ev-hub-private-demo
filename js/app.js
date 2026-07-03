@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.6 landlord default zero";
+const APP_BUILD_VERSION = "V17.7 portfolio financial audit";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -1947,6 +1947,34 @@ function portfolioActualDateInfo(site) {
   const latestDate = portfolioParseDate(diagnostics.latestDate || site?.actual?.asOfDate || site?.liveActuals?.asOfDate);
   return { firstActiveDate, latestDate };
 }
+function portfolioActualDataDays(site) {
+  const actual = site?.actual || {};
+  const liveActuals = site?.liveActuals || {};
+  const diagnostics = liveActuals.diagnostics || {};
+  const candidates = [
+    site?.maturity?.dataDays,
+    actual.dataDays,
+    actual.operationalDays,
+    actual.daysLive,
+    actual.liveDays,
+    liveActuals.dataDays,
+    liveActuals.operationalDays,
+    diagnostics.dataDays,
+    diagnostics.operationalDays,
+    diagnostics.daysLive
+  ];
+  for (const candidate of candidates) {
+    const n = Number(candidate);
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
+  const text = [actual.annualisationMethod, actual.actualBasis, actual.basis, actual.sourceNote, liveActuals.actualBasis].filter(Boolean).join(" ");
+  const match = String(text).match(/(\d+(?:\.\d+)?)\s*(?:calendar\s*)?days?\s*(?:live|operational|of\s*data)?/i);
+  if (match) {
+    const n = Number(match[1]);
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
+  return 0;
+}
 function portfolioAnnualOperatingValues(site, metrics = portfolioOperatingMetrics(site)) {
   const actual = site?.actual || {};
   const explicitAnnualKwh = Number(actual.annualKwh || 0);
@@ -1956,7 +1984,7 @@ function portfolioAnnualOperatingValues(site, metrics = portfolioOperatingMetric
   const annualKwh = hasExplicitAnnual ? explicitAnnualKwh : Number(metrics.annualisedKwh || 0);
   const annualSessions = explicitAnnualSessions > 0 ? explicitAnnualSessions : Number(metrics.annualisedSessions || 0);
   const annualRevenue = explicitAnnualRevenue > 0 ? explicitAnnualRevenue : annualKwh * Number(metrics.revenuePerKwh || DEFAULT_INPUTS.netSellingPriceExVat || 0);
-  const dataDays = Number(site?.maturity?.dataDays || 0);
+  const dataDays = portfolioActualDataDays(site);
   const dateInfo = portfolioActualDateInfo(site);
   const uploadedSuffix = site?.liveActuals?.source === "uploaded" ? ` · uploaded actuals${site.liveActuals.asOfDate ? ` as of ${site.liveActuals.asOfDate}` : ""}` : site?.liveActuals?.actualSourceStatus ? ` · ${site.liveActuals.actualSourceStatus}` : "";
   const periodEnd = dateInfo.latestDate;
@@ -2856,7 +2884,7 @@ function renderPortfolioCalibration() {
 
 
 function portfolioOperationalDays(site, annualActual = null) {
-  const explicit = Number(site?.maturity?.dataDays || 0);
+  const explicit = portfolioActualDataDays(site);
   if (explicit > 0) return explicit;
   const dateInfo = portfolioActualDateInfo(site);
   const diff = portfolioDateDiffDays(dateInfo.firstActiveDate, dateInfo.latestDate);
@@ -2894,30 +2922,28 @@ function portfolioActualLandlordTerms(site, annualRevenue, grossProfit, modelGro
   let landlordGpShare = 0;
   let landlordGrossSalesShare = 0;
   let basis = "not provided";
-  let conflict = false;
-  if (hasGp && hasGrossSales && !structure) {
-    conflict = true;
-    basis = "conflict excluded";
-  } else if ((structure.includes("gross") || structure.includes("sales")) && hasGrossSales) {
+  let gpSuppressed = false;
+  if ((structure.includes("gross") || structure.includes("sales")) && hasGrossSales) {
     landlordGrossSalesShare = Math.max(0, Number(annualRevenue || 0)) * grossSalesShareRate;
-    basis = "gross-sales share";
-  } else if ((structure.includes("gp") || structure.includes("profit")) && hasGp) {
+    gpSuppressed = hasGp;
+    basis = gpSuppressed ? "gross-sales share; GP suppressed" : "gross-sales share";
+  } else if ((structure.includes("gp") || structure.includes("profit")) && hasGp && !hasGrossSales) {
     landlordGpShare = Math.max(0, Number(grossProfit || 0)) * gpShareRate;
     basis = "gross-profit share";
-  } else if (hasGrossSales && !hasGp) {
+  } else if (hasGrossSales) {
+    // Gross-sales share takes precedence when both structures are populated.
     landlordGrossSalesShare = Math.max(0, Number(annualRevenue || 0)) * grossSalesShareRate;
-    basis = "gross-sales share";
-  } else if (hasGp && !hasGrossSales) {
+    gpSuppressed = hasGp;
+    basis = gpSuppressed ? "gross-sales share; GP suppressed" : "gross-sales share";
+  } else if (hasGp) {
     landlordGpShare = Math.max(0, Number(grossProfit || 0)) * gpShareRate;
     basis = "gross-profit share";
   }
   const applied = groundRentAnnual > 0 || landlordGpShare > 0 || landlordGrossSalesShare > 0;
   const note = applied
     ? `Actual landlord terms included (${basis}).`
-    : conflict
-      ? "Conflicting landlord share terms supplied; excluded until one structure is selected."
-      : `Landlord costs excluded: no actual site-level landlord terms provided${Number(modelGroundRent || 0) > 0 ? ` (model rent €${number(modelGroundRent, 0)} not used).` : "."}`;
-  return { groundRentAnnual, landlordGpShare, landlordGrossSalesShare, basis, applied, conflict, note };
+    : `Landlord costs excluded: no actual site-level landlord terms provided${Number(modelGroundRent || 0) > 0 ? ` (model rent €${number(modelGroundRent, 0)} not used).` : "."}`;
+  return { groundRentAnnual, landlordGpShare, landlordGrossSalesShare, basis, applied, conflict: false, gpSuppressed, note };
 }
 function portfolioFinancialOpexFromActuals(result, annualKwh, annualSessions, annualRevenue, site = null) {
   const inputs = result?.inputs || DEFAULT_INPUTS;
@@ -3223,7 +3249,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     <section class="panel portfolio-financial-hero"><div><span class="eyebrow">Portfolio dashboard</span><h3>All active sites together</h3><p>Rows with missing/low operating history are greyed out. Missing CAPEX now blocks only the payback calculation, not the site performance benchmark. Landlord costs are not assumed for active sites without actual landlord terms.</p></div><div class="portfolio-summary-grid">${kpi("Actual CAPEX tracked", currency(summary.actualCapex,0), `${number(summary.rowsWithCapex,0)} of ${number(summary.totalSites,0)} sites`)}${kpi("Model CAPEX", currency(summary.modelCapexForCapexRows,0), "same sites with actual CAPEX")}${kpi("CAPEX Δ", currency(summary.capexDelta,0), "model minus actual")}${kpi("Annualised kWh", kwh(summary.annualKwh,0), `${number(summary.rowsWithActuals,0)} sites with usable actuals`)}${kpi("Next-year revenue", currency(summary.annualRevenue,0), "actual run-rate / estimated where noted")}${kpi("OPEX / yr", currency(summary.annualOpex,0), "excludes electricity + landlord")}${kpi("EBITDA proxy / yr", currency(summary.operatingCashflow,0), "pre-landlord unless actual terms provided")}${kpi("Portfolio payback", portfolioPaybackLabel(summary.paybackYears), `${number(summary.paybackEligible,0)} positive-cashflow sites`)}</div></section>
     <section class="panel"><h3>Performance position</h3><div class="portfolio-summary-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "actual kWh within ±15%")}${kpi("Underperforming", number(summary.underperforming,0), "actual kWh below model")}${kpi("Above benchmark", number(summary.outperforming,0), "actual kWh above model")}${kpi("Low / missing history", number(summary.notEnoughData,0), "greyed out in table")}${kpi("CAPEX missing", number(summary.capexMissing,0), "payback blocked only")}${kpi("No payback", number(summary.noPayback,0), "negative run-rate cashflow")}</div><p class="muted small">OPEX is calculated using the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. OPEX excludes electricity purchase; EBITDA proxy deducts both electricity and OPEX from annualised revenue. Negative-cashflow sites show “No payback” rather than “Not enough data”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.6 landlord defaults</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. CAPEX cells show actual value first, then model value and delta; kWh cells show actual value first, then model value and variance. Payback is a current run-rate proxy. Landlord GP share and gross-sales share default to 0 and are applied only if manually populated / site-level terms exist.</p></div></div>${table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table")}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.7 audit checked</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. CAPEX cells show actual value first, then model value and delta; kWh cells show actual value first, then model value and variance. Payback is a current run-rate proxy. Landlord GP share and gross-sales share default to 0 and are applied only if manually populated / site-level terms exist.</p></div></div>${table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table")}</section>
   `;
 }
 

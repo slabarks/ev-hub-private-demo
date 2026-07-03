@@ -28,5 +28,5 @@ for (const token of requiredCssTokens) {
   if (!css.includes(token)) throw new Error(`Missing compact portfolio rendering CSS token: ${token}`);
 }
 
-if (!html.includes('17.6-landlord-default-zero-20260703')) throw new Error('Compact rendering cache-busting version tag missing.');
+if (!html.includes('17.7-portfolio-financial-audit-20260703')) throw new Error('Compact rendering cache-busting version tag missing.');
 console.log('Portfolio compact rendering static regression passed.');

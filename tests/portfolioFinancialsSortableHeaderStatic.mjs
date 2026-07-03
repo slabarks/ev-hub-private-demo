@@ -4,8 +4,8 @@ const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const css = fs.readFileSync(new URL('../assets/styles.css', import.meta.url), 'utf8');
 
-if (!html.includes('17.8-portfolio-financial-render-fix-20260703')) throw new Error('V17.8 cache-busting tag missing from index.html.');
-if (!app.includes('V17.8 portfolio financial render fix')) throw new Error('V17.8 app build marker missing.');
+if (!html.includes('17.9-portfolio-financial-revenue-labels-20260703')) throw new Error('V17.9 cache-busting tag missing from index.html.');
+if (!app.includes('V17.9 portfolio financial revenue labels')) throw new Error('V17.9 app build marker missing.');
 if (!app.includes('portfolio-financial-sort-header${isActive ? " active" : ""}')) throw new Error('Active sort-header class logic missing.');
 if (!app.includes('class="sort-arrow"')) throw new Error('Sort arrow span missing from financial headers.');
 if (!app.includes('Use the green header buttons to sort any column')) throw new Error('Financial table sort instruction missing.');

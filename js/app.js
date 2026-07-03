@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.11 portfolio financial dashboard grouped";
+const APP_BUILD_VERSION = "V17.12 horizontal windows";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -3053,7 +3053,7 @@ function portfolioFinancialRows() {
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_11";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_12";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
@@ -3191,8 +3191,8 @@ function portfolioFinancialDashboardWindows(rows, filteredRows, summary, project
   ], "projection");
   return `<div class="portfolio-financial-dashboard-grid">${investment}${operating}${projectionWindow}</div>`;
 }
-function portfolioFinancialPerformanceStrip(summary) {
-  return `<div class="portfolio-financial-status-strip">${portfolioFinancialStatusPill("In benchmark", number(summary.inBenchmark,0), "±15% kWh")}${portfolioFinancialStatusPill("Underperforming", number(summary.underperforming,0), "below model")}${portfolioFinancialStatusPill("Above benchmark", number(summary.outperforming,0), "above model")}${portfolioFinancialStatusPill("Low / missing history", number(summary.notEnoughData,0), "greyed out")}${portfolioFinancialStatusPill("CAPEX missing", number(summary.capexMissing,0), "payback blocked")}${portfolioFinancialStatusPill("No payback", number(summary.noPayback,0), "negative cashflow")}</div>`;
+function portfolioFinancialPerformanceCards(summary) {
+  return `<div class="portfolio-summary-grid portfolio-financial-performance-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "actual kWh within ±15%")}${kpi("Underperforming", number(summary.underperforming,0), "actual kWh below model")}${kpi("Above benchmark", number(summary.outperforming,0), "actual kWh above model")}${kpi("Low / missing history", number(summary.notEnoughData,0), "greyed out in table")}${kpi("CAPEX missing", number(summary.capexMissing,0), "payback blocked only")}${kpi("No payback", number(summary.noPayback,0), "negative run-rate cashflow")}</div>`;
 }
 function portfolioFinancialProjectionGrowthRate() {
   const trafficGrowth = Number(state.inputs.annualTrafficGrowthRate ?? DEFAULT_INPUTS.annualTrafficGrowthRate ?? 0.01);
@@ -3455,8 +3455,8 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless 365+ days of data exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
-    <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Compact demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceStrip(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.11 grouped dashboard</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only with at least 365 operating days; otherwise it is labelled projected annual run-rate. Payback is a current run-rate proxy.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.12 horizontal layout</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only with at least 365 operating days; otherwise it is labelled projected annual run-rate. Payback is a current run-rate proxy.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
   `;
 }
 

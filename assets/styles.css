@@ -2393,8 +2393,9 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 .portfolio-financial-table th:nth-child(9) { width: 12%; text-align: center; }
 .portfolio-financial-table td {
   font-size: 12.5px;
-  vertical-align: middle;
+  vertical-align: top;
   line-height: 1.25;
+  overflow: hidden;
 }
 .portfolio-financial-table td:nth-child(2),
 .portfolio-financial-table td:nth-child(8),
@@ -2414,15 +2415,24 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   white-space: nowrap;
   max-width: 100%;
 }
-.portfolio-financial-metric { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
-.portfolio-financial-metric strong { font-size: 12.8px; font-weight: 850; white-space: nowrap; }
+.portfolio-financial-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-end;
+  max-width: 100%;
+}
+.portfolio-financial-metric strong { font-size: 12.8px; font-weight: 850; white-space: nowrap; max-width: 100%; }
 .portfolio-financial-metric small,
 .portfolio-financial-cell-note {
   display: block;
   color: var(--muted);
   font-size: 10.5px;
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+  max-width: 100%;
 }
 .portfolio-financial-table td:nth-child(9) .portfolio-financial-cell-note { margin-top: 4px; }
 .portfolio-financial-sort-header { white-space: nowrap; }
@@ -2521,3 +2531,27 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 }
 
 /* v17.5 portfolio financials: landlord OPEX audit and conservative pre-landlord payback labelling */
+
+
+/* v17.8 portfolio financials: render cleanup */
+.portfolio-financial-table td:nth-child(8),
+.portfolio-financial-table td:nth-child(9) {
+  white-space: normal;
+}
+.portfolio-financial-table td .badge {
+  max-width: 100%;
+}
+.portfolio-financial-table td .portfolio-financial-cell-note {
+  margin-top: 3px;
+}
+.portfolio-financial-table .portfolio-financial-metric,
+.portfolio-financial-table .portfolio-financial-site {
+  min-width: 0;
+}
+.portfolio-financial-table td:nth-child(3) .portfolio-financial-metric,
+.portfolio-financial-table td:nth-child(4) .portfolio-financial-metric,
+.portfolio-financial-table td:nth-child(5) .portfolio-financial-metric,
+.portfolio-financial-table td:nth-child(6) .portfolio-financial-metric,
+.portfolio-financial-table td:nth-child(7) .portfolio-financial-metric {
+  text-align: right;
+}

@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.7 portfolio financial audit";
+const APP_BUILD_VERSION = "V17.8 portfolio financial render fix";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -3196,10 +3196,26 @@ function portfolioFinancialTableRow(fin) {
   const kwhCell = fin.hasActualKwh
     ? portfolioFinancialMetric(kwh(fin.annualKwh, 0), `${modelKwh > 0 ? `model ${kwh(modelKwh, 0)} · ` : ""}${portfolioFinancialVarianceLabel(r.annualKwhVariance)}`)
     : "—";
-  const paybackCell = `<span class="badge ${h(fin.paybackState?.cls || "neutral")}" title="${h(fin.paybackState?.reason || portfolioPaybackSubtext(fin.paybackYears, fin.paybackState))}">${h(portfolioPaybackLabel(fin.paybackYears, fin.paybackState))}</span><small class="portfolio-financial-cell-note">${h(portfolioPaybackSubtext(fin.paybackYears, fin.paybackState))}</small>`;
+  const paybackReason = fin.paybackState?.reason || portfolioPaybackSubtext(fin.paybackYears, fin.paybackState);
+  const paybackShort = fin.paybackState?.state === "positive"
+    ? "simple"
+    : fin.paybackState?.state === "capexMissing"
+      ? "CAPEX req."
+      : fin.paybackState?.state === "lowHistory"
+        ? "low history"
+        : fin.paybackState?.state === "negativeCashflow"
+          ? "neg. EBITDA"
+          : portfolioPaybackSubtext(fin.paybackYears, fin.paybackState);
+  const paybackCell = `<span class="badge ${h(fin.paybackState?.cls || "neutral")}" title="${h(paybackReason)}">${h(portfolioPaybackLabel(fin.paybackYears, fin.paybackState))}</span><small class="portfolio-financial-cell-note" title="${h(paybackReason)}">${h(paybackShort)}</small>`;
   const statusCell = `<span class="badge ${h(status.cls)}">${h(status.label)}</span><small class="portfolio-financial-cell-note" title="${h(status.note || fin.dataQuality)}">${h(portfolioFinancialDataQualityShort(fin.dataQuality))}</small>`;
   const rowClass = fin.muted ? "portfolio-financial-muted" : fin.partial ? "portfolio-financial-partial" : "";
-  const opexSub = fin.landlordApplied ? `excl. electricity · elec ${currency(fin.electricityCost,0)}` : `excl. elec & landlord · elec ${currency(fin.electricityCost,0)}`;
+  const opexTitle = fin.landlordApplied
+    ? `OPEX excludes electricity. Electricity used in EBITDA: ${currency(fin.electricityCost,0)}. ${fin.landlordNote || "Actual landlord terms applied."}`
+    : `OPEX excludes electricity and excludes landlord terms. Electricity used in EBITDA: ${currency(fin.electricityCost,0)}. ${fin.landlordNote || "No actual landlord terms provided."}`;
+  const opexSub = fin.landlordApplied ? `excl. elec` : `excl. elec & landlord`;
+  const ebitdaTitle = fin.landlordApplied
+    ? "EBITDA proxy after electricity and OPEX, including actual landlord terms where provided."
+    : "EBITDA proxy after electricity and OPEX, before landlord costs unless actual terms are provided.";
   return {
     className: rowClass,
     cells: [
@@ -3208,8 +3224,8 @@ function portfolioFinancialTableRow(fin) {
       actualCapexCell,
       kwhCell,
       fin.annualRevenue > 0 ? portfolioFinancialMetric(currency(fin.annualRevenue, 0), revenueSub) : "—",
-      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.opexExElectricity, 0), opexSub, "", fin.landlordNote) : "—",
-      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.operatingCashflow, 0), "pre-landlord unless actual terms provided") : "—",
+      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.opexExElectricity, 0), opexSub, "", opexTitle) : "—",
+      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.operatingCashflow, 0), fin.landlordApplied ? "run-rate" : "pre-landlord", "", ebitdaTitle) : "—",
       paybackCell,
       statusCell
     ]
@@ -3249,7 +3265,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     <section class="panel portfolio-financial-hero"><div><span class="eyebrow">Portfolio dashboard</span><h3>All active sites together</h3><p>Rows with missing/low operating history are greyed out. Missing CAPEX now blocks only the payback calculation, not the site performance benchmark. Landlord costs are not assumed for active sites without actual landlord terms.</p></div><div class="portfolio-summary-grid">${kpi("Actual CAPEX tracked", currency(summary.actualCapex,0), `${number(summary.rowsWithCapex,0)} of ${number(summary.totalSites,0)} sites`)}${kpi("Model CAPEX", currency(summary.modelCapexForCapexRows,0), "same sites with actual CAPEX")}${kpi("CAPEX Δ", currency(summary.capexDelta,0), "model minus actual")}${kpi("Annualised kWh", kwh(summary.annualKwh,0), `${number(summary.rowsWithActuals,0)} sites with usable actuals`)}${kpi("Next-year revenue", currency(summary.annualRevenue,0), "actual run-rate / estimated where noted")}${kpi("OPEX / yr", currency(summary.annualOpex,0), "excludes electricity + landlord")}${kpi("EBITDA proxy / yr", currency(summary.operatingCashflow,0), "pre-landlord unless actual terms provided")}${kpi("Portfolio payback", portfolioPaybackLabel(summary.paybackYears), `${number(summary.paybackEligible,0)} positive-cashflow sites`)}</div></section>
     <section class="panel"><h3>Performance position</h3><div class="portfolio-summary-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "actual kWh within ±15%")}${kpi("Underperforming", number(summary.underperforming,0), "actual kWh below model")}${kpi("Above benchmark", number(summary.outperforming,0), "actual kWh above model")}${kpi("Low / missing history", number(summary.notEnoughData,0), "greyed out in table")}${kpi("CAPEX missing", number(summary.capexMissing,0), "payback blocked only")}${kpi("No payback", number(summary.noPayback,0), "negative run-rate cashflow")}</div><p class="muted small">OPEX is calculated using the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. OPEX excludes electricity purchase; EBITDA proxy deducts both electricity and OPEX from annualised revenue. Negative-cashflow sites show “No payback” rather than “Not enough data”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.7 audit checked</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. CAPEX cells show actual value first, then model value and delta; kWh cells show actual value first, then model value and variance. Payback is a current run-rate proxy. Landlord GP share and gross-sales share default to 0 and are applied only if manually populated / site-level terms exist.</p></div></div>${table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table")}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.8 render fix</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. CAPEX cells show actual value first, then model value and delta; kWh cells show actual value first, then model value and variance. Payback is a current run-rate proxy. Landlord terms default to 0 unless manually populated. Long explanatory notes are now in hover tooltips to keep the table readable.</p></div></div>${table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table")}</section>
   `;
 }
 

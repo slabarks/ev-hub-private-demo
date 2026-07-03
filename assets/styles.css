@@ -2363,3 +2363,46 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
     white-space: nowrap;
   }
 }
+
+/* v35.58 portfolio financial performance tab */
+.portfolio-financial-hero {
+  border-color: rgba(10, 151, 88, 0.22);
+  background: linear-gradient(135deg, rgba(231,245,237,.95), rgba(255,255,255,.98));
+}
+.portfolio-financial-hero h3 { margin: 4px 0 8px; font-size: clamp(24px, 2.1vw, 34px); letter-spacing: -.04em; }
+.portfolio-financial-hero p { margin: 0 0 16px; color: var(--muted); line-height: 1.5; }
+.portfolio-financial-table th { white-space: normal; vertical-align: bottom; }
+.portfolio-financial-table td { font-size: 12.5px; }
+.portfolio-financial-table td:nth-child(1) { min-width: 220px; }
+.portfolio-financial-table td:nth-child(2),
+.portfolio-financial-table td:nth-child(8),
+.portfolio-financial-table td:nth-child(12),
+.portfolio-financial-table td:nth-child(13) { text-align: center; }
+.portfolio-financial-table td:nth-child(3),
+.portfolio-financial-table td:nth-child(4),
+.portfolio-financial-table td:nth-child(5),
+.portfolio-financial-table td:nth-child(6),
+.portfolio-financial-table td:nth-child(7),
+.portfolio-financial-table td:nth-child(9),
+.portfolio-financial-table td:nth-child(10),
+.portfolio-financial-table td:nth-child(11) { text-align: right; font-weight: 700; }
+.portfolio-financial-table tr.portfolio-financial-muted td {
+  background: rgba(238, 243, 241, 0.56);
+  color: #687873;
+}
+.portfolio-financial-table tr.portfolio-financial-muted td:first-child strong { color: #52615c; }
+.portfolio-financial-table tr.portfolio-financial-muted { opacity: .76; }
+.portfolio-finance-footnote {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: #eef3f1;
+  color: #53645f;
+  font-size: 10px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+@media (max-width: 1100px) {
+  .portfolio-financial-table td:nth-child(n) { text-align: left; }
+}

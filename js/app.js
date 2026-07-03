@@ -14,7 +14,7 @@ import { PORTFOLIO_CALIBRATION_SITES } from "./data/operatingHubCalibrationLibra
 import { actualCapexForSite, capexStatusForSite, capexNoteForSite } from "./data/capexCalibrationLibrary.js";
 import { zeviFundingForSite, zeviFundingSuggestionsForSite, zeviFundingShortLabel } from "./data/zeviFundingLibrary.js";
 
-const VALID_TABS = ["site", "demand", "setup", "investment", "annuals", "scenario", "portfolio", "advanced", "report"];
+const VALID_TABS = ["site", "demand", "setup", "investment", "annuals", "scenario", "portfolio", "portfolioFinancials", "advanced", "report"];
 const TAB_ALIASES = { simulation: "setup", yearbyyear: "annuals", export: "report" };
 
 function tabFromHash() {
@@ -715,8 +715,12 @@ function plainTableLabel(value) {
 
 function table(headers, rows, cls = "") {
   const labels = headers.map(plainTableLabel);
+  const normaliseRow = row => Array.isArray(row) ? { cells: row, className: "" } : { cells: row?.cells || [], className: row?.className || "" };
   const body = rows.length
-    ? rows.map(row => `<tr>${row.map((x, i) => `<td data-label="${h(labels[i] || "Value")}">${x}</td>`).join("")}</tr>`).join("")
+    ? rows.map(rawRow => {
+      const row = normaliseRow(rawRow);
+      return `<tr${row.className ? ` class="${h(row.className)}"` : ""}>${row.cells.map((x, i) => `<td data-label="${h(labels[i] || "Value")}">${x}</td>`).join("")}</tr>`;
+    }).join("")
     : `<tr><td data-label="Status" colspan="${headers.length}">No rows to display.</td></tr>`;
   return `<div class="table-wrap"><table class="${cls}"><thead><tr>${headers.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -773,6 +777,7 @@ const TAB_LABELS = {
   annuals: "Annual Financials",
   scenario: "Scenario Ranking",
   portfolio: "Portfolio Calibration",
+  portfolioFinancials: "Portfolio Financials",
   advanced: "Advanced Model Settings",
   report: "Investor Report"
 };
@@ -2848,6 +2853,227 @@ function renderPortfolioCalibration() {
   `;
 }
 
+
+function portfolioOperationalDays(site, annualActual = null) {
+  const explicit = Number(site?.maturity?.dataDays || 0);
+  if (explicit > 0) return explicit;
+  const dateInfo = portfolioActualDateInfo(site);
+  const diff = portfolioDateDiffDays(dateInfo.firstActiveDate, dateInfo.latestDate);
+  if (Number.isFinite(diff) && diff >= 0) return diff + 1;
+  if (Number(annualActual?.dataDays || 0) > 0) return Number(annualActual.dataDays);
+  return null;
+}
+function portfolioOperationalDaysLabel(days) {
+  return Number.isFinite(Number(days)) && Number(days) > 0 ? `${number(days, 0)} days` : "Not confirmed";
+}
+function portfolioActualRevenueInfo(site, annualActual, metrics) {
+  const actual = site?.actual || {};
+  const explicitAnnualRevenue = Number(actual.annualNetRevenue || 0);
+  const rollingRevenue = Number(actual.rolling30NetRevenue || 0);
+  const annualKwh = Number(annualActual?.annualKwh || 0);
+  const annualSessions = Number(annualActual?.annualSessions || metrics?.annualisedSessions || 0);
+  const price = Number(DEFAULT_INPUTS.netSellingPriceExVat || 0);
+  if (explicitAnnualRevenue > 0) return { annualRevenue: explicitAnnualRevenue, annualSessions, source: "Actual trailing revenue", estimated: false, available: true };
+  if (rollingRevenue > 0 && Number(metrics?.actualKwh || 0) > 0) {
+    const revenuePerKwh = rollingRevenue / Math.max(1, Number(metrics.actualKwh || 0));
+    return { annualRevenue: annualKwh * revenuePerKwh, annualSessions, source: "Actual rolling revenue annualised", estimated: false, available: true };
+  }
+  if (annualKwh > 0 && price > 0) return { annualRevenue: annualKwh * price, annualSessions, source: "Estimated from kWh × net price", estimated: true, available: true };
+  return { annualRevenue: 0, annualSessions, source: "No revenue/kWh actual", estimated: false, available: false };
+}
+function portfolioFinancialOpexFromActuals(result, annualKwh, annualSessions, annualRevenue) {
+  const inputs = result?.inputs || DEFAULT_INPUTS;
+  const row = result?.compareRow || {};
+  const fixedOpex = [
+    row.chargerSlaPpmSupport,
+    row.managedService,
+    row.batteryAnnualService,
+    row.duosStandingCharge,
+    row.duosCapacityCharge,
+    row.groundRent,
+    row.extendedChargerWarranty,
+    row.extendedBatteryWarranty
+  ].map(Number).filter(Number.isFinite).reduce((a, b) => a + b, 0);
+  const electricityCost = Number(annualKwh || 0) * Number(inputs.electricityCost || 0);
+  const grossProfit = Number(annualRevenue || 0) - electricityCost;
+  const transactionProcessingFee = Number(annualKwh || 0) * Number(inputs.transactionProcessingFeePctRevenue || 0);
+  const flatTransactionFee = Number(annualSessions || 0) * Number(inputs.flatTransactionFeePerSession || 0);
+  const landlordGpShare = grossProfit * Number(inputs.landlordGpShare || 0);
+  const landlordGrossSalesShare = Number(annualKwh || 0) * Number(inputs.landlordGrossSalesShare || 0);
+  const variableOpex = transactionProcessingFee + flatTransactionFee + landlordGpShare + landlordGrossSalesShare;
+  const opexExElectricity = fixedOpex + variableOpex;
+  const operatingCashflow = grossProfit - opexExElectricity;
+  return { fixedOpex, variableOpex, opexExElectricity, electricityCost, grossProfit, operatingCashflow, transactionProcessingFee, flatTransactionFee, landlordGpShare, landlordGrossSalesShare };
+}
+function portfolioFinancialCompletenessLabel(fin) {
+  if (!fin.hasActualKwh) return "Not enough data · no actual kWh";
+  if (!fin.hasOperationalDays) return "Not enough data · days not confirmed";
+  if (!fin.hasActualCapex) return "Not enough data · CAPEX missing";
+  if (fin.revenueEstimated) return "Medium · revenue estimated";
+  if (fin.operationalDays < 30) return "Low · <30 operational days";
+  return "High";
+}
+function portfolioFinancialStatus(fin, r) {
+  if (!fin.hasActualKwh || !fin.hasOperationalDays || !fin.hasActualCapex) return { label: "Not enough data", cls: "neutral", note: portfolioFinancialCompletenessLabel(fin) };
+  if (fin.operationalDays < 30) return { label: "Low history", cls: "warn", note: "Actuals exist, but operating history is too short for a reliable payback view." };
+  if (!Number.isFinite(Number(r?.annualKwhVariance))) return { label: "Review", cls: "warn", note: "Model variance unavailable." };
+  if (r.annualKwhVariance > PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) return { label: "Underperforming", cls: "bad", note: "Actual kWh is below the matched model benchmark." };
+  if (r.annualKwhVariance < -PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) return { label: "Above benchmark", cls: "good", note: "Actual kWh is above the matched model benchmark." };
+  if (fin.operatingCashflow <= 0) return { label: "Cashflow pressure", cls: "bad", note: "kWh is in benchmark, but current operating cashflow is not positive." };
+  return { label: "In benchmark", cls: "good", note: "Actual kWh is within ±15% of the matched model benchmark." };
+}
+function portfolioFinancialRow(site, benchmarks) {
+  const result = portfolioSiteResults(site, benchmarks);
+  const capex = portfolioCapexInfo(site, result.financialSummary?.initialInvestment || 0);
+  const annualActual = portfolioAnnualOperatingValues(site, result.metrics);
+  const operationalDays = portfolioOperationalDays(site, annualActual);
+  const revenueInfo = portfolioActualRevenueInfo(site, annualActual, result.metrics);
+  const opex = portfolioFinancialOpexFromActuals(result, annualActual.annualKwh, revenueInfo.annualSessions, revenueInfo.annualRevenue);
+  const hasActualKwh = Number(annualActual.annualKwh || 0) > 0;
+  const hasActualCapex = Number(capex.actual || 0) > 0;
+  const hasOperationalDays = Number.isFinite(Number(operationalDays)) && Number(operationalDays) > 0;
+  const operatingCashflow = hasActualKwh ? opex.operatingCashflow : 0;
+  const paybackYears = hasActualCapex && hasActualKwh && hasOperationalDays && operatingCashflow > 0 ? capex.actual / operatingCashflow : null;
+  const fin = {
+    result,
+    site,
+    actualCapex: capex.actual,
+    modelCapex: capex.model,
+    capexDelta: Number.isFinite(capex.variance) ? capex.variance : null,
+    capexNote: capex.note,
+    annualKwh: annualActual.annualKwh,
+    annualSessions: revenueInfo.annualSessions,
+    annualRevenue: revenueInfo.annualRevenue,
+    revenueSource: revenueInfo.source,
+    revenueEstimated: revenueInfo.estimated,
+    operationalDays,
+    hasActualKwh,
+    hasActualCapex,
+    hasOperationalDays,
+    opexExElectricity: opex.opexExElectricity,
+    electricityCost: opex.electricityCost,
+    grossProfit: opex.grossProfit,
+    operatingCashflow,
+    paybackYears,
+    dataQuality: "",
+    muted: false
+  };
+  fin.dataQuality = portfolioFinancialCompletenessLabel(fin);
+  fin.status = portfolioFinancialStatus(fin, result);
+  fin.enoughForPayback = hasActualKwh && hasActualCapex && hasOperationalDays && operatingCashflow > 0;
+  fin.muted = !hasActualKwh || !hasActualCapex || !hasOperationalDays || Number(operationalDays || 0) < 30;
+  return fin;
+}
+function portfolioFinancialRows() {
+  const sites = portfolioSites({ includeAdditional: false });
+  const benchmarks = portfolioBenchmarksByCategory(sites);
+  return sites.map(site => portfolioFinancialRow(site, benchmarks));
+}
+function portfolioFinancialSummary(rows) {
+  const rowsWithCapex = rows.filter(r => r.hasActualCapex);
+  const rowsWithActuals = rows.filter(r => r.hasActualKwh && r.hasOperationalDays);
+  const paybackEligible = rows.filter(r => r.enoughForPayback && Number(r.operationalDays || 0) >= 30);
+  const sumField = (items, key) => items.reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
+  const actualCapex = sumField(rowsWithCapex, "actualCapex");
+  const modelCapexForCapexRows = sumField(rowsWithCapex, "modelCapex");
+  const annualKwh = sumField(rowsWithActuals, "annualKwh");
+  const annualRevenue = sumField(rowsWithActuals, "annualRevenue");
+  const annualOpex = sumField(rowsWithActuals, "opexExElectricity");
+  const electricityCost = sumField(rowsWithActuals, "electricityCost");
+  const operatingCashflow = sumField(rowsWithActuals, "operatingCashflow");
+  const eligibleCapex = sumField(paybackEligible, "actualCapex");
+  const eligibleCashflow = sumField(paybackEligible, "operatingCashflow");
+  const paybackYears = eligibleCapex > 0 && eligibleCashflow > 0 ? eligibleCapex / eligibleCashflow : null;
+  const matureRows = rows.filter(r => r.hasActualKwh && r.hasOperationalDays && Number(r.operationalDays || 0) >= 30 && Number.isFinite(Number(r.result?.annualKwhVariance)));
+  return {
+    totalSites: rows.length,
+    rowsWithCapex: rowsWithCapex.length,
+    rowsWithActuals: rowsWithActuals.length,
+    paybackEligible: paybackEligible.length,
+    notEnoughData: rows.filter(r => r.status?.label === "Not enough data").length,
+    actualCapex,
+    modelCapexForCapexRows,
+    capexDelta: modelCapexForCapexRows - actualCapex,
+    annualKwh,
+    annualRevenue,
+    annualOpex,
+    electricityCost,
+    operatingCashflow,
+    paybackYears,
+    underperforming: matureRows.filter(r => r.result.annualKwhVariance > PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE).length,
+    outperforming: matureRows.filter(r => r.result.annualKwhVariance < -PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE).length,
+    inBenchmark: matureRows.filter(r => Math.abs(r.result.annualKwhVariance) <= PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE).length
+  };
+}
+function portfolioPaybackLabel(years) {
+  return Number.isFinite(Number(years)) && Number(years) > 0 ? `${number(years, 1)} yrs` : "Not enough data";
+}
+function portfolioFinancialVarianceLabel(v) {
+  return Number.isFinite(Number(v)) ? `${v >= 0 ? "+" : ""}${pct(v, 1)}` : "—";
+}
+function portfolioFinancialTableRow(fin) {
+  const r = fin.result;
+  const capexDelta = Number.isFinite(Number(fin.capexDelta)) ? currency(fin.capexDelta, 0) : "—";
+  const status = fin.status || { label: "Review", cls: "warn", note: "Review manually." };
+  const revenueSub = fin.revenueEstimated ? `<span class="portfolio-finance-footnote">est.</span>` : "";
+  return {
+    className: fin.muted ? "portfolio-financial-muted" : "",
+    cells: [
+      `<strong>${h(fin.site.name)}</strong><div class="muted small">${h(fin.site.modelEquivalentSummary || "")}</div>`,
+      portfolioOperationalDaysLabel(fin.operationalDays),
+      fin.hasActualCapex ? currency(fin.actualCapex, 0) : `<span class="badge neutral">Not enough data</span>`,
+      Number(fin.modelCapex) > 0 ? currency(fin.modelCapex, 0) : "—",
+      capexDelta,
+      fin.hasActualKwh ? kwh(fin.annualKwh, 0) : "—",
+      Number(r.modelledAnnualKwh) > 0 ? kwh(r.modelledAnnualKwh, 0) : "—",
+      portfolioFinancialVarianceLabel(r.annualKwhVariance),
+      fin.annualRevenue > 0 ? `${currency(fin.annualRevenue, 0)}${revenueSub}` : "—",
+      fin.hasActualKwh ? currency(fin.opexExElectricity, 0) : "—",
+      fin.hasActualKwh ? currency(fin.operatingCashflow, 0) : "—",
+      portfolioPaybackLabel(fin.paybackYears),
+      `<span class="badge ${h(status.cls)}">${h(status.label)}</span>`,
+      `<span title="${h(status.note || fin.dataQuality)}">${h(fin.dataQuality)}</span><div class="muted small">${h(fin.revenueSource)}</div>`
+    ]
+  };
+}
+function renderPortfolioFinancialPerformance() {
+  const rows = portfolioFinancialRows();
+  const summary = portfolioFinancialSummary(rows);
+  const completeRows = rows.filter(r => !r.muted);
+  const headers = [
+    "Site",
+    "Operational days",
+    "Actual CAPEX",
+    "Model CAPEX",
+    "CAPEX Δ",
+    "Actual kWh/yr",
+    "Model kWh/yr",
+    "kWh variance",
+    "Next-year revenue",
+    "OPEX/yr",
+    "EBITDA proxy/yr",
+    "Payback",
+    "Status",
+    "Data quality"
+  ];
+  const sorted = [...rows].sort((a, b) => {
+    const am = a.muted ? 1 : 0;
+    const bm = b.muted ? 1 : 0;
+    if (am !== bm) return am - bm;
+    const av = Number(a.result?.annualKwhVariance);
+    const bv = Number(b.result?.annualKwhVariance);
+    if (Number.isFinite(av) && Number.isFinite(bv)) return av - bv;
+    return String(a.site.name).localeCompare(String(b.site.name));
+  });
+  return `
+    ${sectionTitle("Portfolio Financial Performance", "Financial view of all active Portfolio Calibration sites: actual CAPEX vs model CAPEX, operating-days maturity, actual-run-rate revenue, OPEX and payback quality.")}
+    ${portfolioLiveCalibrationCard(portfolioMappedSites())}
+    <section class="panel portfolio-financial-hero"><div><span class="eyebrow">Portfolio dashboard</span><h3>All active sites together</h3><p>Rows with missing CAPEX, missing actual kWh or unconfirmed operating days are greyed out and excluded from payback-quality KPIs.</p></div><div class="portfolio-summary-grid">${kpi("Actual CAPEX tracked", currency(summary.actualCapex,0), `${number(summary.rowsWithCapex,0)} of ${number(summary.totalSites,0)} sites`)}${kpi("Model CAPEX", currency(summary.modelCapexForCapexRows,0), "same sites with actual CAPEX")}${kpi("CAPEX Δ", currency(summary.capexDelta,0), "model minus actual")}${kpi("Annualised kWh", kwh(summary.annualKwh,0), `${number(summary.rowsWithActuals,0)} sites with usable actuals`)}${kpi("Next-year revenue", currency(summary.annualRevenue,0), "actual run-rate / estimated where noted")}${kpi("OPEX / yr", currency(summary.annualOpex,0), "excludes electricity purchase")}${kpi("EBITDA proxy / yr", currency(summary.operatingCashflow,0), "after electricity and OPEX")}${kpi("Portfolio payback", portfolioPaybackLabel(summary.paybackYears), `${number(summary.paybackEligible,0)} payback-eligible sites`)}</div></section>
+    <section class="panel"><h3>Performance position</h3><div class="portfolio-summary-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "actual kWh within ±15%")}${kpi("Underperforming", number(summary.underperforming,0), "actual kWh below model")}${kpi("Above benchmark", number(summary.outperforming,0), "actual kWh above model")}${kpi("Not enough data", number(summary.notEnoughData,0), "greyed out in table")}</div><p class="muted small">OPEX is calculated using the model's current site configuration and commercial assumptions, applied to actual annualised kWh/sessions. It excludes electricity purchase; EBITDA proxy deducts electricity and OPEX from annualised revenue.</p></section>
+    <section class="panel"><h3>Site financial performance table</h3>${table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table")}</section>
+  `;
+}
+
 const DEVELOPER_GROUPS = [
   {
     title: "Traffic & demand defaults",
@@ -3019,6 +3245,7 @@ function guidePanelHtml() {
     ["annuals", "Check annuals", "Review year-by-year revenue, costs, replacements and battery augmentation.", "Open Annuals", "calendar"],
     ["scenario", "Compare scenarios", "Use feasibility-first ranking to compare valid investment options.", "Open Scenarios", "scales"],
     ["portfolio", "Back-test real hubs", "Compare modelled output against real operating hubs using matched AADT, MIC and model-equivalent chargers.", "Open Calibration", "scales"],
+    ["portfolioFinancials", "Review portfolio financials", "See actual CAPEX, model CAPEX, operating days, actual-run-rate revenue, OPEX and payback quality across all live sites.", "Open Financials", "money"],
     ["advanced", "Fine-tune assumptions", "Review advanced model settings without duplicating normal tab inputs.", "Open Assumptions", "sliders"],
     ["report", "Export investor report", "Generate the final report for sharing with investors or internal review.", "Open Report", "report"]
   ];
@@ -3050,7 +3277,7 @@ function renderInvestorReport(r) {
     <div class="export-card-grid">
       <section class="export-card primary-export">
         <h3>Investor PDF Pack</h3>
-        <p>Exports a polished PDF-ready report covering Site Screening, Demand Forecast, Product Configuration, Investment Case, Annual Financials, Scenario Ranking and Portfolio Calibration. AADT is explained in the assumptions section of the report.</p>
+        <p>Exports a polished PDF-ready report covering Site Screening, Demand Forecast, Product Configuration, Investment Case, Annual Financials, Scenario Ranking, Portfolio Calibration and Portfolio Financials. AADT is explained in the assumptions section of the report.</p>
         <button class="primary" id="exportInvestorPdf">Export investor PDF</button>
       </section>
       <section class="export-card excel-export">
@@ -3110,6 +3337,7 @@ function render() {
     annuals: () => renderAnnualFinancials(r),
     scenario: () => renderScenarioRanking(r),
     portfolio: () => renderPortfolioCalibration(),
+    portfolioFinancials: () => renderPortfolioFinancialPerformance(),
     advanced: () => renderAdvancedSettings(r),
     report: () => renderInvestorReport(r)
   };

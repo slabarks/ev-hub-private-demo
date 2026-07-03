@@ -2621,3 +2621,178 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 @media (max-width: 760px) {
   .portfolio-financial-horizon { justify-content: flex-start; margin-top: 8px; }
 }
+
+/* v17.11 portfolio financials: grouped dashboard windows */
+.portfolio-financial-filter-panel-compact {
+  padding: 12px 16px;
+}
+.portfolio-financial-filter-panel-compact details {
+  width: 100%;
+}
+.portfolio-financial-filter-panel-compact summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.portfolio-financial-filter-panel-compact summary::-webkit-details-marker { display: none; }
+.portfolio-financial-filter-panel-compact summary > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.portfolio-financial-filter-panel-compact summary strong {
+  color: #0f2d25;
+  font-size: 15px;
+}
+.portfolio-financial-filter-panel-compact summary small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.portfolio-financial-filter-panel-compact summary::before {
+  content: "▸";
+  color: #00704a;
+  font-weight: 900;
+  margin-right: -4px;
+}
+.portfolio-financial-filter-panel-compact details[open] summary::before { content: "▾"; }
+.portfolio-financial-dashboard .portfolio-financial-dashboard-title h3 {
+  margin: 3px 0 8px;
+  font-size: clamp(26px, 2.2vw, 36px);
+  letter-spacing: -.04em;
+}
+.portfolio-financial-dashboard .portfolio-financial-dashboard-title p {
+  max-width: 980px;
+}
+.portfolio-financial-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.portfolio-financial-dashboard-window {
+  border: 1px solid rgba(0,112,74,.14);
+  border-radius: 18px;
+  background: rgba(255,255,255,.78);
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .035);
+}
+.portfolio-financial-dashboard-window.investment { background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(239,248,244,.92)); }
+.portfolio-financial-dashboard-window.operating { background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(246,250,248,.94)); }
+.portfolio-financial-dashboard-window.projection { background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(235,247,242,.94)); }
+.portfolio-financial-window-head h4 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  color: #0f2d25;
+  letter-spacing: -.02em;
+}
+.portfolio-financial-window-head p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.portfolio-financial-window-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.portfolio-financial-dashboard-metric {
+  border: 1px solid rgba(0,112,74,.12);
+  border-radius: 13px;
+  background: rgba(255,255,255,.86);
+  padding: 10px 11px;
+  min-height: 76px;
+}
+.portfolio-financial-dashboard-metric span {
+  display: block;
+  color: #4f655d;
+  font-size: 10.5px;
+  font-weight: 850;
+  letter-spacing: .01em;
+  margin-bottom: 5px;
+}
+.portfolio-financial-dashboard-metric strong {
+  display: block;
+  color: #071d17;
+  font-size: clamp(17px, 1.45vw, 23px);
+  font-weight: 900;
+  letter-spacing: -.04em;
+  line-height: 1.05;
+}
+.portfolio-financial-dashboard-metric small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 5px;
+}
+.portfolio-financial-dashboard-metric.good strong { color: #00704a; }
+.portfolio-financial-dashboard-metric.bad strong { color: #a64b00; }
+.portfolio-financial-dashboard-metric.horizon-control {
+  grid-column: 1 / -1;
+  min-height: auto;
+}
+.portfolio-financial-dashboard-metric.horizon-control > span {
+  margin-bottom: 8px;
+}
+.portfolio-financial-dashboard-metric.horizon-control .portfolio-financial-horizon {
+  justify-content: flex-start;
+}
+.portfolio-financial-dashboard-metric.horizon-control .portfolio-financial-horizon span {
+  display: none;
+}
+.portfolio-financial-horizon button {
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.portfolio-financial-performance-panel {
+  padding-bottom: 14px;
+}
+.portfolio-financial-status-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 12px 0 10px;
+}
+.portfolio-financial-status-pill {
+  border: 1px solid rgba(0,112,74,.13);
+  border-radius: 999px;
+  background: rgba(255,255,255,.82);
+  padding: 8px 11px;
+  display: grid;
+  grid-template-columns: auto min-content;
+  align-items: center;
+  gap: 2px 8px;
+}
+.portfolio-financial-status-pill span {
+  color: #4f655d;
+  font-size: 10.5px;
+  font-weight: 850;
+}
+.portfolio-financial-status-pill strong {
+  color: #071d17;
+  font-size: 17px;
+  line-height: 1;
+}
+.portfolio-financial-status-pill small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+@media (max-width: 1180px) {
+  .portfolio-financial-dashboard-grid { grid-template-columns: 1fr; }
+  .portfolio-financial-window-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .portfolio-financial-dashboard-metric.horizon-control { grid-column: auto; }
+  .portfolio-financial-status-strip { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+}
+@media (max-width: 760px) {
+  .portfolio-financial-window-grid { grid-template-columns: 1fr; }
+  .portfolio-financial-status-strip { grid-template-columns: 1fr 1fr; }
+  .portfolio-financial-filter-panel-compact summary { align-items: flex-start; }
+}

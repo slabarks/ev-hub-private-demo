@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.10 portfolio financial filters and projections";
+const APP_BUILD_VERSION = "V17.11 portfolio financial dashboard grouped";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -3053,12 +3053,13 @@ function portfolioFinancialRows() {
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "capex", "revenue", "payback"];
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_11";
 function portfolioFinancialHorizon() {
-  const raw = Number(localStorage.getItem("evHub.portfolioFinancials.horizon") || 5);
+  const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
 }
 function portfolioFinancialFilterValue(key) {
-  return localStorage.getItem(`evHub.portfolioFinancials.filter.${key}`) || "all";
+  return localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.filter.${key}`) || "all";
 }
 function portfolioFinancialStatusKey(label = "") {
   return String(label || "review").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "review";
@@ -3149,7 +3150,49 @@ function portfolioFinancialActiveFilterCount() {
 function portfolioFinancialFilterPanel(rows, filteredRows) {
   const defs = portfolioFinancialFilterDefinitions();
   const activeCount = portfolioFinancialActiveFilterCount();
-  return `<section class="panel portfolio-financial-filter-panel"><div class="panel-title-row"><div><h3>Filters</h3><p class="muted small">Filter the dashboard and table by operating status, quality, maturity, CAPEX, revenue basis and payback category.</p></div><button type="button" class="secondary mini" data-portfolio-financial-reset-filters="1" ${activeCount ? "" : "disabled"}>Reset filters</button></div><div class="portfolio-financial-filter-grid">${defs.map(def => portfolioFinancialFilterSelect(def, rows)).join("")}</div><p class="muted small"><strong>${number(filteredRows.length,0)}</strong> of <strong>${number(rows.length,0)}</strong> active sites selected${activeCount ? ` · ${number(activeCount,0)} filter${activeCount === 1 ? "" : "s"} applied` : ""}.</p></section>`;
+  const openAttr = activeCount ? " open" : "";
+  return `<section class="panel portfolio-financial-filter-panel portfolio-financial-filter-panel-compact"><details${openAttr}><summary><span><strong>Filters</strong><small>${number(filteredRows.length,0)} of ${number(rows.length,0)} active sites selected${activeCount ? ` · ${number(activeCount,0)} filter${activeCount === 1 ? "" : "s"} applied` : " · all sites"}</small></span><button type="button" class="secondary mini" data-portfolio-financial-reset-filters="1" ${activeCount ? "" : "disabled"}>Reset filters</button></summary><p class="muted small">Filter the dashboard and table by operating status, quality, maturity, CAPEX, revenue basis and payback category.</p><div class="portfolio-financial-filter-grid">${defs.map(def => portfolioFinancialFilterSelect(def, rows)).join("")}</div></details></section>`;
+}
+function portfolioFinancialDashboardMetric(label, value, note = "", cls = "") {
+  return `<div class="portfolio-financial-dashboard-metric ${h(cls)}"><span>${h(label)}</span><strong>${value}</strong>${note ? `<small>${h(note)}</small>` : ""}</div>`;
+}
+function portfolioFinancialDashboardWindow(title, subtitle, metrics, cls = "") {
+  return `<section class="portfolio-financial-dashboard-window ${h(cls)}"><div class="portfolio-financial-window-head"><h4>${h(title)}</h4>${subtitle ? `<p>${h(subtitle)}</p>` : ""}</div><div class="portfolio-financial-window-grid">${metrics.join("")}</div></section>`;
+}
+function portfolioFinancialStatusPill(label, value, note = "") {
+  return `<div class="portfolio-financial-status-pill"><span>${h(label)}</span><strong>${value}</strong>${note ? `<small>${h(note)}</small>` : ""}</div>`;
+}
+function portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon) {
+  const selectedText = `${number(filteredRows.length,0)} of ${number(rows.length,0)} active sites`;
+  const capexDeltaPct = summary.modelCapexForCapexRows > 0 ? summary.capexDelta / summary.modelCapexForCapexRows : null;
+  const capexDeltaNote = summary.capexDelta < 0 ? "overspend vs model" : summary.capexDelta > 0 ? "underspend vs model" : "in line with model";
+  const investment = portfolioFinancialDashboardWindow("Investment position", "Actual investment against modelled CAPEX for the selected sites.", [
+    portfolioFinancialDashboardMetric("Selected sites", number(filteredRows.length,0), selectedText),
+    portfolioFinancialDashboardMetric("Actual CAPEX tracked", currency(summary.actualCapex,0), `${number(summary.rowsWithCapex,0)} of ${number(summary.totalSites,0)} selected sites`),
+    portfolioFinancialDashboardMetric("Model CAPEX", currency(summary.modelCapexForCapexRows,0), "same sites with actual CAPEX"),
+    portfolioFinancialDashboardMetric("CAPEX Δ", currency(summary.capexDelta,0), `model minus actual · ${capexDeltaNote}`, summary.capexDelta < 0 ? "bad" : "good"),
+    portfolioFinancialDashboardMetric("CAPEX Δ %", capexDeltaPct === null ? "—" : pct(capexDeltaPct,1), "model minus actual / model"),
+    portfolioFinancialDashboardMetric("CAPEX missing", number(summary.capexMissing,0), "payback blocked only")
+  ], "investment");
+  const operating = portfolioFinancialDashboardWindow("Current operating performance", "Annualised run-rate from available actual operating data.", [
+    portfolioFinancialDashboardMetric("This-year revenue", currency(projection.thisYearRevenue,0), "current annual run-rate"),
+    portfolioFinancialDashboardMetric("Next-year revenue", currency(projection.nextYearRevenue,0), "projected next year"),
+    portfolioFinancialDashboardMetric("Annualised kWh", kwh(summary.annualKwh,0), `${number(summary.rowsWithActuals,0)} selected sites with usable actuals`),
+    portfolioFinancialDashboardMetric("OPEX / yr", currency(summary.annualOpex,0), "excludes electricity + landlord"),
+    portfolioFinancialDashboardMetric("EBITDA proxy / yr", currency(summary.operatingCashflow,0), "pre-landlord unless actual terms provided"),
+    portfolioFinancialDashboardMetric("Portfolio payback", portfolioPaybackLabel(summary.paybackYears), `${number(summary.paybackEligible,0)} positive-cashflow sites`)
+  ], "operating");
+  const projectionWindow = portfolioFinancialDashboardWindow("Projection & profitability", `Selected ${number(horizon,0)}-year projection.`, [
+    `<div class="portfolio-financial-dashboard-metric horizon-control"><span>Projection horizon</span>${portfolioFinancialHorizonSelector(horizon)}</div>`,
+    portfolioFinancialDashboardMetric(`${number(horizon,0)}yr revenue`, currency(projection.horizonRevenue,0), "cumulative projection"),
+    portfolioFinancialDashboardMetric(`${number(horizon,0)}yr EBITDA`, currency(projection.horizonEbitda,0), "cumulative pre-landlord"),
+    portfolioFinancialDashboardMetric(`${number(horizon,0)}yr net after CAPEX`, currency(projection.netAfterCapex,0), "EBITDA minus tracked CAPEX", projection.netAfterCapex < 0 ? "bad" : "good"),
+    portfolioFinancialDashboardMetric("Profitability margin", projection.profitabilityMargin === null ? "—" : pct(projection.profitabilityMargin,1), `${number(horizon,0)}yr EBITDA / revenue`)
+  ], "projection");
+  return `<div class="portfolio-financial-dashboard-grid">${investment}${operating}${projectionWindow}</div>`;
+}
+function portfolioFinancialPerformanceStrip(summary) {
+  return `<div class="portfolio-financial-status-strip">${portfolioFinancialStatusPill("In benchmark", number(summary.inBenchmark,0), "±15% kWh")}${portfolioFinancialStatusPill("Underperforming", number(summary.underperforming,0), "below model")}${portfolioFinancialStatusPill("Above benchmark", number(summary.outperforming,0), "above model")}${portfolioFinancialStatusPill("Low / missing history", number(summary.notEnoughData,0), "greyed out")}${portfolioFinancialStatusPill("CAPEX missing", number(summary.capexMissing,0), "payback blocked")}${portfolioFinancialStatusPill("No payback", number(summary.noPayback,0), "negative cashflow")}</div>`;
 }
 function portfolioFinancialProjectionGrowthRate() {
   const trafficGrowth = Number(state.inputs.annualTrafficGrowthRate ?? DEFAULT_INPUTS.annualTrafficGrowthRate ?? 0.01);
@@ -3258,10 +3301,10 @@ function portfolioFinancialMetric(value, sub = "", cls = "", title = "") {
   return `<div class="portfolio-financial-metric ${h(cls)}"${titleAttr}><strong>${value}</strong>${sub ? `<small>${sub}</small>` : ""}</div>`;
 }
 function portfolioFinancialSortKey() {
-  return localStorage.getItem("evHub.portfolioFinancials.sortKey") || "site";
+  return localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.sortKey`) || "site";
 }
 function portfolioFinancialSortDir() {
-  return localStorage.getItem("evHub.portfolioFinancials.sortDir") === "desc" ? "desc" : "asc";
+  return localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.sortDir`) === "desc" ? "desc" : "asc";
 }
 function portfolioFinancialSortHeader(key, label) {
   const currentKey = portfolioFinancialSortKey();
@@ -3408,12 +3451,12 @@ function renderPortfolioFinancialPerformance() {
   const sortDir = portfolioFinancialSortDir() === "desc" ? "high to low / Z-A" : "low to high / A-Z";
   const projectionNote = `Projection uses current annual run-rate and ${(projection.growth * 100).toFixed(1)}% annual growth/tariff escalation from model assumptions. Profitability is EBITDA proxy before landlord unless actual terms are loaded.`;
   return `
-    ${sectionTitle("Portfolio Financial Performance", "Simplified financial view of all active Portfolio Calibration sites: actual CAPEX vs model CAPEX, operating days, actual-run-rate revenue, OPEX, payback quality and selectable long-term projections.")}
+    ${sectionTitle("Portfolio Financial Performance", "Financial view of all active Portfolio Calibration sites: CAPEX control, current run-rate, long-term projection and site-level performance quality.")}
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
-    <section class="panel portfolio-financial-hero"><div class="panel-title-row"><div><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless 365+ days of data exists. Rows with missing/low operating history are greyed out. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialHorizonSelector(horizon)}</div><div class="portfolio-summary-grid">${kpi("Selected sites", number(filteredRows.length,0), `${number(rows.length,0)} active sites available`)}${kpi("Actual CAPEX tracked", currency(summary.actualCapex,0), `${number(summary.rowsWithCapex,0)} of ${number(summary.totalSites,0)} selected sites`)}${kpi("This-year revenue", currency(projection.thisYearRevenue,0), "current annual run-rate")}${kpi("Next-year revenue", currency(projection.nextYearRevenue,0), "projected next year")}${kpi(`${number(horizon,0)}yr revenue`, currency(projection.horizonRevenue,0), "cumulative projection")}${kpi(`${number(horizon,0)}yr EBITDA`, currency(projection.horizonEbitda,0), "cumulative pre-landlord")}${kpi(`${number(horizon,0)}yr net after CAPEX`, currency(projection.netAfterCapex,0), "EBITDA minus tracked CAPEX")}${kpi("Profitability margin", projection.profitabilityMargin === null ? "—" : pct(projection.profitabilityMargin,1), `${number(horizon,0)}yr EBITDA / revenue`)}${kpi("Annualised kWh", kwh(summary.annualKwh,0), `${number(summary.rowsWithActuals,0)} selected sites with usable actuals`)}${kpi("OPEX / yr", currency(summary.annualOpex,0), "excludes electricity + landlord")}${kpi("EBITDA proxy / yr", currency(summary.operatingCashflow,0), "pre-landlord unless actual terms provided")}${kpi("Portfolio payback", portfolioPaybackLabel(summary.paybackYears), `${number(summary.paybackEligible,0)} positive-cashflow sites`)}</div><p class="muted small">${h(projectionNote)}</p></section>
-    <section class="panel"><h3>Performance position</h3><div class="portfolio-summary-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "actual kWh within ±15%")}${kpi("Underperforming", number(summary.underperforming,0), "actual kWh below model")}${kpi("Above benchmark", number(summary.outperforming,0), "actual kWh above model")}${kpi("Low / missing history", number(summary.notEnoughData,0), "greyed out in table")}${kpi("CAPEX missing", number(summary.capexMissing,0), "payback blocked only")}${kpi("No payback", number(summary.noPayback,0), "negative run-rate cashflow")}</div><p class="muted small">OPEX is calculated using the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. OPEX excludes electricity purchase; EBITDA proxy deducts both electricity and OPEX from annualised revenue. Negative-cashflow sites show “No payback” rather than “Not enough data”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.10 filters + projections</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only with at least 365 operating days; otherwise it is labelled projected annual run-rate. Payback is a current run-rate proxy.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless 365+ days of data exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
+    <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Compact demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceStrip(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.11 grouped dashboard</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only with at least 365 operating days; otherwise it is labelled projected annual run-rate. Payback is a current run-rate proxy.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
   `;
 }
 
@@ -3828,10 +3871,10 @@ function wirePage(r) {
   document.querySelectorAll("[data-portfolio-financial-sort]").forEach(node => {
     node.addEventListener("click", e => {
       const key = e.currentTarget.dataset.portfolioFinancialSort;
-      const currentKey = localStorage.getItem("evHub.portfolioFinancials.sortKey") || "site";
-      const currentDir = localStorage.getItem("evHub.portfolioFinancials.sortDir") || "asc";
-      localStorage.setItem("evHub.portfolioFinancials.sortKey", key);
-      localStorage.setItem("evHub.portfolioFinancials.sortDir", currentKey === key && currentDir === "asc" ? "desc" : "asc");
+      const currentKey = localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.sortKey`) || "site";
+      const currentDir = localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.sortDir`) || "asc";
+      localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.sortKey`, key);
+      localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.sortDir`, currentKey === key && currentDir === "asc" ? "desc" : "asc");
       preserveScrollRender();
     });
   });
@@ -3840,19 +3883,19 @@ function wirePage(r) {
       const key = e.currentTarget.dataset.portfolioFinancialFilter;
       const value = e.currentTarget.value || "all";
       if (!key) return;
-      localStorage.setItem(`evHub.portfolioFinancials.filter.${key}`, value);
+      localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.filter.${key}`, value);
       preserveScrollRender();
     });
   });
   document.querySelectorAll("[data-portfolio-financial-reset-filters]").forEach(node => {
     node.addEventListener("click", () => {
-      PORTFOLIO_FINANCIAL_FILTERS.forEach(key => localStorage.setItem(`evHub.portfolioFinancials.filter.${key}`, "all"));
+      PORTFOLIO_FINANCIAL_FILTERS.forEach(key => localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.filter.${key}`, "all"));
       preserveScrollRender();
     });
   });
   document.querySelectorAll("[data-portfolio-financial-horizon]").forEach(node => {
     node.addEventListener("click", e => {
-      localStorage.setItem("evHub.portfolioFinancials.horizon", e.currentTarget.dataset.portfolioFinancialHorizon || "5");
+      localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`, e.currentTarget.dataset.portfolioFinancialHorizon || "5");
       preserveScrollRender();
     });
   });

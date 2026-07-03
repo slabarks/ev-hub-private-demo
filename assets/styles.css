@@ -2555,3 +2555,69 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 .portfolio-financial-table td:nth-child(7) .portfolio-financial-metric {
   text-align: right;
 }
+
+/* v17.10 portfolio financial filters and projection horizon */
+.portfolio-financial-filter-panel {
+  border-color: rgba(0,112,74,.16);
+}
+.portfolio-financial-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 12px 0 8px;
+}
+.portfolio-financial-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.portfolio-financial-filter select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(0,112,74,.18);
+  border-radius: 10px;
+  background: rgba(255,255,255,.9);
+  color: #0f2d25;
+  font-weight: 800;
+  padding: 6px 8px;
+}
+.portfolio-financial-horizon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.portfolio-financial-horizon span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  margin-right: 4px;
+}
+.portfolio-financial-horizon button {
+  border: 1px solid rgba(0,112,74,.2);
+  border-radius: 999px;
+  background: rgba(255,255,255,.86);
+  color: #07543c;
+  font-weight: 850;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.portfolio-financial-horizon button:hover,
+.portfolio-financial-horizon button:focus-visible {
+  background: #fff;
+  border-color: rgba(0,112,74,.45);
+  outline: 2px solid rgba(0,112,74,.12);
+  outline-offset: 1px;
+}
+.portfolio-financial-horizon button.active {
+  background: #00704a;
+  border-color: #00704a;
+  color: #fff;
+}
+@media (max-width: 760px) {
+  .portfolio-financial-horizon { justify-content: flex-start; margin-top: 8px; }
+}

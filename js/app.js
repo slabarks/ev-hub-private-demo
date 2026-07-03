@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.12 horizontal windows";
+const APP_BUILD_VERSION = "V17.13 multi filters";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -3053,13 +3053,28 @@ function portfolioFinancialRows() {
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_12";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_13";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
 }
+function portfolioFinancialFilterValues(key) {
+  const raw = localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.filter.${key}`) || "all";
+  if (!raw || raw === "all") return ["all"];
+  const values = raw.split(",").map(v => String(v || "").trim()).filter(Boolean);
+  return values.length ? [...new Set(values)] : ["all"];
+}
 function portfolioFinancialFilterValue(key) {
-  return localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.filter.${key}`) || "all";
+  const values = portfolioFinancialFilterValues(key);
+  return values.includes("all") ? "all" : values[0];
+}
+function portfolioFinancialFilterStorageValue(values) {
+  const clean = [...new Set((values || []).map(v => String(v || "").trim()).filter(Boolean).filter(v => v !== "all"))];
+  return clean.length ? clean.join(",") : "all";
+}
+function portfolioFinancialFilterHasValue(key, value) {
+  const values = portfolioFinancialFilterValues(key);
+  return values.includes("all") ? value === "all" : values.includes(value);
 }
 function portfolioFinancialStatusKey(label = "") {
   return String(label || "review").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "review";
@@ -3125,33 +3140,35 @@ function portfolioFinancialRowFilterValue(fin, key) {
 }
 function portfolioFinancialPassesFilters(fin) {
   return PORTFOLIO_FINANCIAL_FILTERS.every(key => {
-    const selected = portfolioFinancialFilterValue(key);
-    if (!selected || selected === "all") return true;
-    return portfolioFinancialRowFilterValue(fin, key) === selected;
+    const selected = portfolioFinancialFilterValues(key);
+    if (!selected.length || selected.includes("all")) return true;
+    return selected.includes(portfolioFinancialRowFilterValue(fin, key));
   });
 }
 function portfolioFinancialFilteredRows(rows) {
   return rows.filter(portfolioFinancialPassesFilters);
 }
 function portfolioFinancialFilterSelect(def, rows) {
-  const selected = portfolioFinancialFilterValue(def.key);
+  const selectedValues = portfolioFinancialFilterValues(def.key);
   const counts = new Map();
   rows.forEach(r => counts.set(portfolioFinancialRowFilterValue(r, def.key), (counts.get(portfolioFinancialRowFilterValue(r, def.key)) || 0) + 1));
-  const options = def.options.map(([value, label]) => {
-    const count = value === "all" ? rows.length : (counts.get(value) || 0);
-    const disabled = value !== "all" && count === 0 ? "disabled" : "";
-    return `<option value="${h(value)}" ${selected === value ? "selected" : ""} ${disabled}>${h(label)}${value === "all" ? "" : ` (${number(count,0)})`}</option>`;
+  const total = rows.length;
+  const allActive = selectedValues.includes("all");
+  const options = def.options.filter(([value]) => value !== "all").map(([value, label]) => {
+    const count = counts.get(value) || 0;
+    const disabled = count === 0 ? "disabled" : "";
+    const checked = !allActive && selectedValues.includes(value) ? "checked" : "";
+    return `<label class="portfolio-financial-filter-option ${disabled ? "disabled" : ""}"><input type="checkbox" data-portfolio-financial-filter-checkbox="${h(def.key)}" value="${h(value)}" ${checked} ${disabled}><span>${h(label)}</span><small>${number(count,0)}</small></label>`;
   }).join("");
-  return `<label class="portfolio-financial-filter"><span>${h(def.label)}</span><select data-portfolio-financial-filter="${h(def.key)}">${options}</select></label>`;
+  return `<section class="portfolio-financial-filter"><div class="portfolio-financial-filter-head"><span>${h(def.label)}</span><button type="button" class="portfolio-financial-filter-all ${allActive ? "active" : ""}" data-portfolio-financial-filter-all="${h(def.key)}">All <em>${number(total,0)}</em></button></div><div class="portfolio-financial-filter-options">${options}</div></section>`;
 }
 function portfolioFinancialActiveFilterCount() {
-  return PORTFOLIO_FINANCIAL_FILTERS.filter(key => portfolioFinancialFilterValue(key) !== "all").length;
+  return PORTFOLIO_FINANCIAL_FILTERS.filter(key => !portfolioFinancialFilterValues(key).includes("all")).length;
 }
 function portfolioFinancialFilterPanel(rows, filteredRows) {
   const defs = portfolioFinancialFilterDefinitions();
   const activeCount = portfolioFinancialActiveFilterCount();
-  const openAttr = activeCount ? " open" : "";
-  return `<section class="panel portfolio-financial-filter-panel portfolio-financial-filter-panel-compact"><details${openAttr}><summary><span><strong>Filters</strong><small>${number(filteredRows.length,0)} of ${number(rows.length,0)} active sites selected${activeCount ? ` · ${number(activeCount,0)} filter${activeCount === 1 ? "" : "s"} applied` : " · all sites"}</small></span><button type="button" class="secondary mini" data-portfolio-financial-reset-filters="1" ${activeCount ? "" : "disabled"}>Reset filters</button></summary><p class="muted small">Filter the dashboard and table by operating status, quality, maturity, CAPEX, revenue basis and payback category.</p><div class="portfolio-financial-filter-grid">${defs.map(def => portfolioFinancialFilterSelect(def, rows)).join("")}</div></details></section>`;
+  return `<section class="panel portfolio-financial-filter-panel portfolio-financial-filter-panel-open"><div class="portfolio-financial-filter-toolbar"><span><strong>Filters</strong><small>${number(filteredRows.length,0)} of ${number(rows.length,0)} active sites selected${activeCount ? ` · ${number(activeCount,0)} filter${activeCount === 1 ? "" : "s"} active` : " · all sites"}</small></span><button type="button" class="secondary mini" data-portfolio-financial-reset-filters="1" ${activeCount ? "" : "disabled"}>Reset filters</button></div><p class="muted small">Filters are always visible. You can select multiple values inside each filter group.</p><div class="portfolio-financial-filter-grid">${defs.map(def => portfolioFinancialFilterSelect(def, rows)).join("")}</div></section>`;
 }
 function portfolioFinancialDashboardMetric(label, value, note = "", cls = "") {
   return `<div class="portfolio-financial-dashboard-metric ${h(cls)}"><span>${h(label)}</span><strong>${value}</strong>${note ? `<small>${h(note)}</small>` : ""}</div>`;
@@ -3456,7 +3473,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless 365+ days of data exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.12 horizontal layout</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only with at least 365 operating days; otherwise it is labelled projected annual run-rate. Payback is a current run-rate proxy.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.13 multi filters</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only with at least 365 operating days; otherwise it is labelled projected annual run-rate. Payback is a current run-rate proxy.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
   `;
 }
 
@@ -3878,12 +3895,23 @@ function wirePage(r) {
       preserveScrollRender();
     });
   });
-  document.querySelectorAll("[data-portfolio-financial-filter]").forEach(node => {
+  document.querySelectorAll("[data-portfolio-financial-filter-checkbox]").forEach(node => {
     node.addEventListener("change", e => {
-      const key = e.currentTarget.dataset.portfolioFinancialFilter;
-      const value = e.currentTarget.value || "all";
+      const key = e.currentTarget.dataset.portfolioFinancialFilterCheckbox;
+      const value = e.currentTarget.value || "";
+      if (!key || !value) return;
+      const current = portfolioFinancialFilterValues(key).filter(v => v !== "all");
+      const next = new Set(current);
+      if (e.currentTarget.checked) next.add(value); else next.delete(value);
+      localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.filter.${key}`, portfolioFinancialFilterStorageValue([...next]));
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-portfolio-financial-filter-all]").forEach(node => {
+    node.addEventListener("click", e => {
+      const key = e.currentTarget.dataset.portfolioFinancialFilterAll;
       if (!key) return;
-      localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.filter.${key}`, value);
+      localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.filter.${key}`, "all");
       preserveScrollRender();
     });
   });

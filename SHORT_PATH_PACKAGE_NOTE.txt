@@ -1,1 +1,1 @@
-This package uses the short root folder EVHubV11 and shortened data filenames to avoid Windows Error 0x80010135: Path too long during extraction/copying. App version: v35.40 matched portfolio benchmark fix.
+EVHub_V17_3.zip uses a short root folder name to avoid Windows path-too-long errors. Extract to C:\EVHub\ or another short path.

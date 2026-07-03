@@ -14,7 +14,10 @@ const appTokens = [
   'Not enough data · CAPEX missing',
   'OPEX / yr',
   'EBITDA proxy / yr',
-  'portfolioPaybackLabel(summary.paybackYears)'
+  'portfolioPaybackLabel(summary.paybackYears)',
+  'function portfolioFinancialSortHeader',
+  'data-portfolio-financial-sort',
+  'function portfolioFinancialSortRows'
 ];
 for (const token of appTokens) {
   if (!app.includes(token)) throw new Error(`Missing Portfolio Financials app token: ${token}`);
@@ -31,10 +34,11 @@ for (const token of htmlTokens) {
 }
 
 const cssTokens = [
-  'v35.58 portfolio financial performance tab',
+  'v35.59 portfolio financial performance tab',
   '.portfolio-financial-table',
   '.portfolio-financial-muted',
-  '.portfolio-finance-footnote'
+  '.portfolio-financial-metric',
+  '.portfolio-financial-sort-header'
 ];
 for (const token of cssTokens) {
   if (!css.includes(token)) throw new Error(`Missing Portfolio Financials CSS token: ${token}`);

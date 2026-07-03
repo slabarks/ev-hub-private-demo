@@ -769,6 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
+const APP_BUILD_VERSION = "V17.3 compact sortable financial table";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -3011,66 +3012,142 @@ function portfolioPaybackLabel(years) {
 function portfolioFinancialVarianceLabel(v) {
   return Number.isFinite(Number(v)) ? `${v >= 0 ? "+" : ""}${pct(v, 1)}` : "—";
 }
+function portfolioFinancialDataQualityShort(label) {
+  const text = String(label || "");
+  if (text.startsWith("Not enough data")) return "Insufficient";
+  if (text.startsWith("Medium")) return "Medium";
+  if (text.startsWith("Low")) return "Low";
+  if (text.startsWith("High")) return "High";
+  return text || "Review";
+}
+function portfolioFinancialMetric(value, sub = "", cls = "") {
+  return `<div class="portfolio-financial-metric ${h(cls)}"><strong>${value}</strong>${sub ? `<small>${sub}</small>` : ""}</div>`;
+}
+function portfolioFinancialSortKey() {
+  return localStorage.getItem("evHub.portfolioFinancials.sortKey") || "site";
+}
+function portfolioFinancialSortDir() {
+  return localStorage.getItem("evHub.portfolioFinancials.sortDir") === "desc" ? "desc" : "asc";
+}
+function portfolioFinancialSortHeader(key, label) {
+  const currentKey = portfolioFinancialSortKey();
+  const dir = portfolioFinancialSortDir();
+  const isActive = currentKey === key;
+  const arrow = isActive ? (dir === "asc" ? "↑" : "↓") : "↕";
+  const title = isActive
+    ? `Sorted by ${label} ${dir === "asc" ? "ascending" : "descending"}. Click to reverse.`
+    : `Sort by ${label}`;
+  return `<button type="button" class="sort-header portfolio-financial-sort-header${isActive ? " active" : ""}" data-portfolio-financial-sort="${h(key)}" aria-label="${h(title)}" title="${h(title)}"><span>${h(label)}</span><span class="sort-arrow" aria-hidden="true">${arrow}</span></button>`;
+}
+function portfolioFinancialSortValue(fin, key) {
+  const statusRank = {
+    "Cashflow pressure": 1,
+    "Underperforming": 2,
+    "Low history": 3,
+    "In benchmark": 4,
+    "Above benchmark": 5,
+    "Review": 6,
+    "Not enough data": 9
+  };
+  const qualityRank = { High: 1, Medium: 2, Low: 3, Insufficient: 4 };
+  switch (key) {
+    case "site": return { type: "text", value: fin.site?.name || "" };
+    case "days": return { type: "number", value: Number(fin.operationalDays), missing: !fin.hasOperationalDays };
+    case "capex": return { type: "number", value: Number(fin.actualCapex), missing: !fin.hasActualCapex };
+    case "kwh": return { type: "number", value: Number(fin.annualKwh), missing: !fin.hasActualKwh };
+    case "revenue": return { type: "number", value: Number(fin.annualRevenue), missing: !(Number(fin.annualRevenue) > 0) };
+    case "opex": return { type: "number", value: Number(fin.opexExElectricity), missing: !fin.hasActualKwh };
+    case "ebitda": return { type: "number", value: Number(fin.operatingCashflow), missing: !fin.hasActualKwh };
+    case "payback": return { type: "number", value: Number(fin.paybackYears), missing: !Number.isFinite(Number(fin.paybackYears)) };
+    case "status": return { type: "number", value: statusRank[fin.status?.label] || 8, missing: false };
+    case "quality": return { type: "number", value: qualityRank[portfolioFinancialDataQualityShort(fin.dataQuality)] || 5, missing: false };
+    default: return { type: "text", value: fin.site?.name || "" };
+  }
+}
+function portfolioFinancialSortRows(rows) {
+  const key = portfolioFinancialSortKey();
+  const dir = portfolioFinancialSortDir() === "desc" ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const av = portfolioFinancialSortValue(a, key);
+    const bv = portfolioFinancialSortValue(b, key);
+    if (av.missing !== bv.missing) return av.missing ? 1 : -1;
+    if (av.type === "text" || bv.type === "text") {
+      const textCompare = String(av.value || "").localeCompare(String(bv.value || ""));
+      if (textCompare !== 0) return textCompare * dir;
+    } else {
+      const an = Number(av.value);
+      const bn = Number(bv.value);
+      const aFinite = Number.isFinite(an);
+      const bFinite = Number.isFinite(bn);
+      if (aFinite !== bFinite) return aFinite ? -1 : 1;
+      if (aFinite && bFinite && an !== bn) return (an - bn) * dir;
+    }
+    return String(a.site?.name || "").localeCompare(String(b.site?.name || ""));
+  });
+}
 function portfolioFinancialTableRow(fin) {
   const r = fin.result;
-  const capexDelta = Number.isFinite(Number(fin.capexDelta)) ? currency(fin.capexDelta, 0) : "—";
   const status = fin.status || { label: "Review", cls: "warn", note: "Review manually." };
-  const revenueSub = fin.revenueEstimated ? `<span class="portfolio-finance-footnote">est.</span>` : "";
+  const revenueSub = fin.revenueEstimated ? "estimated" : "actual";
+  const modelKwh = Number(r.modelledAnnualKwh || 0);
+  const capexDeltaLabel = Number.isFinite(Number(fin.capexDelta)) ? `Δ ${currency(fin.capexDelta, 0)}` : "Δ n/a";
+  const actualCapexCell = fin.hasActualCapex
+    ? portfolioFinancialMetric(currency(fin.actualCapex, 0), `${Number(fin.modelCapex) > 0 ? `model ${currency(fin.modelCapex, 0)} · ` : ""}${capexDeltaLabel}`)
+    : `<span class="badge neutral">Not enough data</span><small class="portfolio-financial-cell-note">CAPEX missing</small>`;
+  const kwhCell = fin.hasActualKwh
+    ? portfolioFinancialMetric(kwh(fin.annualKwh, 0), `${modelKwh > 0 ? `model ${kwh(modelKwh, 0)} · ` : ""}${portfolioFinancialVarianceLabel(r.annualKwhVariance)}`)
+    : "—";
+  const statusCell = `<span class="badge ${h(status.cls)}">${h(status.label)}</span><small class="portfolio-financial-cell-note" title="${h(status.note || fin.dataQuality)}">${h(portfolioFinancialDataQualityShort(fin.dataQuality))}${fin.revenueEstimated ? " · rev est." : ""}</small>`;
   return {
     className: fin.muted ? "portfolio-financial-muted" : "",
     cells: [
-      `<strong>${h(fin.site.name)}</strong><div class="muted small">${h(fin.site.modelEquivalentSummary || "")}</div>`,
+      `<div class="portfolio-financial-site"><strong>${h(fin.site.name)}</strong><small title="${h(fin.site.modelEquivalentSummary || "")}">${h(fin.site.modelEquivalentSummary || "")}</small></div>`,
       portfolioOperationalDaysLabel(fin.operationalDays),
-      fin.hasActualCapex ? currency(fin.actualCapex, 0) : `<span class="badge neutral">Not enough data</span>`,
-      Number(fin.modelCapex) > 0 ? currency(fin.modelCapex, 0) : "—",
-      capexDelta,
-      fin.hasActualKwh ? kwh(fin.annualKwh, 0) : "—",
-      Number(r.modelledAnnualKwh) > 0 ? kwh(r.modelledAnnualKwh, 0) : "—",
-      portfolioFinancialVarianceLabel(r.annualKwhVariance),
-      fin.annualRevenue > 0 ? `${currency(fin.annualRevenue, 0)}${revenueSub}` : "—",
-      fin.hasActualKwh ? currency(fin.opexExElectricity, 0) : "—",
-      fin.hasActualKwh ? currency(fin.operatingCashflow, 0) : "—",
+      actualCapexCell,
+      kwhCell,
+      fin.annualRevenue > 0 ? portfolioFinancialMetric(currency(fin.annualRevenue, 0), revenueSub) : "—",
+      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.opexExElectricity, 0), "excl. electricity") : "—",
+      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.operatingCashflow, 0), "run-rate") : "—",
       portfolioPaybackLabel(fin.paybackYears),
-      `<span class="badge ${h(status.cls)}">${h(status.label)}</span>`,
-      `<span title="${h(status.note || fin.dataQuality)}">${h(fin.dataQuality)}</span><div class="muted small">${h(fin.revenueSource)}</div>`
+      statusCell
     ]
   };
 }
 function renderPortfolioFinancialPerformance() {
   const rows = portfolioFinancialRows();
   const summary = portfolioFinancialSummary(rows);
-  const completeRows = rows.filter(r => !r.muted);
   const headers = [
-    "Site",
-    "Operational days",
-    "Actual CAPEX",
-    "Model CAPEX",
-    "CAPEX Δ",
-    "Actual kWh/yr",
-    "Model kWh/yr",
-    "kWh variance",
-    "Next-year revenue",
-    "OPEX/yr",
-    "EBITDA proxy/yr",
-    "Payback",
-    "Status",
-    "Data quality"
+    portfolioFinancialSortHeader("site", "Site"),
+    portfolioFinancialSortHeader("days", "Days"),
+    portfolioFinancialSortHeader("capex", "CAPEX"),
+    portfolioFinancialSortHeader("kwh", "kWh / yr"),
+    portfolioFinancialSortHeader("revenue", "Revenue / yr"),
+    portfolioFinancialSortHeader("opex", "OPEX / yr"),
+    portfolioFinancialSortHeader("ebitda", "EBITDA / yr"),
+    portfolioFinancialSortHeader("payback", "Payback"),
+    portfolioFinancialSortHeader("status", "Status / quality")
   ];
-  const sorted = [...rows].sort((a, b) => {
-    const am = a.muted ? 1 : 0;
-    const bm = b.muted ? 1 : 0;
-    if (am !== bm) return am - bm;
-    const av = Number(a.result?.annualKwhVariance);
-    const bv = Number(b.result?.annualKwhVariance);
-    if (Number.isFinite(av) && Number.isFinite(bv)) return av - bv;
-    return String(a.site.name).localeCompare(String(b.site.name));
-  });
+  const sorted = portfolioFinancialSortRows(rows);
+  const sortNames = {
+    site: "site",
+    days: "operational days",
+    capex: "actual CAPEX",
+    kwh: "actual annual kWh",
+    revenue: "annual revenue",
+    opex: "annual OPEX",
+    ebitda: "annual EBITDA proxy",
+    payback: "payback",
+    status: "status / data quality",
+    quality: "data quality"
+  };
+  const sortKey = portfolioFinancialSortKey();
+  const sortDir = portfolioFinancialSortDir() === "desc" ? "high to low / Z-A" : "low to high / A-Z";
   return `
-    ${sectionTitle("Portfolio Financial Performance", "Financial view of all active Portfolio Calibration sites: actual CAPEX vs model CAPEX, operating-days maturity, actual-run-rate revenue, OPEX and payback quality.")}
+    ${sectionTitle("Portfolio Financial Performance", "Simplified financial view of all active Portfolio Calibration sites: actual CAPEX vs model CAPEX, operating days, actual-run-rate revenue, OPEX and payback quality.")}
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     <section class="panel portfolio-financial-hero"><div><span class="eyebrow">Portfolio dashboard</span><h3>All active sites together</h3><p>Rows with missing CAPEX, missing actual kWh or unconfirmed operating days are greyed out and excluded from payback-quality KPIs.</p></div><div class="portfolio-summary-grid">${kpi("Actual CAPEX tracked", currency(summary.actualCapex,0), `${number(summary.rowsWithCapex,0)} of ${number(summary.totalSites,0)} sites`)}${kpi("Model CAPEX", currency(summary.modelCapexForCapexRows,0), "same sites with actual CAPEX")}${kpi("CAPEX Δ", currency(summary.capexDelta,0), "model minus actual")}${kpi("Annualised kWh", kwh(summary.annualKwh,0), `${number(summary.rowsWithActuals,0)} sites with usable actuals`)}${kpi("Next-year revenue", currency(summary.annualRevenue,0), "actual run-rate / estimated where noted")}${kpi("OPEX / yr", currency(summary.annualOpex,0), "excludes electricity purchase")}${kpi("EBITDA proxy / yr", currency(summary.operatingCashflow,0), "after electricity and OPEX")}${kpi("Portfolio payback", portfolioPaybackLabel(summary.paybackYears), `${number(summary.paybackEligible,0)} payback-eligible sites`)}</div></section>
     <section class="panel"><h3>Performance position</h3><div class="portfolio-summary-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "actual kWh within ±15%")}${kpi("Underperforming", number(summary.underperforming,0), "actual kWh below model")}${kpi("Above benchmark", number(summary.outperforming,0), "actual kWh above model")}${kpi("Not enough data", number(summary.notEnoughData,0), "greyed out in table")}</div><p class="muted small">OPEX is calculated using the model's current site configuration and commercial assumptions, applied to actual annualised kWh/sessions. It excludes electricity purchase; EBITDA proxy deducts electricity and OPEX from annualised revenue.</p></section>
-    <section class="panel"><h3>Site financial performance table</h3>${table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table")}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.3 compact sortable</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. CAPEX cells show actual value first, then model value and delta; kWh cells show actual value first, then model value and variance.</p></div></div>${table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table")}</section>
   `;
 }
 
@@ -3480,6 +3557,16 @@ function wirePage(r) {
       localStorage.setItem("evHub.portfolio.sortKey", key);
       localStorage.setItem("evHub.portfolio.sortDir", currentKey === key && currentDir === "asc" ? "desc" : "asc");
       render();
+    });
+  });
+  document.querySelectorAll("[data-portfolio-financial-sort]").forEach(node => {
+    node.addEventListener("click", e => {
+      const key = e.currentTarget.dataset.portfolioFinancialSort;
+      const currentKey = localStorage.getItem("evHub.portfolioFinancials.sortKey") || "site";
+      const currentDir = localStorage.getItem("evHub.portfolioFinancials.sortDir") || "asc";
+      localStorage.setItem("evHub.portfolioFinancials.sortKey", key);
+      localStorage.setItem("evHub.portfolioFinancials.sortDir", currentKey === key && currentDir === "asc" ? "desc" : "asc");
+      preserveScrollRender();
     });
   });
   document.querySelectorAll("[data-portfolio-status-trigger]").forEach(node => {

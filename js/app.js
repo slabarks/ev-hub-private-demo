@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.16 commercial terms modal";
+const APP_BUILD_VERSION = "V17.18 rent step fix";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -3162,7 +3162,7 @@ function portfolioFinancialRows() {
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_16";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_18";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
@@ -3300,7 +3300,7 @@ function portfolioCommercialFormFields(terms, prefix = "commercial") {
   const salesEnabled = ["sales", "fixed-sales"].includes(t.termType);
   return `<div class="commercial-form-grid" data-commercial-form="${h(prefix)}">
     <label class="field"><span>Term type</span><select data-commercial-term="termType">${portfolioCommercialTermTypeOptions(t.termType)}</select><small>GP share and sales share are mutually exclusive. Fixed rent can combine with either.</small></label>
-    <label class="field"><span>Fixed rent €/yr</span><input type="number" min="0" step="100" value="${h(t.fixedRent)}" data-commercial-term="fixedRent" ${fixedEnabled ? "" : "disabled"}></label>
+    <label class="field"><span>Fixed rent €/yr</span><input type="number" min="0" step="1" value="${h(t.fixedRent)}" data-commercial-term="fixedRent" ${fixedEnabled ? "" : "disabled"}></label>
     <label class="field"><span>GP share %</span><input type="number" min="0" step="0.1" value="${h(t.gpSharePct)}" data-commercial-term="gpSharePct" ${gpEnabled ? "" : "disabled"}></label>
     <label class="field"><span>Sales share %</span><input type="number" min="0" step="0.1" value="${h(t.salesSharePct)}" data-commercial-term="salesSharePct" ${salesEnabled ? "" : "disabled"}></label>
     <label class="field"><span>Confidence</span><select data-commercial-term="confidence">${portfolioCommercialConfidenceOptions(t.confidence)}</select></label>
@@ -3328,7 +3328,7 @@ function portfolioCommercialSiteModal(row) {
     <div class="commercial-modal-head"><div><span class="eyebrow">Commercial terms</span><h3>${h(site.name)}</h3><p>Keep the investor table clean while adding site-specific landlord rent/share terms when they are known.</p></div><button type="button" class="commercial-modal-close" data-commercial-terms-close="1" aria-label="Close">×</button></div>
     <div class="commercial-current-status"><span class="badge ${h(termsLabel.cls)}">${h(termsLabel.label)}</span><small>${h(termsLabel.title)}</small></div>
     <h4>Financial impact</h4>${portfolioCommercialModalKpis(base, after)}
-    <h4>Landlord terms</h4><form data-commercial-site-form="${h(portfolioCommercialTermsKey(site))}">${portfolioCommercialFormFields(terms, "site")}<div class="commercial-modal-actions"><button type="button" class="secondary" data-commercial-terms-clear="${h(portfolioCommercialTermsKey(site))}">Clear terms</button><button type="button" class="secondary" data-commercial-terms-close="1">Cancel</button><button type="submit">Save terms</button></div></form>
+    <h4>Landlord terms</h4><form data-commercial-site-form="${h(portfolioCommercialTermsKey(site))}">${portfolioCommercialFormFields(terms, "site")}<div class="commercial-modal-actions"><button type="button" class="secondary" data-commercial-terms-clear="${h(portfolioCommercialTermsKey(site))}">Clear terms</button><button type="button" class="secondary" data-commercial-terms-close="1">Cancel</button><button type="submit" class="primary commercial-save-button">Save terms</button></div></form>
   </section></div>`;
 }
 function portfolioCommercialBulkModal(rows) {
@@ -3336,7 +3336,7 @@ function portfolioCommercialBulkModal(rows) {
   const checkboxes = allSites.map(site => `<label><input type="checkbox" data-commercial-bulk-site value="${h(portfolioCommercialTermsKey(site))}"><span>${h(site.name)}</span></label>`).join("");
   return `<div class="commercial-modal-backdrop" data-commercial-modal-backdrop="1"><section class="commercial-modal commercial-bulk-modal" role="dialog" aria-modal="true" aria-label="Bulk commercial terms manager">
     <div class="commercial-modal-head"><div><span class="eyebrow">Bulk manager</span><h3>Manage commercial terms</h3><p>Apply the same landlord terms to multiple sites, or clear terms in bulk. Defaults remain zero unless you save terms.</p></div><button type="button" class="commercial-modal-close" data-commercial-terms-close="1" aria-label="Close">×</button></div>
-    <form data-commercial-bulk-form="1"><div class="commercial-bulk-layout"><div><div class="commercial-bulk-tools"><button type="button" class="secondary mini" data-commercial-bulk-select="all">Select all</button><button type="button" class="secondary mini" data-commercial-bulk-select="none">Select none</button></div><div class="commercial-bulk-sites">${checkboxes}</div></div><div>${portfolioCommercialFormFields(portfolioCommercialTermsDefault(), "bulk")}</div></div><div class="commercial-modal-actions"><button type="button" class="secondary" data-commercial-bulk-clear="1">Clear selected terms</button><button type="button" class="secondary" data-commercial-terms-close="1">Cancel</button><button type="submit">Apply to selected</button></div></form>
+    <form data-commercial-bulk-form="1"><div class="commercial-bulk-layout"><div><div class="commercial-bulk-tools"><button type="button" class="secondary mini" data-commercial-bulk-select="all">Select all</button><button type="button" class="secondary mini" data-commercial-bulk-select="none">Select none</button></div><div class="commercial-bulk-sites">${checkboxes}</div></div><div>${portfolioCommercialFormFields(portfolioCommercialTermsDefault(), "bulk")}</div></div><div class="commercial-modal-actions"><button type="button" class="secondary" data-commercial-bulk-clear="1">Clear selected terms</button><button type="button" class="secondary" data-commercial-terms-close="1">Cancel</button><button type="submit" class="primary commercial-save-button">Apply to selected</button></div></form>
   </section></div>`;
 }
 function portfolioCommercialTermsModal(rows) {
@@ -3353,7 +3353,7 @@ function portfolioCommercialReadForm(form) {
   const get = key => form?.querySelector(`[data-commercial-term="${key}"]`)?.value ?? "";
   return portfolioCommercialTermsSanitise({
     termType: get("termType"),
-    fixedRent: Number(get("fixedRent") || 0),
+    fixedRent: Math.round(Number(String(get("fixedRent") || 0).replace(/,/g, "")) || 0),
     gpSharePct: Number(get("gpSharePct") || 0),
     salesSharePct: Number(get("salesSharePct") || 0),
     confidence: get("confidence"),
@@ -3669,7 +3669,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.16 commercial terms</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.18 rent step fix</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }

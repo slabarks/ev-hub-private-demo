@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.13 multi filters";
+const APP_BUILD_VERSION = "V17.16 commercial terms modal";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -1951,8 +1951,16 @@ function portfolioActualDataDays(site) {
   const actual = site?.actual || {};
   const liveActuals = site?.liveActuals || {};
   const diagnostics = liveActuals.diagnostics || {};
+  // Prefer actual-source operating-day evidence over maturity defaults. The maturity
+  // field is a modelling band and can be stale / rounded; using it first caused sites
+  // such as Castleknock Hotel to show 180 days despite the actual source saying 67 days.
+  const text = [actual.annualisationMethod, actual.actualBasis, actual.basis, actual.sourceNote, liveActuals.actualBasis].filter(Boolean).join(" ");
+  const match = String(text).match(/(\d+(?:\.\d+)?)\s*(?:calendar\s*)?days?\s*(?:live|operational|of\s*data)?/i);
+  if (match) {
+    const n = Number(match[1]);
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
   const candidates = [
-    site?.maturity?.dataDays,
     actual.dataDays,
     actual.operationalDays,
     actual.daysLive,
@@ -1961,20 +1969,16 @@ function portfolioActualDataDays(site) {
     liveActuals.operationalDays,
     diagnostics.dataDays,
     diagnostics.operationalDays,
-    diagnostics.daysLive
+    diagnostics.daysLive,
+    site?.maturity?.dataDays
   ];
   for (const candidate of candidates) {
     const n = Number(candidate);
     if (Number.isFinite(n) && n > 0) return Math.round(n);
   }
-  const text = [actual.annualisationMethod, actual.actualBasis, actual.basis, actual.sourceNote, liveActuals.actualBasis].filter(Boolean).join(" ");
-  const match = String(text).match(/(\d+(?:\.\d+)?)\s*(?:calendar\s*)?days?\s*(?:live|operational|of\s*data)?/i);
-  if (match) {
-    const n = Number(match[1]);
-    if (Number.isFinite(n) && n > 0) return Math.round(n);
-  }
   return 0;
 }
+
 function portfolioAnnualOperatingValues(site, metrics = portfolioOperatingMetrics(site)) {
   const actual = site?.actual || {};
   const explicitAnnualKwh = Number(actual.annualKwh || 0);
@@ -2901,18 +2905,123 @@ function portfolioActualRevenueInfo(site, annualActual, metrics) {
   const rollingRevenue = Number(actual.rolling30NetRevenue || 0);
   const annualKwh = Number(annualActual?.annualKwh || 0);
   const annualSessions = Number(annualActual?.annualSessions || metrics?.annualisedSessions || 0);
-  const price = Number(DEFAULT_INPUTS.netSellingPriceExVat || 0);
-  if (explicitAnnualRevenue > 0) return { annualRevenue: explicitAnnualRevenue, annualSessions, source: "Actual trailing revenue", estimated: false, available: true };
-  if (rollingRevenue > 0 && Number(metrics?.actualKwh || 0) > 0) {
-    const revenuePerKwh = rollingRevenue / Math.max(1, Number(metrics.actualKwh || 0));
-    return { annualRevenue: annualKwh * revenuePerKwh, annualSessions, source: "Actual rolling revenue annualised", estimated: false, available: true };
+  const price = Number((typeof state !== "undefined" && state.inputs ? state.inputs.netSellingPriceExVat : undefined) ?? DEFAULT_INPUTS.netSellingPriceExVat ?? 0);
+  const actualKwh = Number(metrics?.actualKwh || actual.rolling30Kwh || 0);
+  const dataDays = Number(annualActual?.dataDays || portfolioActualDataDays(site) || 0);
+  const minRevenuePerKwh = 0.2;
+  const maxRevenuePerKwh = 2.0;
+  const estimatedFromTariff = (source = "Estimated from kWh × net price") => ({
+    annualRevenue: annualKwh > 0 && price > 0 ? annualKwh * price : 0,
+    annualSessions,
+    source,
+    estimated: true,
+    available: annualKwh > 0 && price > 0
+  });
+  if (explicitAnnualRevenue > 0) {
+    // Only trust an explicit annual revenue when the actual source is really a full-year
+    // / trailing annual basis. Otherwise a partial-period revenue can be mistaken for a
+    // full year and make EBITDA/payback look artificially poor.
+    if (Number(annualActual?.hasExplicitAnnual || false) || dataDays >= 365) {
+      const implied = annualKwh > 0 ? explicitAnnualRevenue / annualKwh : null;
+      if (!Number.isFinite(implied) || (implied >= minRevenuePerKwh && implied <= maxRevenuePerKwh)) {
+        return { annualRevenue: explicitAnnualRevenue, annualSessions, source: "Actual trailing revenue", estimated: false, available: true };
+      }
+      return estimatedFromTariff(`Estimated from kWh × net price; explicit revenue ignored (${number(implied,2)} €/kWh out of range)`);
+    }
+    return estimatedFromTariff("Estimated from kWh × net price; partial revenue not treated as annual");
   }
-  if (annualKwh > 0 && price > 0) return { annualRevenue: annualKwh * price, annualSessions, source: "Estimated from kWh × net price", estimated: true, available: true };
-  return { annualRevenue: 0, annualSessions, source: "No revenue/kWh actual", estimated: false, available: false };
+  if (rollingRevenue > 0 && actualKwh > 0) {
+    const revenuePerKwh = rollingRevenue / Math.max(1, actualKwh);
+    if (revenuePerKwh >= minRevenuePerKwh && revenuePerKwh <= maxRevenuePerKwh) {
+      return { annualRevenue: annualKwh * revenuePerKwh, annualSessions, source: "Actual rolling revenue annualised", estimated: false, available: true };
+    }
+    return estimatedFromTariff(`Estimated from kWh × net price; rolling revenue ignored (${number(revenuePerKwh,2)} €/kWh out of range)`);
+  }
+  return estimatedFromTariff();
 }
+
+
+function portfolioCommercialTermsKey(siteOrName) {
+  const name = typeof siteOrName === "string" ? siteOrName : (siteOrName?.name || siteOrName?.siteName || "site");
+  return String(name || "site").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "site";
+}
+function portfolioCommercialTermsStorageKey(siteOrName) {
+  return `${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialTerms.${portfolioCommercialTermsKey(siteOrName)}`;
+}
+function portfolioCommercialTermsDefault() {
+  return { termType: "none", fixedRent: 0, gpSharePct: 0, salesSharePct: 0, confidence: "unknown", notes: "" };
+}
+function portfolioCommercialTermsSanitise(raw = {}) {
+  const base = portfolioCommercialTermsDefault();
+  const termType = ["none", "fixed", "gp", "sales", "fixed-gp", "fixed-sales"].includes(String(raw.termType || "").toLowerCase()) ? String(raw.termType).toLowerCase() : base.termType;
+  const confidence = ["unknown", "estimate", "actual"].includes(String(raw.confidence || "").toLowerCase()) ? String(raw.confidence).toLowerCase() : base.confidence;
+  const fixedRent = Math.max(0, Number(raw.fixedRent ?? raw.fixedRentEurPerYear ?? 0) || 0);
+  const gpSharePct = Math.max(0, Number(raw.gpSharePct ?? raw.gpShare ?? 0) || 0);
+  const salesSharePct = Math.max(0, Number(raw.salesSharePct ?? raw.salesShare ?? 0) || 0);
+  return { termType, fixedRent, gpSharePct, salesSharePct, confidence, notes: String(raw.notes || "").slice(0, 400) };
+}
+function portfolioCommercialTermsLoad(siteOrName) {
+  try {
+    const raw = localStorage.getItem(portfolioCommercialTermsStorageKey(siteOrName));
+    return raw ? portfolioCommercialTermsSanitise(JSON.parse(raw)) : portfolioCommercialTermsDefault();
+  } catch (_) {
+    return portfolioCommercialTermsDefault();
+  }
+}
+function portfolioCommercialTermsSave(siteOrName, terms) {
+  try { localStorage.setItem(portfolioCommercialTermsStorageKey(siteOrName), JSON.stringify(portfolioCommercialTermsSanitise(terms))); } catch (_) {}
+}
+function portfolioCommercialTermsClear(siteOrName) {
+  try { localStorage.removeItem(portfolioCommercialTermsStorageKey(siteOrName)); } catch (_) {}
+}
+function portfolioCommercialTermsApplied(terms) {
+  const t = portfolioCommercialTermsSanitise(terms);
+  if (t.termType === "none") return false;
+  if (["fixed", "fixed-gp", "fixed-sales"].includes(t.termType) && t.fixedRent > 0) return true;
+  if (["gp", "fixed-gp"].includes(t.termType) && t.gpSharePct > 0) return true;
+  if (["sales", "fixed-sales"].includes(t.termType) && t.salesSharePct > 0) return true;
+  return false;
+}
+function portfolioCommercialTermsLabel(siteOrName) {
+  const terms = portfolioCommercialTermsLoad(siteOrName);
+  const conf = terms.confidence === "actual" ? "Actual" : terms.confidence === "estimate" ? "Estimate" : "Unknown";
+  if (!portfolioCommercialTermsApplied(terms)) return { label: "No landlord terms", cls: "neutral", title: "No site-specific landlord rent or share terms are applied." };
+  const bits = [];
+  if (["fixed", "fixed-gp", "fixed-sales"].includes(terms.termType) && terms.fixedRent > 0) bits.push(`Rent ${currency(terms.fixedRent, 0)}`);
+  if (["gp", "fixed-gp"].includes(terms.termType) && terms.gpSharePct > 0) bits.push(`GP ${number(terms.gpSharePct, 1)}%`);
+  if (["sales", "fixed-sales"].includes(terms.termType) && terms.salesSharePct > 0) bits.push(`Sales ${number(terms.salesSharePct, 1)}%`);
+  return { label: `${bits.join(" + ")} · ${conf}`, cls: terms.confidence === "actual" ? "good" : "warn", title: `${bits.join(" + ")} landlord terms are included in OPEX and EBITDA. Confidence: ${conf}.` };
+}
+function portfolioCommercialManualTermsForCalculation(site) {
+  const terms = portfolioCommercialTermsLoad(site);
+  if (!portfolioCommercialTermsApplied(terms)) return null;
+  const hasFixed = ["fixed", "fixed-gp", "fixed-sales"].includes(terms.termType);
+  const hasGp = ["gp", "fixed-gp"].includes(terms.termType);
+  const hasSales = ["sales", "fixed-sales"].includes(terms.termType);
+  return {
+    source: "manual",
+    structure: terms.termType,
+    groundRentAnnual: hasFixed ? terms.fixedRent : 0,
+    gpShareRate: hasGp ? terms.gpSharePct / 100 : 0,
+    grossSalesShareRate: hasSales ? terms.salesSharePct / 100 : 0,
+    confidence: terms.confidence,
+    notes: terms.notes
+  };
+}
+function portfolioCommercialImpact(site, withTerms = true) {
+  const result = portfolioSiteResults(site, portfolioBenchmarksByCategory(portfolioSites({ includeAdditional: false })));
+  const capex = portfolioCapexInfo(site, result.financialSummary?.initialInvestment || 0);
+  const annualActual = portfolioAnnualOperatingValues(site, result.metrics);
+  const revenueInfo = portfolioActualRevenueInfo(site, annualActual, result.metrics);
+  const opex = portfolioFinancialOpexFromActuals(result, annualActual.annualKwh, revenueInfo.annualSessions, revenueInfo.annualRevenue, withTerms ? site : { ...site, ignoreManualCommercialTerms: true });
+  const payback = Number(capex.actual || 0) > 0 && Number(opex.operatingCashflow || 0) > 0 ? capex.actual / opex.operatingCashflow : null;
+  return { capex: capex.actual, opex: opex.opexExElectricity, electricity: opex.electricityCost, ebitda: opex.operatingCashflow, payback };
+}
+
 function portfolioActualLandlordTerms(site, annualRevenue, grossProfit, modelGroundRent = 0) {
   const actual = site?.actual || {};
-  const terms = site?.landlordActuals || actual.landlordTerms || {};
+  const manualTerms = site?.ignoreManualCommercialTerms ? null : portfolioCommercialManualTermsForCalculation(site);
+  const terms = manualTerms || site?.landlordActuals || actual.landlordTerms || {};
   const structure = String(terms.structure || terms.type || terms.basis || "").toLowerCase();
   const groundRentAnnual = Number(terms.groundRentAnnual ?? terms.annualGroundRent ?? actual.groundRentAnnual ?? site?.groundRentAnnual ?? 0) || 0;
   const gpShareRate = Number(terms.gpShareRate ?? terms.landlordGpShare ?? actual.landlordGpShare ?? NaN);
@@ -2941,7 +3050,7 @@ function portfolioActualLandlordTerms(site, annualRevenue, grossProfit, modelGro
   }
   const applied = groundRentAnnual > 0 || landlordGpShare > 0 || landlordGrossSalesShare > 0;
   const note = applied
-    ? `Actual landlord terms included (${basis}).`
+    ? `${manualTerms ? "Manual" : "Actual"} landlord terms included (${basis}${manualTerms?.confidence ? ` · ${manualTerms.confidence}` : ""}).`
     : `Landlord costs excluded: no actual site-level landlord terms provided${Number(modelGroundRent || 0) > 0 ? ` (model rent €${number(modelGroundRent, 0)} not used).` : "."}`;
   return { groundRentAnnual, landlordGpShare, landlordGrossSalesShare, basis, applied, conflict: false, gpSuppressed, note };
 }
@@ -3053,7 +3162,7 @@ function portfolioFinancialRows() {
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_13";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_16";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
@@ -3089,12 +3198,16 @@ function portfolioFinancialHistoryKey(fin) {
   if (days < 365) return "ramping-180-364";
   return "full-year-365-plus";
 }
+function portfolioFinancialHasActualT12mRevenue(fin) {
+  return !fin?.revenueEstimated && String(fin?.revenueSource || "") === "Actual trailing revenue" && Number(fin?.operationalDays || 0) >= 365;
+}
+function portfolioFinancialHasEstimatedT12mRevenue(fin) {
+  return !!fin?.revenueEstimated && String(fin?.revenueSource || "").includes("explicit") && Number(fin?.operationalDays || 0) >= 365;
+}
 function portfolioFinancialRevenueKey(fin) {
-  const fullYear = Number(fin?.operationalDays || 0) >= 365;
-  if (fullYear && fin?.revenueEstimated) return "est-t12m";
-  if (fullYear) return "actual-t12m";
-  if (fin?.revenueEstimated) return "projected-est";
-  return "projected";
+  if (portfolioFinancialHasActualT12mRevenue(fin)) return "actual-t12m";
+  if (portfolioFinancialHasEstimatedT12mRevenue(fin)) return "est-t12m";
+  return fin?.revenueEstimated ? "projected-est" : "projected";
 }
 function portfolioFinancialPaybackKey(fin) {
   const state = fin?.paybackState?.state || "notCalculated";
@@ -3168,8 +3281,86 @@ function portfolioFinancialActiveFilterCount() {
 function portfolioFinancialFilterPanel(rows, filteredRows) {
   const defs = portfolioFinancialFilterDefinitions();
   const activeCount = portfolioFinancialActiveFilterCount();
-  return `<section class="panel portfolio-financial-filter-panel portfolio-financial-filter-panel-open"><div class="portfolio-financial-filter-toolbar"><span><strong>Filters</strong><small>${number(filteredRows.length,0)} of ${number(rows.length,0)} active sites selected${activeCount ? ` · ${number(activeCount,0)} filter${activeCount === 1 ? "" : "s"} active` : " · all sites"}</small></span><button type="button" class="secondary mini" data-portfolio-financial-reset-filters="1" ${activeCount ? "" : "disabled"}>Reset filters</button></div><p class="muted small">Filters are always visible. You can select multiple values inside each filter group.</p><div class="portfolio-financial-filter-grid">${defs.map(def => portfolioFinancialFilterSelect(def, rows)).join("")}</div></section>`;
+  return `<section class="panel portfolio-financial-filter-panel portfolio-financial-filter-panel-open"><div class="portfolio-financial-filter-toolbar"><span><strong>Filters & commercial terms</strong><small>${number(filteredRows.length,0)} of ${number(rows.length,0)} active sites selected${activeCount ? ` · ${number(activeCount,0)} filter${activeCount === 1 ? "" : "s"} active` : " · all sites"}</small></span><div class="portfolio-financial-toolbar-actions">${portfolioCommercialTermsManagerButton(rows)}<button type="button" class="secondary mini" data-portfolio-financial-reset-filters="1" ${activeCount ? "" : "disabled"}>Reset filters</button></div></div><p class="muted small">Filters are always visible. You can select multiple values inside each filter group. Use commercial terms only when actual or estimated landlord terms exist.</p><div class="portfolio-financial-filter-grid">${defs.map(def => portfolioFinancialFilterSelect(def, rows)).join("")}</div></section>`;
 }
+
+function portfolioCommercialTermTypeOptions(selected) {
+  const options = [
+    ["none", "None"], ["fixed", "Fixed rent"], ["gp", "GP share"], ["sales", "Sales share"], ["fixed-gp", "Fixed rent + GP share"], ["fixed-sales", "Fixed rent + sales share"]
+  ];
+  return options.map(([value, label]) => `<option value="${h(value)}" ${selected === value ? "selected" : ""}>${h(label)}</option>`).join("");
+}
+function portfolioCommercialConfidenceOptions(selected) {
+  return [["unknown", "Unknown"], ["estimate", "Estimate"], ["actual", "Actual"]].map(([value, label]) => `<option value="${h(value)}" ${selected === value ? "selected" : ""}>${h(label)}</option>`).join("");
+}
+function portfolioCommercialFormFields(terms, prefix = "commercial") {
+  const t = portfolioCommercialTermsSanitise(terms);
+  const fixedEnabled = ["fixed", "fixed-gp", "fixed-sales"].includes(t.termType);
+  const gpEnabled = ["gp", "fixed-gp"].includes(t.termType);
+  const salesEnabled = ["sales", "fixed-sales"].includes(t.termType);
+  return `<div class="commercial-form-grid" data-commercial-form="${h(prefix)}">
+    <label class="field"><span>Term type</span><select data-commercial-term="termType">${portfolioCommercialTermTypeOptions(t.termType)}</select><small>GP share and sales share are mutually exclusive. Fixed rent can combine with either.</small></label>
+    <label class="field"><span>Fixed rent €/yr</span><input type="number" min="0" step="100" value="${h(t.fixedRent)}" data-commercial-term="fixedRent" ${fixedEnabled ? "" : "disabled"}></label>
+    <label class="field"><span>GP share %</span><input type="number" min="0" step="0.1" value="${h(t.gpSharePct)}" data-commercial-term="gpSharePct" ${gpEnabled ? "" : "disabled"}></label>
+    <label class="field"><span>Sales share %</span><input type="number" min="0" step="0.1" value="${h(t.salesSharePct)}" data-commercial-term="salesSharePct" ${salesEnabled ? "" : "disabled"}></label>
+    <label class="field"><span>Confidence</span><select data-commercial-term="confidence">${portfolioCommercialConfidenceOptions(t.confidence)}</select></label>
+    <label class="field commercial-notes"><span>Notes</span><textarea rows="3" data-commercial-term="notes">${h(t.notes)}</textarea></label>
+  </div>`;
+}
+function portfolioCommercialModalKpis(base, after) {
+  return `<div class="commercial-impact-grid">
+    <div><span>OPEX / yr before</span><strong>${currency(base.opex,0)}</strong></div>
+    <div><span>OPEX / yr after</span><strong>${currency(after.opex,0)}</strong></div>
+    <div><span>EBITDA before</span><strong>${currency(base.ebitda,0)}</strong></div>
+    <div><span>EBITDA after</span><strong>${currency(after.ebitda,0)}</strong></div>
+    <div><span>Payback before</span><strong>${base.payback ? `${number(base.payback,1)} yrs` : "—"}</strong></div>
+    <div><span>Payback after</span><strong>${after.payback ? `${number(after.payback,1)} yrs` : "—"}</strong></div>
+  </div>`;
+}
+function portfolioCommercialSiteModal(row) {
+  const site = row?.site;
+  if (!site) return "";
+  const terms = portfolioCommercialTermsLoad(site);
+  const base = portfolioCommercialImpact(site, false);
+  const after = portfolioCommercialImpact(site, true);
+  const termsLabel = portfolioCommercialTermsLabel(site);
+  return `<div class="commercial-modal-backdrop" data-commercial-modal-backdrop="1"><section class="commercial-modal" role="dialog" aria-modal="true" aria-label="Commercial terms for ${h(site.name)}">
+    <div class="commercial-modal-head"><div><span class="eyebrow">Commercial terms</span><h3>${h(site.name)}</h3><p>Keep the investor table clean while adding site-specific landlord rent/share terms when they are known.</p></div><button type="button" class="commercial-modal-close" data-commercial-terms-close="1" aria-label="Close">×</button></div>
+    <div class="commercial-current-status"><span class="badge ${h(termsLabel.cls)}">${h(termsLabel.label)}</span><small>${h(termsLabel.title)}</small></div>
+    <h4>Financial impact</h4>${portfolioCommercialModalKpis(base, after)}
+    <h4>Landlord terms</h4><form data-commercial-site-form="${h(portfolioCommercialTermsKey(site))}">${portfolioCommercialFormFields(terms, "site")}<div class="commercial-modal-actions"><button type="button" class="secondary" data-commercial-terms-clear="${h(portfolioCommercialTermsKey(site))}">Clear terms</button><button type="button" class="secondary" data-commercial-terms-close="1">Cancel</button><button type="submit">Save terms</button></div></form>
+  </section></div>`;
+}
+function portfolioCommercialBulkModal(rows) {
+  const allSites = rows.map(r => r.site).filter(Boolean);
+  const checkboxes = allSites.map(site => `<label><input type="checkbox" data-commercial-bulk-site value="${h(portfolioCommercialTermsKey(site))}"><span>${h(site.name)}</span></label>`).join("");
+  return `<div class="commercial-modal-backdrop" data-commercial-modal-backdrop="1"><section class="commercial-modal commercial-bulk-modal" role="dialog" aria-modal="true" aria-label="Bulk commercial terms manager">
+    <div class="commercial-modal-head"><div><span class="eyebrow">Bulk manager</span><h3>Manage commercial terms</h3><p>Apply the same landlord terms to multiple sites, or clear terms in bulk. Defaults remain zero unless you save terms.</p></div><button type="button" class="commercial-modal-close" data-commercial-terms-close="1" aria-label="Close">×</button></div>
+    <form data-commercial-bulk-form="1"><div class="commercial-bulk-layout"><div><div class="commercial-bulk-tools"><button type="button" class="secondary mini" data-commercial-bulk-select="all">Select all</button><button type="button" class="secondary mini" data-commercial-bulk-select="none">Select none</button></div><div class="commercial-bulk-sites">${checkboxes}</div></div><div>${portfolioCommercialFormFields(portfolioCommercialTermsDefault(), "bulk")}</div></div><div class="commercial-modal-actions"><button type="button" class="secondary" data-commercial-bulk-clear="1">Clear selected terms</button><button type="button" class="secondary" data-commercial-terms-close="1">Cancel</button><button type="submit">Apply to selected</button></div></form>
+  </section></div>`;
+}
+function portfolioCommercialTermsModal(rows) {
+  const active = localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`) || "";
+  if (!active) return "";
+  if (active === "bulk") return portfolioCommercialBulkModal(rows);
+  const row = rows.find(r => portfolioCommercialTermsKey(r.site) === active);
+  return row ? portfolioCommercialSiteModal(row) : "";
+}
+function portfolioCommercialTermsManagerButton(rows) {
+  return `<button type="button" class="secondary" data-commercial-terms-open="bulk">Manage commercial terms</button>`;
+}
+function portfolioCommercialReadForm(form) {
+  const get = key => form?.querySelector(`[data-commercial-term="${key}"]`)?.value ?? "";
+  return portfolioCommercialTermsSanitise({
+    termType: get("termType"),
+    fixedRent: Number(get("fixedRent") || 0),
+    gpSharePct: Number(get("gpSharePct") || 0),
+    salesSharePct: Number(get("salesSharePct") || 0),
+    confidence: get("confidence"),
+    notes: get("notes")
+  });
+}
+
 function portfolioFinancialDashboardMetric(label, value, note = "", cls = "") {
   return `<div class="portfolio-financial-dashboard-metric ${h(cls)}"><span>${h(label)}</span><strong>${value}</strong>${note ? `<small>${h(note)}</small>` : ""}</div>`;
 }
@@ -3382,15 +3573,17 @@ function portfolioFinancialSortRows(rows) {
 function portfolioFinancialTableRow(fin) {
   const r = fin.result;
   const status = fin.status || { label: "Review", cls: "warn", note: "Review manually." };
-  const fullYearRevenueData = Number(fin.operationalDays || 0) >= 365;
-  const revenueSub = fullYearRevenueData
-    ? (fin.revenueEstimated ? "est. T12M" : "actual T12M")
-    : (fin.revenueEstimated ? "projected est." : "projected");
-  const revenueTitle = fullYearRevenueData
-    ? (fin.revenueEstimated
-        ? "Annual revenue estimated from kWh because actual revenue is not available, with at least one year of operating history."
-        : "Actual trailing-12-month revenue because at least one year of operating history is available.")
-    : `Projected annual run-rate based on ${Number(fin.operationalDays || 0).toFixed(0)} operational days of actual performance. Not a full-year actual.`;
+  const revenueKey = portfolioFinancialRevenueKey(fin);
+  const revenueSub = revenueKey === "actual-t12m"
+    ? "actual T12M"
+    : revenueKey === "est-t12m"
+      ? "est. T12M"
+      : fin.revenueEstimated ? "projected est." : "projected";
+  const revenueTitle = revenueKey === "actual-t12m"
+    ? "Actual trailing-12-month revenue from a trusted annual revenue field."
+    : revenueKey === "est-t12m"
+      ? "Estimated trailing-12-month revenue from annual kWh because actual T12M revenue is not available."
+      : `${fin.revenueEstimated ? "Estimated" : "Projected"} annual run-rate based on ${Number(fin.operationalDays || 0).toFixed(0)} operational days / latest actual performance. Not a full-year actual T12M revenue figure.`;
   const modelKwh = Number(r.modelledAnnualKwh || 0);
   const capexDeltaLabel = Number.isFinite(Number(fin.capexDelta)) ? `Δ ${currency(fin.capexDelta, 0)}` : "Δ n/a";
   const actualCapexCell = fin.hasActualCapex
@@ -3419,10 +3612,13 @@ function portfolioFinancialTableRow(fin) {
   const ebitdaTitle = fin.landlordApplied
     ? "EBITDA proxy after electricity and OPEX, including actual landlord terms where provided."
     : "EBITDA proxy after electricity and OPEX, before landlord costs unless actual terms are provided.";
+  const termsLabel = portfolioCommercialTermsLabel(fin.site);
+  const siteKey = portfolioCommercialTermsKey(fin.site);
+  const siteCell = `<div class="portfolio-financial-site"><button type="button" class="portfolio-financial-site-link" data-commercial-terms-open="${h(siteKey)}" title="Edit commercial terms for ${h(fin.site.name)}"><strong>${h(fin.site.name)}</strong></button><small title="${h(fin.site.modelEquivalentSummary || "")}">${h(fin.site.modelEquivalentSummary || "")}</small><button type="button" class="portfolio-commercial-chip ${h(termsLabel.cls)}" data-commercial-terms-open="${h(siteKey)}" title="${h(termsLabel.title)}">${h(termsLabel.label)} · Edit</button></div>`;
   return {
     className: rowClass,
     cells: [
-      `<div class="portfolio-financial-site"><strong>${h(fin.site.name)}</strong><small title="${h(fin.site.modelEquivalentSummary || "")}">${h(fin.site.modelEquivalentSummary || "")}</small></div>`,
+      siteCell,
       portfolioOperationalDaysLabel(fin.operationalDays),
       actualCapexCell,
       kwhCell,
@@ -3471,9 +3667,10 @@ function renderPortfolioFinancialPerformance() {
     ${sectionTitle("Portfolio Financial Performance", "Financial view of all active Portfolio Calibration sites: CAPEX control, current run-rate, long-term projection and site-level performance quality.")}
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
-    <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless 365+ days of data exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
+    <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.13 multi filters</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only with at least 365 operating days; otherwise it is labelled projected annual run-rate. Payback is a current run-rate proxy.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.16 commercial terms</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    ${portfolioCommercialTermsModal(rows)}
   `;
 }
 
@@ -3924,6 +4121,87 @@ function wirePage(r) {
   document.querySelectorAll("[data-portfolio-financial-horizon]").forEach(node => {
     node.addEventListener("click", e => {
       localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`, e.currentTarget.dataset.portfolioFinancialHorizon || "5");
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-commercial-terms-open]").forEach(node => {
+    node.addEventListener("click", e => {
+      e.preventDefault();
+      const key = e.currentTarget.dataset.commercialTermsOpen;
+      if (!key) return;
+      localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`, key);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-commercial-terms-close], [data-commercial-modal-backdrop]").forEach(node => {
+    node.addEventListener("click", e => {
+      if (e.currentTarget !== e.target && e.currentTarget.dataset.commercialModalBackdrop) return;
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-commercial-term='termType']").forEach(node => {
+    const sync = () => {
+      const form = node.closest("[data-commercial-form]");
+      const type = node.value;
+      const fixed = form?.querySelector("[data-commercial-term='fixedRent']");
+      const gp = form?.querySelector("[data-commercial-term='gpSharePct']");
+      const sales = form?.querySelector("[data-commercial-term='salesSharePct']");
+      if (fixed) fixed.disabled = !["fixed", "fixed-gp", "fixed-sales"].includes(type);
+      if (gp) gp.disabled = !["gp", "fixed-gp"].includes(type);
+      if (sales) sales.disabled = !["sales", "fixed-sales"].includes(type);
+    };
+    node.addEventListener("change", sync);
+    sync();
+  });
+  document.querySelectorAll("[data-commercial-site-form]").forEach(form => {
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const key = form.dataset.commercialSiteForm;
+      const row = portfolioFinancialRows().find(r => portfolioCommercialTermsKey(r.site) === key);
+      if (!row) return;
+      portfolioCommercialTermsSave(row.site, portfolioCommercialReadForm(form));
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-commercial-terms-clear]").forEach(node => {
+    node.addEventListener("click", e => {
+      const key = e.currentTarget.dataset.commercialTermsClear;
+      const row = portfolioFinancialRows().find(r => portfolioCommercialTermsKey(r.site) === key);
+      if (row) portfolioCommercialTermsClear(row.site);
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-commercial-bulk-select]").forEach(node => {
+    node.addEventListener("click", e => {
+      const mode = e.currentTarget.dataset.commercialBulkSelect;
+      document.querySelectorAll("[data-commercial-bulk-site]").forEach(box => { box.checked = mode === "all"; });
+    });
+  });
+  document.querySelectorAll("[data-commercial-bulk-form]").forEach(form => {
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const terms = portfolioCommercialReadForm(form);
+      const rows = portfolioFinancialRows();
+      form.querySelectorAll("[data-commercial-bulk-site]:checked").forEach(box => {
+        const row = rows.find(r => portfolioCommercialTermsKey(r.site) === box.value);
+        if (row) portfolioCommercialTermsSave(row.site, terms);
+      });
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-commercial-bulk-clear]").forEach(node => {
+    node.addEventListener("click", e => {
+      const form = e.currentTarget.closest("form");
+      const rows = portfolioFinancialRows();
+      form?.querySelectorAll("[data-commercial-bulk-site]:checked").forEach(box => {
+        const row = rows.find(r => portfolioCommercialTermsKey(r.site) === box.value);
+        if (row) portfolioCommercialTermsClear(row.site);
+      });
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`);
       preserveScrollRender();
     });
   });

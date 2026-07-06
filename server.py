@@ -3513,8 +3513,16 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
     actuals: list[dict] = []
     for site in site_days.values():
         daily = site["daily"]
-        active_dates = [d for d, vals in daily.items() if vals.get("kwh", 0) > 0 or vals.get("sessions", 0) > 0 or vals.get("net", 0) > 0]
-        first_active = min(active_dates) if active_dates else None
+        # Commercial operational start: use the first real field session where
+        # available, then first meaningful kWh movement. Do not use a charger
+        # commissioning/telemetry day, and do not move the start date forward if
+        # the site later has zero-usage downtime.
+        session_active_dates = [d for d, vals in daily.items() if vals.get("sessions", 0) >= 1]
+        kwh_active_dates = [d for d, vals in daily.items() if vals.get("kwh", 0) >= 1.0]
+        first_session = min(session_active_dates) if session_active_dates else None
+        first_kwh = min(kwh_active_dates) if kwh_active_dates else None
+        first_active = first_session or first_kwh
+        days_basis = "first_session" if first_session else "first_kwh" if first_kwh else "no_commercial_activity"
         data_days = (latest_date - first_active).days + 1 if first_active else 0
         rolling_vals = [vals for d, vals in daily.items() if rolling_start <= d <= latest_date]
         trailing_vals = [vals for d, vals in daily.items() if trailing_start <= d <= latest_date]
@@ -3585,10 +3593,16 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "source": "Uploaded live calibration files",
                 "annualisationBasis": annualisation_basis,
                 "annualisationMethod": annualisation_method,
+                "firstCommercialSessionDate": first_session.isoformat() if first_session else None,
+                "firstCommercialKwhDate": first_kwh.isoformat() if first_kwh else None,
+                "commercialDaysBasis": days_basis,
             },
             "maturity": {"dataDays": int(data_days), "tier": tier},
             "diagnostics": {
                 "firstActiveDate": first_active.isoformat() if first_active else None,
+                "firstCommercialSessionDate": first_session.isoformat() if first_session else None,
+                "firstCommercialKwhDate": first_kwh.isoformat() if first_kwh else None,
+                "commercialDaysBasis": days_basis,
                 "latestDate": latest_date.isoformat(),
                 "chargerCount": len(site["chargerNames"]),
                 "chargerNames": sorted(site["chargerNames"]),

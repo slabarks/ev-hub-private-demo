@@ -3103,3 +3103,24 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   outline: 3px solid rgba(167, 215, 197, .45);
   outline-offset: 2px;
 }
+
+/* v17.19 Portfolio Financials: commercial operational-days source label */
+.portfolio-days-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.15;
+}
+.portfolio-days-cell strong {
+  font-weight: 850;
+  color: #0f2d25;
+  white-space: nowrap;
+}
+.portfolio-days-cell small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  max-width: 92px;
+  text-align: center;
+}

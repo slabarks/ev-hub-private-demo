@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.18 rent step fix";
+const APP_BUILD_VERSION = "V17.19 commercial days basis";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -1943,9 +1943,12 @@ function portfolioDateLabel(date) {
 }
 function portfolioActualDateInfo(site) {
   const diagnostics = site?.liveActuals?.diagnostics || {};
-  const firstActiveDate = portfolioParseDate(diagnostics.firstActiveDate || site?.actual?.firstActiveDate);
-  const latestDate = portfolioParseDate(diagnostics.latestDate || site?.actual?.asOfDate || site?.liveActuals?.asOfDate);
-  return { firstActiveDate, latestDate };
+  const actual = site?.actual || {};
+  const firstSessionDate = portfolioParseDate(diagnostics.firstCommercialSessionDate || diagnostics.firstSessionDate || actual.firstCommercialSessionDate || actual.firstSessionDate);
+  const firstKwhDate = portfolioParseDate(diagnostics.firstCommercialKwhDate || diagnostics.firstKwhDate || actual.firstCommercialKwhDate || actual.firstKwhDate);
+  const firstActiveDate = portfolioParseDate(diagnostics.firstActiveDate || actual.firstActiveDate);
+  const latestDate = portfolioParseDate(diagnostics.latestDate || actual.asOfDate || site?.liveActuals?.asOfDate);
+  return { firstSessionDate, firstKwhDate, firstActiveDate, latestDate };
 }
 function portfolioActualDataDays(site) {
   const actual = site?.actual || {};
@@ -1954,12 +1957,8 @@ function portfolioActualDataDays(site) {
   // Prefer actual-source operating-day evidence over maturity defaults. The maturity
   // field is a modelling band and can be stale / rounded; using it first caused sites
   // such as Castleknock Hotel to show 180 days despite the actual source saying 67 days.
-  const text = [actual.annualisationMethod, actual.actualBasis, actual.basis, actual.sourceNote, liveActuals.actualBasis].filter(Boolean).join(" ");
-  const match = String(text).match(/(\d+(?:\.\d+)?)\s*(?:calendar\s*)?days?\s*(?:live|operational|of\s*data)?/i);
-  if (match) {
-    const n = Number(match[1]);
-    if (Number.isFinite(n) && n > 0) return Math.round(n);
-  }
+  const explicitTextDays = portfolioExplicitLiveDaysFromText(site);
+  if (explicitTextDays > 0) return explicitTextDays;
   const candidates = [
     actual.dataDays,
     actual.operationalDays,
@@ -2887,17 +2886,65 @@ function renderPortfolioCalibration() {
 }
 
 
-function portfolioOperationalDays(site, annualActual = null) {
-  const explicit = portfolioActualDataDays(site);
-  if (explicit > 0) return explicit;
-  const dateInfo = portfolioActualDateInfo(site);
-  const diff = portfolioDateDiffDays(dateInfo.firstActiveDate, dateInfo.latestDate);
-  if (Number.isFinite(diff) && diff >= 0) return diff + 1;
-  if (Number(annualActual?.dataDays || 0) > 0) return Number(annualActual.dataDays);
-  return null;
+function portfolioActualDataDaysText(site) {
+  const actual = site?.actual || {};
+  const liveActuals = site?.liveActuals || {};
+  return [actual.annualisationMethod, actual.annualisationBasis, actual.actualBasis, actual.basis, actual.sourceNote, liveActuals.actualBasis].filter(Boolean).join(" ");
 }
-function portfolioOperationalDaysLabel(days) {
-  return Number.isFinite(Number(days)) && Number(days) > 0 ? `${number(days, 0)} days` : "Not confirmed";
+function portfolioExplicitLiveDaysFromText(site) {
+  const match = String(portfolioActualDataDaysText(site)).match(/(\d+(?:\.\d+)?)\s*(?:calendar\s*)?days?\s*(?:live|operational|of\s*data)?/i);
+  if (!match) return 0;
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+}
+function portfolioOperationalDaysInfo(site, annualActual = null) {
+  const actual = site?.actual || {};
+  const liveActuals = site?.liveActuals || {};
+  const diagnostics = liveActuals.diagnostics || {};
+  const dateInfo = portfolioActualDateInfo(site);
+  const latest = dateInfo.latestDate;
+  const fromDate = (date, basisKey, basisLabel, sourceLabel, confidence = "high") => {
+    const diff = portfolioDateDiffDays(date, latest);
+    if (Number.isFinite(diff) && diff >= 0) {
+      return { days: diff + 1, basisKey, basisLabel, sourceLabel, confidence, firstOperationalDate: date, latestDate: latest, note: `${basisLabel}: ${portfolioDateLabel(date)} to ${portfolioDateLabel(latest)}` };
+    }
+    return null;
+  };
+  const firstSession = fromDate(dateInfo.firstSessionDate, "first-session", "from first session", "First real session", "high");
+  if (firstSession) return firstSession;
+  const firstKwh = fromDate(dateInfo.firstKwhDate, "first-kwh", "from first kWh", "First kWh movement", "high");
+  if (firstKwh) return firstKwh;
+  const firstActivity = fromDate(dateInfo.firstActiveDate, "first-activity", "from first activity", "First activity date", "medium");
+  if (firstActivity) return firstActivity;
+  const textDays = portfolioExplicitLiveDaysFromText(site);
+  if (textDays > 0) return { days: textDays, basisKey: "reported-live-days", basisLabel: "reported live days", sourceLabel: "Reported live-days text", confidence: "medium", firstOperationalDate: dateInfo.firstActiveDate || null, latestDate: latest, note: `Reported live-days text from actual source: ${number(textDays,0)} days` };
+  const candidates = [
+    actual.dataDays,
+    actual.operationalDays,
+    actual.daysLive,
+    actual.liveDays,
+    liveActuals.dataDays,
+    liveActuals.operationalDays,
+    diagnostics.dataDays,
+    diagnostics.operationalDays,
+    diagnostics.daysLive,
+    annualActual?.dataDays,
+    site?.maturity?.dataDays
+  ];
+  for (const candidate of candidates) {
+    const n = Number(candidate);
+    if (Number.isFinite(n) && n > 0) return { days: Math.round(n), basisKey: "stored-maturity", basisLabel: "stored maturity", sourceLabel: "Stored maturity/data-days field", confidence: "lower", firstOperationalDate: dateInfo.firstActiveDate || null, latestDate: latest, note: `Fallback to stored maturity/data-days field: ${number(n,0)} days` };
+  }
+  return { days: null, basisKey: "low-confidence", basisLabel: "not confirmed", sourceLabel: "No reliable days source", confidence: "low", firstOperationalDate: null, latestDate: latest, note: "Operational days could not be confirmed." };
+}
+function portfolioOperationalDays(site, annualActual = null) {
+  return portfolioOperationalDaysInfo(site, annualActual).days;
+}
+function portfolioOperationalDaysLabel(days, info = null) {
+  const main = Number.isFinite(Number(days)) && Number(days) > 0 ? `${number(days, 0)} days` : "Not confirmed";
+  if (!info) return main;
+  const note = info.basisLabel || info.sourceLabel || "";
+  return `<span class="portfolio-days-cell" title="${h(info.note || note)}"><strong>${h(main)}</strong>${note ? `<small>${h(note)}</small>` : ""}</span>`;
 }
 function portfolioActualRevenueInfo(site, annualActual, metrics) {
   const actual = site?.actual || {};
@@ -3109,7 +3156,8 @@ function portfolioFinancialRow(site, benchmarks) {
   const result = portfolioSiteResults(site, benchmarks);
   const capex = portfolioCapexInfo(site, result.financialSummary?.initialInvestment || 0);
   const annualActual = portfolioAnnualOperatingValues(site, result.metrics);
-  const operationalDays = portfolioOperationalDays(site, annualActual);
+  const operationalDaysInfo = portfolioOperationalDaysInfo(site, annualActual);
+  const operationalDays = operationalDaysInfo.days;
   const revenueInfo = portfolioActualRevenueInfo(site, annualActual, result.metrics);
   const opex = portfolioFinancialOpexFromActuals(result, annualActual.annualKwh, revenueInfo.annualSessions, revenueInfo.annualRevenue, site);
   const hasActualKwh = Number(annualActual.annualKwh || 0) > 0;
@@ -3130,6 +3178,10 @@ function portfolioFinancialRow(site, benchmarks) {
     revenueSource: revenueInfo.source,
     revenueEstimated: revenueInfo.estimated,
     operationalDays,
+    operationalDaysInfo,
+    daysBasisKey: operationalDaysInfo.basisKey,
+    daysBasisLabel: operationalDaysInfo.basisLabel,
+    daysBasisNote: operationalDaysInfo.note,
     hasActualKwh,
     hasActualCapex,
     hasOperationalDays,
@@ -3161,8 +3213,8 @@ function portfolioFinancialRows() {
 }
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
-const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_18";
+const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "daysBasis", "capex", "revenue", "payback"];
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_19";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
@@ -3231,6 +3283,9 @@ function portfolioFinancialFilterDefinitions() {
     { key: "history", label: "Operational days", options: [
       ["all", "All days"], ["low-history", "<30 days"], ["early-30-179", "30–179 days"], ["ramping-180-364", "180–364 days"], ["full-year-365-plus", "365+ days"]
     ]},
+    { key: "daysBasis", label: "Days basis", options: [
+      ["all", "All days basis"], ["first-session", "First session"], ["first-kwh", "First kWh"], ["first-activity", "First activity"], ["reported-live-days", "Reported live days"], ["stored-maturity", "Stored maturity"], ["low-confidence", "Low confidence"]
+    ]},
     { key: "capex", label: "CAPEX", options: [
       ["all", "All CAPEX"], ["capex-tracked", "CAPEX tracked"], ["capex-missing", "CAPEX missing"]
     ]},
@@ -3246,6 +3301,7 @@ function portfolioFinancialRowFilterValue(fin, key) {
   if (key === "status") return portfolioFinancialStatusKey(fin?.status?.label);
   if (key === "quality") return portfolioFinancialQualityKey(fin);
   if (key === "history") return portfolioFinancialHistoryKey(fin);
+  if (key === "daysBasis") return fin?.daysBasisKey || "low-confidence";
   if (key === "capex") return portfolioFinancialCapexKey(fin);
   if (key === "revenue") return portfolioFinancialRevenueKey(fin);
   if (key === "payback") return portfolioFinancialPaybackKey(fin);
@@ -3619,7 +3675,7 @@ function portfolioFinancialTableRow(fin) {
     className: rowClass,
     cells: [
       siteCell,
-      portfolioOperationalDaysLabel(fin.operationalDays),
+      portfolioOperationalDaysLabel(fin.operationalDays, fin.operationalDaysInfo),
       actualCapexCell,
       kwhCell,
       fin.annualRevenue > 0 ? portfolioFinancialMetric(currency(fin.annualRevenue, 0), revenueSub, "", revenueTitle) : "—",
@@ -3650,7 +3706,7 @@ function renderPortfolioFinancialPerformance() {
   const sorted = portfolioFinancialSortRows(filteredRows);
   const sortNames = {
     site: "site",
-    days: "operational days",
+    days: "commercial operational days",
     capex: "actual CAPEX",
     kwh: "actual annual kWh",
     revenue: "annual revenue",
@@ -3669,7 +3725,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.18 rent step fix</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.19 commercial days basis</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis where available: first session, first kWh, then fallbacks. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }

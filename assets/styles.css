@@ -3199,3 +3199,164 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   body.portfolio-financial-print-mode .print-report .pf-pdf-sub { font-size: 6.7px; color: #53625e; margin-top: 1px; line-height: 1.12; }
   body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table tr { break-inside: avoid; }
 }
+
+/* V17.25 Portfolio Financials PDF dashboard export */
+@media print {
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-summary-page {
+    padding: 5mm !important;
+  }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-table-page {
+    padding: 5mm !important;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 10px;
+    margin: 5px 0 5px;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-section-head h2 {
+    margin: 0;
+    font-size: 13px;
+    letter-spacing: -.02em;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-section-head p {
+    margin: 0;
+    font-size: 7.4px;
+    color: #5d6a65;
+    line-height: 1.15;
+    max-width: 70%;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-filter,
+  body.portfolio-financial-print-mode .print-report .pf-pdf-window,
+  body.portfolio-financial-print-mode .print-report .pf-pdf-performance {
+    border: 1px solid #dce9e0;
+    border-radius: 8px;
+    background: #fff !important;
+    padding: 5px;
+    break-inside: avoid;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-filter-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 3px;
+    font-size: 7.2px;
+    font-weight: 850;
+    color: #0f2d25;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-filter-head em {
+    font-style: normal;
+    border-radius: 999px;
+    background: #e9f5ee;
+    color: #00704a;
+    padding: 1px 4px;
+    white-space: nowrap;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-filter ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 1px;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-filter li {
+    display: flex;
+    justify-content: space-between;
+    gap: 3px;
+    font-size: 6.4px;
+    line-height: 1.08;
+    color: #30443d;
+    border-radius: 4px;
+    padding: 1px 2px;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-filter li.selected {
+    background: #e0f3ea !important;
+    font-weight: 850;
+    color: #006e46;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-filter li.muted { color: #9aa7a1; }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-filter li strong { font-size: 6.4px; }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-dashboard {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
+    margin-top: 3px;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-dashboard .pf-pdf-section-head,
+  body.portfolio-financial-print-mode .print-report .pf-pdf-performance .pf-pdf-section-head {
+    margin-bottom: 2px;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-window {
+    display: grid;
+    grid-template-columns: 1.15fr 4fr;
+    gap: 6px;
+    align-items: stretch;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-window-head h3 {
+    margin: 0 0 2px;
+    font-size: 9px;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-window-head p {
+    margin: 0;
+    font-size: 6.8px;
+    color: #5d6a65;
+    line-height: 1.16;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-card-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-window.projection .pf-pdf-card-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-card {
+    border: 1px solid #e0eae3;
+    border-radius: 7px;
+    padding: 5px 5px 4px;
+    background: #fbfdfb !important;
+    min-width: 0;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-card span {
+    display: block;
+    font-size: 6.4px;
+    color: #52645e;
+    font-weight: 850;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-card strong {
+    display: block;
+    margin-top: 1px;
+    font-size: 11px;
+    line-height: 1.05;
+    color: #0f2d25;
+    white-space: normal;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-card small {
+    display: block;
+    margin-top: 1px;
+    font-size: 5.8px;
+    line-height: 1.05;
+    color: #65736e;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-card.good strong { color: #00704a; }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-card.bad strong { color: #a34b11; }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-performance {
+    margin-top: 6px;
+  }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-performance-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+  }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-print-panel {
+    margin: 0;
+  }
+}

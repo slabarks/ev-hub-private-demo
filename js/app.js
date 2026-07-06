@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.24 export layout fix";
+const APP_BUILD_VERSION = "V17.25 PDF dashboard export";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -3688,9 +3688,39 @@ function portfolioFinancialExportPayload() {
   const horizon = portfolioFinancialHorizon();
   const projection = portfolioFinancialProjectionSummary(filteredRows, horizon);
   const capexDeltaPct = summary.modelCapexForCapexRows > 0 ? summary.capexDelta / summary.modelCapexForCapexRows : null;
+  const filterGroups = portfolioFinancialFilterDefinitions().map(def => {
+    const selected = portfolioFinancialFilterValues(def.key);
+    const allActive = !selected.length || selected.includes("all");
+    const counts = new Map();
+    rows.forEach(r => {
+      const value = portfolioFinancialRowFilterValue(r, def.key);
+      counts.set(value, (counts.get(value) || 0) + 1);
+    });
+    return {
+      key: def.key,
+      label: def.label,
+      total: rows.length,
+      allActive,
+      options: def.options.filter(([value]) => value !== "all").map(([value, label]) => ({
+        value,
+        label,
+        count: counts.get(value) || 0,
+        selected: !allActive && selected.includes(value)
+      }))
+    };
+  });
   const summaryObject = {
     selectedSites: filteredRows.length,
     totalSites: rows.length,
+    rowsWithCapex: summary.rowsWithCapex,
+    rowsWithActuals: summary.rowsWithActuals,
+    paybackEligible: summary.paybackEligible,
+    capexMissing: summary.capexMissing,
+    noPayback: summary.noPayback,
+    notEnoughData: summary.notEnoughData,
+    inBenchmark: summary.inBenchmark,
+    underperforming: summary.underperforming,
+    outperforming: summary.outperforming,
     actualCapex: summary.actualCapex,
     modelCapex: summary.modelCapexForCapexRows,
     capexDelta: summary.capexDelta,
@@ -3737,7 +3767,7 @@ function portfolioFinancialExportPayload() {
     ["CAPEX delta", "Model CAPEX minus actual CAPEX. Positive means actual spend is below model; negative means overspend."],
     ["kWh variance", "Matched model variance. Positive means under model; negative means above benchmark in the app's status logic."]
   ];
-  return { summary: summaryObject, horizon, filtersText: portfolioFinancialActiveFilterText(), matrixRows: portfolioFinancialExportMatrixRows(filteredRows), displayRows: filteredRows.map(portfolioFinancialExportDisplayRow) };
+  return { summary: summaryObject, horizon, filtersText: portfolioFinancialActiveFilterText(), filterGroups, matrixRows: portfolioFinancialExportMatrixRows(filteredRows), displayRows: filteredRows.map(portfolioFinancialExportDisplayRow) };
 }
 
 function portfolioPaybackLabel(years, state = null) {
@@ -3933,7 +3963,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.24 export layout fix</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.25 PDF dashboard export</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }
@@ -4151,7 +4181,7 @@ function renderInvestorReport(r) {
       </section>
       <section class="export-card portfolio-financial-export">
         <h3>Portfolio Financials Export</h3>
-        <p>Standalone export of the Portfolio Financials tab only. Excel includes a sortable/filterable investor matrix plus summary and data dictionary. PDF creates an independent Portfolio Financials report.</p>
+        <p>Standalone export of the Portfolio Financials tab only. Excel exports the same investor table as the app. PDF exports the Portfolio Financials dashboard, performance cards and site table.</p>
         <div class="actions">
           <button class="primary" id="exportPortfolioFinancialsExcel">Export Portfolio Financials Excel</button>
           <button class="secondary" id="exportPortfolioFinancialsPdf">Export Portfolio Financials PDF</button>

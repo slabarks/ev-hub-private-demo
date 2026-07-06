@@ -721,10 +721,70 @@ function compactPdfCell(main, sub = "") {
   return `<div class="pf-pdf-main">${esc(main)}</div>${sub ? `<div class="pf-pdf-sub">${esc(sub)}</div>` : ""}`;
 }
 
+function pfPdfMetric(label, value, note = "", cls = "") {
+  return `<div class="pf-pdf-card ${esc(cls)}"><span>${esc(label)}</span><strong>${value}</strong>${note ? `<small>${esc(note)}</small>` : ""}</div>`;
+}
+
+function pfPdfWindow(title, note, cards, cls = "") {
+  return `<section class="pf-pdf-window ${esc(cls)}"><div class="pf-pdf-window-head"><h3>${esc(title)}</h3>${note ? `<p>${esc(note)}</p>` : ""}</div><div class="pf-pdf-card-grid">${cards.join("")}</div></section>`;
+}
+
+function pfPdfFilterGroups(groups = []) {
+  if (!groups.length) return "";
+  return `<section class="pf-pdf-filters"><div class="pf-pdf-section-head"><h2>Filters & commercial terms</h2><p>Counts match the Portfolio Financials filter panel. Highlighted options are active; all inactive means all sites are selected.</p></div><div class="pf-pdf-filter-grid">${groups.map(g => {
+    const options = (g.options || []).map(o => `<li class="${o.selected ? "selected" : ""} ${Number(o.count || 0) === 0 ? "muted" : ""}"><span>${esc(o.label)}</span><strong>${number(o.count || 0, 0)}</strong></li>`).join("");
+    return `<div class="pf-pdf-filter"><div class="pf-pdf-filter-head"><span>${esc(g.label)}</span><em>${g.allActive ? `All ${number(g.total || 0,0)}` : "Filtered"}</em></div><ul>${options}</ul></div>`;
+  }).join("")}</div></section>`;
+}
+
+function pfPdfDashboard(summary = {}, horizon = 5) {
+  const capexDeltaPct = Number.isFinite(Number(summary.capexDeltaPct)) ? pct(Number(summary.capexDeltaPct), 1) : "—";
+  const payback = Number.isFinite(Number(summary.paybackYears)) ? `${number(summary.paybackYears, 1)} yrs` : "No payback";
+  const margin = Number.isFinite(Number(summary.profitabilityMargin)) ? pct(Number(summary.profitabilityMargin), 1) : "—";
+  return `<section class="pf-pdf-dashboard"><div class="pf-pdf-section-head"><h2>Portfolio dashboard</h2><p>Selected sites together. Revenue is projected unless a trusted trailing-12-month revenue field exists. Landlord costs are not assumed without actual landlord terms.</p></div>
+    ${pfPdfWindow("Investment position", "Actual investment against modelled CAPEX for the selected sites.", [
+      pfPdfMetric("Selected sites", number(summary.selectedSites || 0, 0), `${number(summary.totalSites || 0,0)} active sites`),
+      pfPdfMetric("Actual CAPEX tracked", currency(summary.actualCapex || 0, 0), `${number(summary.rowsWithCapex || 0,0)} of ${number(summary.selectedSites || 0,0)} selected sites`),
+      pfPdfMetric("Model CAPEX", currency(summary.modelCapex || 0, 0), "same sites with actual CAPEX"),
+      pfPdfMetric("CAPEX Δ", currency(summary.capexDelta || 0, 0), "model minus actual", Number(summary.capexDelta || 0) < 0 ? "bad" : "good"),
+      pfPdfMetric("CAPEX Δ %", capexDeltaPct, "model minus actual / model"),
+      pfPdfMetric("CAPEX missing", number(summary.capexMissing || 0, 0), "payback blocked only")
+    ], "investment")}
+    ${pfPdfWindow("Current operating performance", "Annualised run-rate from available actual operating data.", [
+      pfPdfMetric("This-year revenue", currency(summary.thisYearRevenue || 0, 0), "current annual run-rate"),
+      pfPdfMetric("Next-year revenue", currency(summary.nextYearRevenue || 0, 0), "projected next year"),
+      pfPdfMetric("Annualised kWh", kwh(summary.annualKwh || 0, 0), `${number(summary.rowsWithActuals || 0,0)} selected sites with usable actuals`),
+      pfPdfMetric("OPEX / yr", currency(summary.annualOpex || 0, 0), "excludes electricity + landlord"),
+      pfPdfMetric("EBITDA proxy / yr", currency(summary.annualEbitda || 0, 0), "pre-landlord unless actual terms provided"),
+      pfPdfMetric("Portfolio payback", payback, `${number(summary.paybackEligible || 0,0)} positive-cashflow sites`)
+    ], "operating")}
+    ${pfPdfWindow("Projection & profitability", `Selected ${number(horizon || 5,0)}-year projection.`, [
+      pfPdfMetric("Projection horizon", `${number(horizon || 5,0)} yrs`, "active report setting"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr revenue`, currency(summary.horizonRevenue || 0, 0), "cumulative projection"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr EBITDA`, currency(summary.horizonEbitda || 0, 0), "cumulative pre-landlord"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr net after CAPEX`, currency(summary.netAfterCapex || 0, 0), "EBITDA minus tracked CAPEX", Number(summary.netAfterCapex || 0) < 0 ? "bad" : "good"),
+      pfPdfMetric("Profitability margin", margin, `${number(horizon || 5,0)}yr EBITDA / revenue`)
+    ], "projection")}
+  </section>`;
+}
+
+function pfPdfPerformance(summary = {}) {
+  return `<section class="pf-pdf-performance"><div class="pf-pdf-section-head"><h2>Performance position</h2><p>Demand and data-quality status for the currently selected sites.</p></div><div class="pf-pdf-performance-grid">
+    ${pfPdfMetric("In benchmark", number(summary.inBenchmark || 0, 0), "actual kWh within ±15%")}
+    ${pfPdfMetric("Underperforming", number(summary.underperforming || 0, 0), "actual kWh below model")}
+    ${pfPdfMetric("Above benchmark", number(summary.outperforming || 0, 0), "actual kWh above model")}
+    ${pfPdfMetric("Low / missing history", number(summary.notEnoughData || 0, 0), "greyed out in table")}
+    ${pfPdfMetric("CAPEX missing", number(summary.capexMissing || 0, 0), "payback blocked only")}
+    ${pfPdfMetric("No payback", number(summary.noPayback || 0, 0), "negative run-rate cashflow")}
+  </div></section>`;
+}
+
 export async function exportPortfolioFinancialsPdf(payload) {
   const summary = payload?.summary || {};
   const rows = payload?.displayRows || [];
   const filtersText = payload?.filtersText || "All sites";
+  const filterGroups = payload?.filterGroups || [];
+  const horizon = payload?.horizon || 5;
   const exportedAt = new Date().toLocaleString("en-IE");
   const tableRows = rows.map(r => [
     compactPdfCell(r.site, r.configuration || r.commercialTerms),
@@ -738,7 +798,7 @@ export async function exportPortfolioFinancialsPdf(payload) {
     compactPdfCell(r.status, r.dataQuality)
   ]);
   const report = `
-  <section class="print-page portfolio-page portfolio-financial-print-page">
+  <section class="print-page portfolio-page portfolio-financial-print-page portfolio-financial-summary-page">
     <div class="report-hero portfolio-financial-print-hero">
       <div>
         <img class="report-logo" src="./assets/epower-logo.png" alt="ePower" />
@@ -753,6 +813,11 @@ export async function exportPortfolioFinancialsPdf(payload) {
         ${reportMetric("EBITDA / yr", currency(summary.annualEbitda || 0, 0))}
       </div>
     </div>
+    ${pfPdfFilterGroups(filterGroups)}
+    ${pfPdfDashboard(summary, horizon)}
+    ${pfPdfPerformance(summary)}
+  </section>
+  <section class="print-page portfolio-page portfolio-financial-print-page portfolio-financial-table-page">
     <div class="panel portfolio-financial-print-panel">
       <h3>Site financial performance table</h3>
       <p class="report-caption">Same investor table as the app: Site, Days, CAPEX, kWh/year, Revenue/year, OPEX/year, EBITDA/year, Payback and Status/quality.</p>

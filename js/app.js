@@ -9,7 +9,7 @@ import { searchLocation, searchCoordinates, filterChargers, maxConnectorPower, t
 import { MOCK_LOCATION } from "./providers/mockProviders.js";
 import { lineChart, stackedBarChart, financeComboChart } from "./ui/charts.js";
 import { currency, number, pct, kw, kwh, kva } from "./utils.js";
-import { exportDemandCsv, exportYearByYearCsv, exportScenarioCsv, exportAssumptionsJson, exportAuditJson, exportAnnualFinancialsExcel, exportInvestorPdf } from "./engines/exportEngine.js";
+import { exportDemandCsv, exportYearByYearCsv, exportScenarioCsv, exportAssumptionsJson, exportAuditJson, exportAnnualFinancialsExcel, exportInvestorPdf, exportPortfolioFinancialsExcel, exportPortfolioFinancialsPdf } from "./engines/exportEngine.js";
 import { PORTFOLIO_CALIBRATION_SITES } from "./data/operatingHubCalibrationLibrary.js";
 import { actualCapexForSite, capexStatusForSite, capexNoteForSite } from "./data/capexCalibrationLibrary.js";
 import { zeviFundingForSite, zeviFundingSuggestionsForSite, zeviFundingShortLabel } from "./data/zeviFundingLibrary.js";
@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.22 energy-days basis";
+const APP_BUILD_VERSION = "V17.23 portfolio financial exports";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -3282,7 +3282,7 @@ function portfolioFinancialRows() {
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "daysBasis", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_22";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_23";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
@@ -3600,6 +3600,138 @@ function portfolioFinancialSummary(rows) {
     inBenchmark: benchmarkRows.filter(r => Math.abs(r.result.annualKwhVariance) <= PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE).length
   };
 }
+
+function portfolioFinancialExportNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : "";
+}
+function portfolioFinancialActiveFilterText() {
+  const defs = portfolioFinancialFilterDefinitions();
+  const parts = [];
+  defs.forEach(def => {
+    const selected = portfolioFinancialFilterValues(def.key).filter(v => v !== "all");
+    if (!selected.length) return;
+    const labels = selected.map(v => def.options.find(o => o[0] === v)?.[1] || v);
+    parts.push(`${def.label}: ${labels.join(" + ")}`);
+  });
+  return parts.length ? parts.join("; ") : "All sites";
+}
+function portfolioFinancialExportDisplayRow(fin) {
+  const r = fin.result || {};
+  const days = portfolioOperationalDaysLabel(fin.operationalDays, fin.operationalDaysInfo).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const commercial = portfolioCommercialTermsLabel(fin.site);
+  return {
+    site: fin.site?.name || "",
+    status: fin.status?.label || "Review",
+    dataQuality: portfolioFinancialDataQualityShort(fin.dataQuality),
+    daysLabel: Number.isFinite(Number(fin.operationalDays)) ? `${number(fin.operationalDays,0)} days` : "Not confirmed",
+    daysBasis: fin.daysBasisLabel || "",
+    daysBasisNote: fin.daysBasisNote || "",
+    actualCapex: Number(fin.actualCapex || 0),
+    modelCapex: Number(fin.modelCapex || 0),
+    capexDelta: Number(fin.capexDelta || 0),
+    capexVariancePct: Number(fin.modelCapex || 0) > 0 ? Number(fin.capexDelta || 0) / Number(fin.modelCapex || 0) : null,
+    annualKwh: Number(fin.annualKwh || 0),
+    modelKwh: Number(r.modelledAnnualKwh || 0),
+    kwhVariancePct: Number.isFinite(Number(r.annualKwhVariance)) ? Number(r.annualKwhVariance) : null,
+    annualRevenue: Number(fin.annualRevenue || 0),
+    revenueBasis: fin.revenueEstimated ? `Estimated · ${fin.revenueSource || "kWh × net tariff"}` : (fin.revenueSource || "Projected run-rate"),
+    revenueEstimated: fin.revenueEstimated ? "Yes" : "No",
+    opexExElectricity: Number(fin.opexExElectricity || 0),
+    electricityCost: Number(fin.electricityCost || 0),
+    grossProfit: Number(fin.grossProfit || 0),
+    ebitda: Number(fin.operatingCashflow || 0),
+    paybackYears: Number.isFinite(Number(fin.paybackYears)) ? Number(fin.paybackYears) : null,
+    paybackStatus: portfolioPaybackLabel(fin.paybackYears, fin.paybackState),
+    commercialTerms: commercial.label,
+    landlordApplied: fin.landlordApplied ? "Yes" : "No",
+    landlordNote: fin.landlordNote || "",
+    annualSessions: Number(fin.annualSessions || 0),
+    micKva: Number(fin.site?.realMicKva || 0),
+    aadt: Number(fin.site?.aadt || 0),
+    category: fin.site?.category || "",
+    configuration: fin.site?.modelEquivalentSummary || ""
+  };
+}
+function portfolioFinancialExportMatrixRows(rows) {
+  const display = rows.map(portfolioFinancialExportDisplayRow);
+  return [[
+    "Site", "Status", "Data quality", "Operational days", "Days basis", "Days basis note",
+    "Actual CAPEX EUR", "Model CAPEX EUR", "CAPEX delta EUR", "CAPEX delta %",
+    "Annualised kWh", "Matched model kWh", "kWh variance %",
+    "Revenue per year EUR", "Revenue basis", "Revenue estimated",
+    "OPEX per year EUR excl electricity", "Electricity per year EUR", "Gross profit EUR", "EBITDA proxy EUR",
+    "Payback years", "Payback status", "Commercial terms", "Landlord applied", "Landlord note",
+    "Annualised sessions", "MIC kVA", "AADT", "Category", "Configuration"
+  ], ...display.map(r => [
+    r.site, r.status, r.dataQuality, portfolioFinancialExportNumber(r.daysLabel.replace(/[^0-9.-]/g, "")), r.daysBasis, r.daysBasisNote,
+    portfolioFinancialExportNumber(r.actualCapex), portfolioFinancialExportNumber(r.modelCapex), portfolioFinancialExportNumber(r.capexDelta), portfolioFinancialExportNumber(r.capexVariancePct),
+    portfolioFinancialExportNumber(r.annualKwh), portfolioFinancialExportNumber(r.modelKwh), portfolioFinancialExportNumber(r.kwhVariancePct),
+    portfolioFinancialExportNumber(r.annualRevenue), r.revenueBasis, r.revenueEstimated,
+    portfolioFinancialExportNumber(r.opexExElectricity), portfolioFinancialExportNumber(r.electricityCost), portfolioFinancialExportNumber(r.grossProfit), portfolioFinancialExportNumber(r.ebitda),
+    portfolioFinancialExportNumber(r.paybackYears), r.paybackStatus, r.commercialTerms, r.landlordApplied, r.landlordNote,
+    portfolioFinancialExportNumber(r.annualSessions), portfolioFinancialExportNumber(r.micKva), portfolioFinancialExportNumber(r.aadt), r.category, r.configuration
+  ])];
+}
+function portfolioFinancialExportPayload() {
+  const rows = portfolioFinancialRows();
+  const filteredRows = portfolioFinancialSortRows(portfolioFinancialFilteredRows(rows));
+  const summary = portfolioFinancialSummary(filteredRows);
+  const horizon = portfolioFinancialHorizon();
+  const projection = portfolioFinancialProjectionSummary(filteredRows, horizon);
+  const capexDeltaPct = summary.modelCapexForCapexRows > 0 ? summary.capexDelta / summary.modelCapexForCapexRows : null;
+  const summaryObject = {
+    selectedSites: filteredRows.length,
+    totalSites: rows.length,
+    actualCapex: summary.actualCapex,
+    modelCapex: summary.modelCapexForCapexRows,
+    capexDelta: summary.capexDelta,
+    capexDeltaPct,
+    annualKwh: summary.annualKwh,
+    thisYearRevenue: projection.thisYearRevenue,
+    nextYearRevenue: projection.nextYearRevenue,
+    annualOpex: summary.annualOpex,
+    annualElectricity: summary.electricityCost,
+    annualEbitda: summary.operatingCashflow,
+    paybackYears: summary.paybackYears,
+    horizonRevenue: projection.horizonRevenue,
+    horizonEbitda: projection.horizonEbitda,
+    netAfterCapex: projection.netAfterCapex,
+    profitabilityMargin: projection.profitabilityMargin
+  };
+  const summaryRows = [["Metric", "Value", "Note"],
+    ["Exported at", new Date().toISOString(), "Browser local time shown in PDF export"],
+    ["Active filters", portfolioFinancialActiveFilterText(), "Reset filters to export all active sites"],
+    ["Selected sites", summaryObject.selectedSites, `${summaryObject.totalSites} active Portfolio Financial sites available`],
+    ["Actual CAPEX tracked EUR", summaryObject.actualCapex, `${summary.rowsWithCapex} selected sites with actual CAPEX`],
+    ["Model CAPEX same sites EUR", summaryObject.modelCapex, "Modelled CAPEX for sites with actual CAPEX"],
+    ["CAPEX delta EUR", summaryObject.capexDelta, "Model minus actual"],
+    ["CAPEX delta %", summaryObject.capexDeltaPct ?? "", "Model minus actual / model"],
+    ["Annualised kWh", summaryObject.annualKwh, "Current run-rate based on Portfolio Financials commercial-days basis"],
+    ["This-year revenue EUR", summaryObject.thisYearRevenue, "Current annual run-rate"],
+    ["Next-year revenue EUR", summaryObject.nextYearRevenue, "Run-rate grown by model growth/tariff assumption"],
+    ["OPEX per year EUR", summaryObject.annualOpex, "Excludes electricity; landlord terms only when manually/actually provided"],
+    ["Electricity per year EUR", summaryObject.annualElectricity, "Annualised kWh × electricity cost"],
+    ["EBITDA proxy EUR", summaryObject.annualEbitda, "Revenue minus electricity minus OPEX"],
+    ["Portfolio payback years", summaryObject.paybackYears ?? "", "Run-rate proxy; only positive-cashflow/payback-eligible sites"],
+    [`${horizon} year revenue EUR`, summaryObject.horizonRevenue, "Cumulative projection"],
+    [`${horizon} year EBITDA EUR`, summaryObject.horizonEbitda, "Cumulative EBITDA proxy"],
+    [`${horizon} year net after CAPEX EUR`, summaryObject.netAfterCapex, "EBITDA minus tracked CAPEX"],
+    ["Profitability margin", summaryObject.profitabilityMargin ?? "", "Horizon EBITDA / horizon revenue"]
+  ];
+  const dictionaryRows = [["Column", "Meaning"],
+    ["Operational days", "Commercial operational days; first session / first kWh / energy-delivered inference / reported or stored fallback."],
+    ["Revenue per year", "Projected annual run-rate unless a trusted trailing-12-month revenue field exists."],
+    ["OPEX per year", "Charger support, managed service, DUoS, warranties, transaction fees, and landlord terms only if provided. Excludes electricity."],
+    ["EBITDA proxy", "Revenue minus electricity cost minus OPEX."],
+    ["Payback years", "Actual CAPEX divided by current annual EBITDA proxy where payback is allowed."],
+    ["Commercial terms", "Manual landlord rent/share terms saved in the Portfolio Financials modal; defaults to no landlord terms."],
+    ["CAPEX delta", "Model CAPEX minus actual CAPEX. Positive means actual spend is below model; negative means overspend."],
+    ["kWh variance", "Matched model variance. Positive means under model; negative means above benchmark in the app's status logic."]
+  ];
+  return { summary: summaryObject, horizon, filtersText: portfolioFinancialActiveFilterText(), matrixRows: portfolioFinancialExportMatrixRows(filteredRows), summaryRows, dictionaryRows, displayRows: filteredRows.map(portfolioFinancialExportDisplayRow) };
+}
+
 function portfolioPaybackLabel(years, state = null) {
   if (state?.label && state.label !== "Payback available") return state.label;
   const n = Number(years);
@@ -3793,7 +3925,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.22 energy-days basis</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.23 financial exports</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }
@@ -4008,6 +4140,14 @@ function renderInvestorReport(r) {
         <h3>Annual Financials Excel</h3>
         <p>Exports annual sessions, delivered kWh, revenue, electricity cost, gross profit, opex, cash flow and scenario ranking in an Excel-readable workbook.</p>
         <button class="primary" id="exportAnnualExcel">Export annual financials Excel</button>
+      </section>
+      <section class="export-card portfolio-financial-export">
+        <h3>Portfolio Financials Export</h3>
+        <p>Standalone export of the Portfolio Financials tab only. Excel includes a sortable/filterable investor matrix plus summary and data dictionary. PDF creates an independent Portfolio Financials report.</p>
+        <div class="actions">
+          <button class="primary" id="exportPortfolioFinancialsExcel">Export Portfolio Financials Excel</button>
+          <button class="secondary" id="exportPortfolioFinancialsPdf">Export Portfolio Financials PDF</button>
+        </div>
       </section>
       <section class="export-card technical-export">
         <h3>Supporting CSV files</h3>
@@ -4648,6 +4788,10 @@ function wirePage(r) {
   if (exportInvestorPdfButton) exportInvestorPdfButton.addEventListener("click", () => exportInvestorPdf(state, r));
   const exportAnnualExcelButton = el("exportAnnualExcel");
   if (exportAnnualExcelButton) exportAnnualExcelButton.addEventListener("click", () => exportAnnualFinancialsExcel(state, r));
+  const exportPortfolioFinancialsExcelButton = el("exportPortfolioFinancialsExcel");
+  if (exportPortfolioFinancialsExcelButton) exportPortfolioFinancialsExcelButton.addEventListener("click", () => exportPortfolioFinancialsExcel(portfolioFinancialExportPayload()));
+  const exportPortfolioFinancialsPdfButton = el("exportPortfolioFinancialsPdf");
+  if (exportPortfolioFinancialsPdfButton) exportPortfolioFinancialsPdfButton.addEventListener("click", () => exportPortfolioFinancialsPdf(portfolioFinancialExportPayload()));
 }
 
 function enforceConfigCompatibility() {

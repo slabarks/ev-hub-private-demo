@@ -205,7 +205,7 @@ function xlsxCell(value, r, c) {
   return `<c r="${ref}" t="inlineStr"><is><t>${xlsxEsc(value)}</t></is></c>`;
 }
 
-function xlsxWorksheet(rows) {
+function xlsxWorksheet(rows, options = {}) {
   const cleanRows = rows.map(row => Array.isArray(row) ? row : [row]);
   const maxCols = Math.max(1, ...cleanRows.map(r => r.length));
   const widths = Array.from({ length: maxCols }, (_, col) => {
@@ -218,7 +218,9 @@ function xlsxWorksheet(rows) {
     return `<row r="${r}">${row.map((v, c) => xlsxCell(v, r, c)).join("")}</row>`;
   }).join("");
   const freeze = `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`;
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${freeze}${cols}<sheetData>${sheetData}</sheetData></worksheet>`;
+  const shouldFilter = options.autoFilter !== false && cleanRows.length > 1 && maxCols > 1;
+  const filterRef = shouldFilter ? `<autoFilter ref="A1:${xlsxColName(maxCols - 1)}${cleanRows.length}"/>` : "";
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${freeze}${cols}<sheetData>${sheetData}</sheetData>${filterRef}</worksheet>`;
 }
 
 function xlsxSafeSheetName(name, used) {
@@ -305,7 +307,7 @@ function xlsxWorkbookFiles(sheets) {
     { name: "xl/workbook.xml", data: workbook },
     { name: "xl/_rels/workbook.xml.rels", data: workbookRels },
     { name: "xl/styles.xml", data: styles },
-    ...namedSheets.map(s => ({ name: `xl/worksheets/sheet${s.id}.xml`, data: xlsxWorksheet(s.rows) }))
+    ...namedSheets.map(s => ({ name: `xl/worksheets/sheet${s.id}.xml`, data: xlsxWorksheet(s.rows, s) }))
   ];
 }
 
@@ -705,6 +707,90 @@ export function exportAnnualFinancialsExcel(state, results) {
     { name: "Scenario Ranking", rows: scenarioRows },
     { name: "Portfolio Calibration", rows: portfolioXlsxRows() }
   ]);
+}
+
+
+export function exportPortfolioFinancialsExcel(payload) {
+  const matrixRows = payload?.matrixRows || [];
+  const summaryRows = payload?.summaryRows || [];
+  const dictionaryRows = payload?.dictionaryRows || [];
+  downloadXlsx("ev_hub_portfolio_financials.xlsx", [
+    { name: "Portfolio Financials", rows: matrixRows, autoFilter: true },
+    { name: "Dashboard Summary", rows: summaryRows, autoFilter: true },
+    { name: "Data Dictionary", rows: dictionaryRows, autoFilter: true }
+  ]);
+}
+
+export async function exportPortfolioFinancialsPdf(payload) {
+  const summary = payload?.summary || {};
+  const rows = payload?.displayRows || [];
+  const filtersText = payload?.filtersText || "All sites";
+  const horizon = Number(payload?.horizon || 5);
+  const exportedAt = new Date().toLocaleString("en-IE");
+  const tableRows = rows.map(r => [
+    esc(r.site),
+    esc(r.status),
+    esc(r.daysLabel),
+    esc(r.daysBasis),
+    currency(r.actualCapex, 0),
+    currency(r.modelCapex, 0),
+    currency(r.capexDelta, 0),
+    kwh(r.annualKwh, 0),
+    kwh(r.modelKwh, 0),
+    Number.isFinite(r.kwhVariancePct) ? pct(r.kwhVariancePct, 1) : "—",
+    currency(r.annualRevenue, 0),
+    esc(r.revenueBasis),
+    currency(r.opexExElectricity, 0),
+    currency(r.electricityCost, 0),
+    currency(r.ebitda, 0),
+    Number.isFinite(r.paybackYears) ? number(r.paybackYears, 1) + " yrs" : esc(r.paybackStatus),
+    esc(r.commercialTerms)
+  ]);
+  const report = `
+  <section class="print-page portfolio-page">
+    <div class="report-hero">
+      <div>
+        <img class="report-logo" src="./assets/epower-logo.png" alt="ePower" />
+        <div class="eyebrow">Portfolio Financials report</div>
+        <h1>Portfolio Financial Performance</h1>
+        <p>Independent export · ${esc(exportedAt)} · filters: ${esc(filtersText)}</p>
+      </div>
+      <div class="report-grid">
+        ${reportMetric("Selected sites", number(summary.selectedSites || 0, 0))}
+        ${reportMetric("Actual CAPEX", currency(summary.actualCapex || 0, 0))}
+        ${reportMetric("Model CAPEX", currency(summary.modelCapex || 0, 0))}
+        ${reportMetric("CAPEX Δ", currency(summary.capexDelta || 0, 0))}
+      </div>
+    </div>
+    <div class="report-grid">
+      ${reportMetric("This-year revenue", currency(summary.thisYearRevenue || 0, 0))}
+      ${reportMetric("Next-year revenue", currency(summary.nextYearRevenue || 0, 0))}
+      ${reportMetric(`${horizon}yr revenue`, currency(summary.horizonRevenue || 0, 0))}
+      ${reportMetric(`${horizon}yr EBITDA`, currency(summary.horizonEbitda || 0, 0))}
+      ${reportMetric(`${horizon}yr net after CAPEX`, currency(summary.netAfterCapex || 0, 0))}
+      ${reportMetric("Profitability margin", Number.isFinite(summary.profitabilityMargin) ? pct(summary.profitabilityMargin, 1) : "—")}
+    </div>
+    <div class="panel">
+      <h3>Portfolio Financials matrix</h3>
+      <p class="report-caption">Standalone export of the Portfolio Financials tab. Revenue is projected unless a trusted trailing-12-month revenue field exists. Days use commercial operational basis: first session, first kWh, energy-delivered days, then reported/stored fallback.</p>
+      ${htmlTable(["Site", "Status", "Days", "Days basis", "Actual CAPEX", "Model CAPEX", "CAPEX Δ", "kWh / yr", "Model kWh", "kWh variance", "Revenue / yr", "Revenue basis", "OPEX / yr", "Electricity / yr", "EBITDA / yr", "Payback", "Commercial terms"], tableRows)}
+    </div>
+  </section>`;
+
+  let container = document.getElementById("printReportContainer");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "printReportContainer";
+    container.className = "print-report";
+    document.body.appendChild(container);
+  }
+  container.innerHTML = report;
+  document.body.classList.add("print-mode");
+  await waitForImages(container);
+  setTimeout(() => {
+    window.print();
+    setTimeout(() => document.body.classList.remove("print-mode"), 500);
+  }, 250);
 }
 
 export async function exportInvestorPdf(state, results) {

@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.20 days priority fix";
+const APP_BUILD_VERSION = "V17.22 energy-days basis";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -1887,20 +1887,36 @@ function portfolioOperatingMetrics(site) {
   const aadt = Number(site?.aadt || 0);
   const plugs = Number(site?.modelEquivalentPlugs || 0);
   const micKva = Number(site?.realMicKva || 0);
-  // Client-side annualisation fix: when the server returns rolling30Kwh but no
-  // dailyKwh computed from the correct divisor, use maturity.dataDays as the
-  // denominator for early-tier sites with < 30 days of data. This means the
-  // daily rate is computed as rolling30Kwh / daysLive rather than / 30, giving
-  // the correct annualisation even when server.py hasn't been restarted yet.
   const maturityDays = Number(site?.maturity?.dataDays || 0);
   const maturityTier = site?.maturity?.tier || "early";
-  const rollDivisor = (maturityTier === "early" && maturityDays > 0 && maturityDays < 30) ? maturityDays : 30;
-  const dailyKwh = Number(actual.dailyKwh && rollDivisor === 30
-    ? actual.dailyKwh
-    : (actualKwh > 0 ? actualKwh / rollDivisor : actual.dailyKwh || 0));
-  const dailySessions = Number(actual.dailySessions && rollDivisor === 30
-    ? actual.dailySessions
-    : (actualSessions > 0 ? actualSessions / rollDivisor : actual.dailySessions || 0));
+  const operationalInfo = portfolioOperationalDaysInfo(site);
+  const operationalDays = Number(operationalInfo?.days || 0);
+  const cumulative = portfolioCumulativeActualsFromText(site);
+  // Investor audit rule: when a daily_cumulative source gives both the total
+  // kWh and the days denominator, annualised kWh must be recomputed from those
+  // exact two values. Previously the table could show 67 days while still using
+  // a stale dailyKwh value from a different denominator, which made the Days and
+  // kWh columns internally inconsistent.
+  let dailyKwh = 0;
+  let dailySessions = 0;
+  if (cumulative.kwhTotal > 0 && (operationalDays > 0 || cumulative.days > 0)) {
+    const denominator = operationalDays > 0 ? operationalDays : cumulative.days;
+    dailyKwh = cumulative.kwhTotal / denominator;
+  } else {
+    const rollDivisor = (maturityTier === "early" && maturityDays > 0 && maturityDays < 30) ? maturityDays : 30;
+    dailyKwh = Number(actual.dailyKwh && rollDivisor === 30
+      ? actual.dailyKwh
+      : (actualKwh > 0 ? actualKwh / rollDivisor : actual.dailyKwh || 0));
+  }
+  if (cumulative.sessionsTotal > 0 && (operationalDays > 0 || cumulative.days > 0)) {
+    const denominator = operationalDays > 0 ? operationalDays : cumulative.days;
+    dailySessions = cumulative.sessionsTotal / denominator;
+  } else {
+    const rollDivisor = (maturityTier === "early" && maturityDays > 0 && maturityDays < 30) ? maturityDays : 30;
+    dailySessions = Number(actual.dailySessions && rollDivisor === 30
+      ? actual.dailySessions
+      : (actualSessions > 0 ? actualSessions / rollDivisor : actual.dailySessions || 0));
+  }
   const avgKwhSession = actualSessions > 0 ? actualKwh / actualSessions : Number(DEFAULT_INPUTS.averageSessionEnergy || 30.4);
   return {
     actualKwh,
@@ -1908,6 +1924,8 @@ function portfolioOperatingMetrics(site) {
     actualRevenue,
     dailyKwh,
     dailySessions,
+    cumulativeKwhTotal: cumulative.kwhTotal || null,
+    cumulativeSourceDays: cumulative.days || null,
     annualisedKwh: dailyKwh * 365,
     annualisedSessions: dailySessions * 365,
     avgKwhSession,
@@ -2897,6 +2915,50 @@ function portfolioExplicitLiveDaysFromText(site) {
   const n = Number(match[1]);
   return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
 }
+function portfolioCumulativeActualsFromText(site) {
+  const text = String(portfolioActualDataDaysText(site) || "");
+  const result = { days: 0, kwhTotal: 0, sessionsTotal: 0, source: "" };
+  const daysA = text.match(/(\d+(?:\.\d+)?)\s*(?:calendar\s*)?days?\s*(?:live|operational|of\s*data)?/i);
+  const kwhA = text.match(/([\d,]+(?:\.\d+)?)\s*kwh\s*(?:total|over)/i);
+  const kwhB = text.match(/(?:total|cumulative|sum)\s*[:=]?\s*([\d,]+(?:\.\d+)?)\s*kwh/i);
+  const sessionsA = text.match(/([\d,]+(?:\.\d+)?)\s*(?:sessions?|txns?|transactions?)\s*(?:total|over)?/i);
+  const days = daysA ? Number(String(daysA[1]).replace(/,/g, "")) : 0;
+  const kwhTotal = (kwhA || kwhB) ? Number(String((kwhA || kwhB)[1]).replace(/,/g, "")) : 0;
+  const sessionsTotal = sessionsA ? Number(String(sessionsA[1]).replace(/,/g, "")) : 0;
+  if (Number.isFinite(days) && days > 0) result.days = Math.round(days);
+  if (Number.isFinite(kwhTotal) && kwhTotal > 0) result.kwhTotal = kwhTotal;
+  if (Number.isFinite(sessionsTotal) && sessionsTotal > 0) result.sessionsTotal = sessionsTotal;
+  if (result.days > 0 || result.kwhTotal > 0 || result.sessionsTotal > 0) result.source = text;
+  return result;
+}
+function portfolioEnergyDeliveryDaysInfo(site) {
+  const cumulative = portfolioCumulativeActualsFromText(site);
+  const actual = site?.actual || {};
+  const textDays = Number(cumulative.days || portfolioExplicitLiveDaysFromText(site) || 0);
+  const rollingDailyKwh = Number(actual.dailyKwh || (Number(actual.rolling30Kwh || 0) > 0 ? Number(actual.rolling30Kwh || 0) / 30 : 0));
+  if (!(Number(cumulative.kwhTotal) > 0) || !(rollingDailyKwh > 0)) return null;
+  const implied = Number(cumulative.kwhTotal) / rollingDailyKwh;
+  if (!Number.isFinite(implied) || implied <= 0) return null;
+  // Use energy-derived commercial days only when the delivered-energy denominator
+  // indicates a later real-use start than the reported live/commissioned days.
+  // If implied days are greater than reported days, the rolling run-rate is lower
+  // than the historic average, so reported days are safer.
+  if (textDays > 0 && implied > textDays) return null;
+  const days = Math.max(1, Math.round(implied));
+  const noteParts = [`Energy-derived days = ${Number(cumulative.kwhTotal).toFixed(1)} kWh cumulative / ${Number(rollingDailyKwh).toFixed(1)} kWh/day run-rate`];
+  if (textDays > 0) noteParts.push(`reported live-days was ${Math.round(textDays)}`);
+  return {
+    days,
+    basisKey: "energy-delivery-days",
+    basisLabel: "energy-derived days",
+    sourceLabel: "Energy delivered / run-rate",
+    confidence: textDays > 0 ? "medium" : "lower",
+    firstOperationalDate: null,
+    latestDate: portfolioActualDateInfo(site).latestDate,
+    note: noteParts.join(" · ")
+  };
+}
+
 function portfolioOperationalDaysInfo(site, annualActual = null) {
   const actual = site?.actual || {};
   const liveActuals = site?.liveActuals || {};
@@ -2912,8 +2974,10 @@ function portfolioOperationalDaysInfo(site, annualActual = null) {
   };
   const firstSession = fromDate(dateInfo.firstSessionDate, "first-session", "from first session", "First real session", "high");
   if (firstSession) return firstSession;
-  const firstKwh = fromDate(dateInfo.firstKwhDate, "first-kwh", "from first kWh", "First kWh movement", "high");
+  const firstKwh = fromDate(dateInfo.firstKwhDate, "first-kwh", "from first kWh", "First KWh movement", "high");
   if (firstKwh) return firstKwh;
+  const energyDays = portfolioEnergyDeliveryDaysInfo(site);
+  if (energyDays) return energyDays;
   // Important: do not use generic firstActiveDate before the reported live-days
   // text. In stored/reference actuals, firstActiveDate can represent charger
   // telemetry or commissioning evidence, while the daily_cumulative text already
@@ -2921,7 +2985,7 @@ function portfolioOperationalDaysInfo(site, annualActual = null) {
   // here made sites such as Castleknock show 70 days instead of the trusted
   // 67 days live from the actuals source.
   const textDays = portfolioExplicitLiveDaysFromText(site);
-  if (textDays > 0) return { days: textDays, basisKey: "reported-live-days", basisLabel: "reported live days", sourceLabel: "Reported live-days text", confidence: "medium", firstOperationalDate: dateInfo.firstActiveDate || null, latestDate: latest, note: `Reported live-days text from actual source: ${number(textDays,0)} days` };
+  if (textDays > 0) return { days: textDays, basisKey: "reported-live-days", basisLabel: "reported live days", sourceLabel: "Reported live-days text", confidence: "medium", firstOperationalDate: dateInfo.firstActiveDate || null, latestDate: latest, note: `Reported live-days text from actual source: ${Math.round(textDays)} days` };
   const candidates = [
     actual.dataDays,
     actual.operationalDays,
@@ -2937,7 +3001,7 @@ function portfolioOperationalDaysInfo(site, annualActual = null) {
   ];
   for (const candidate of candidates) {
     const n = Number(candidate);
-    if (Number.isFinite(n) && n > 0) return { days: Math.round(n), basisKey: "stored-maturity", basisLabel: "stored maturity", sourceLabel: "Stored maturity/data-days field", confidence: "lower", firstOperationalDate: dateInfo.firstActiveDate || null, latestDate: latest, note: `Fallback to stored maturity/data-days field: ${number(n,0)} days` };
+    if (Number.isFinite(n) && n > 0) return { days: Math.round(n), basisKey: "stored-maturity", basisLabel: "stored maturity", sourceLabel: "Stored maturity/data-days field", confidence: "lower", firstOperationalDate: dateInfo.firstActiveDate || null, latestDate: latest, note: `Fallback to stored maturity/data-days field: ${Math.round(n)} days` };
   }
   return { days: null, basisKey: "low-confidence", basisLabel: "not confirmed", sourceLabel: "No reliable days source", confidence: "low", firstOperationalDate: null, latestDate: latest, note: "Operational days could not be confirmed." };
 }
@@ -3218,7 +3282,7 @@ function portfolioFinancialRows() {
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "daysBasis", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_20";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_22";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
@@ -3288,7 +3352,7 @@ function portfolioFinancialFilterDefinitions() {
       ["all", "All days"], ["low-history", "<30 days"], ["early-30-179", "30–179 days"], ["ramping-180-364", "180–364 days"], ["full-year-365-plus", "365+ days"]
     ]},
     { key: "daysBasis", label: "Days basis", options: [
-      ["all", "All days basis"], ["first-session", "First session"], ["first-kwh", "First kWh"], ["first-activity", "First activity"], ["reported-live-days", "Reported live days"], ["stored-maturity", "Stored maturity"], ["low-confidence", "Low confidence"]
+      ["all", "All days basis"], ["first-session", "First session"], ["first-kwh", "First kWh"], ["energy-delivery-days", "Energy delivered"], ["reported-live-days", "Reported live days"], ["stored-maturity", "Stored maturity"], ["low-confidence", "Low confidence"]
     ]},
     { key: "capex", label: "CAPEX", options: [
       ["all", "All CAPEX"], ["capex-tracked", "CAPEX tracked"], ["capex-missing", "CAPEX missing"]
@@ -3729,7 +3793,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.20 days priority fix</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then trusted reported live-days/stored fallbacks; generic telemetry first-active dates are not used ahead of reported live days. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.22 energy-days basis</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }

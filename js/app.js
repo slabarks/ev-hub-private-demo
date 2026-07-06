@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.23 portfolio financial exports";
+const APP_BUILD_VERSION = "V17.24 export layout fix";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -3282,7 +3282,7 @@ function portfolioFinancialRows() {
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "daysBasis", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_23";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_24";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
@@ -3616,61 +3616,69 @@ function portfolioFinancialActiveFilterText() {
   });
   return parts.length ? parts.join("; ") : "All sites";
 }
+function portfolioFinancialExportRevenueSub(fin) {
+  const revenueKey = portfolioFinancialRevenueKey(fin);
+  if (revenueKey === "actual-t12m") return "actual T12M";
+  if (revenueKey === "est-t12m") return "est. T12M";
+  return fin.revenueEstimated ? "projected est." : "projected";
+}
 function portfolioFinancialExportDisplayRow(fin) {
   const r = fin.result || {};
-  const days = portfolioOperationalDaysLabel(fin.operationalDays, fin.operationalDaysInfo).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   const commercial = portfolioCommercialTermsLabel(fin.site);
+  const modelKwh = Number(r.modelledAnnualKwh || 0);
+  const actualCapex = Number(fin.actualCapex || 0);
+  const modelCapex = Number(fin.modelCapex || 0);
+  const capexDelta = Number(fin.capexDelta || 0);
+  const paybackLabel = portfolioPaybackLabel(fin.paybackYears, fin.paybackState);
+  const paybackNote = fin.paybackState?.state === "positive"
+    ? (fin.landlordApplied ? "actual CAPEX / EBITDA" : "actual CAPEX / pre-landlord EBITDA")
+    : (fin.paybackState?.reason || portfolioPaybackSubtext(fin.paybackYears, fin.paybackState));
   return {
     site: fin.site?.name || "",
+    configuration: fin.site?.modelEquivalentSummary || "",
+    commercialTerms: commercial.label,
     status: fin.status?.label || "Review",
     dataQuality: portfolioFinancialDataQualityShort(fin.dataQuality),
+    days: Number.isFinite(Number(fin.operationalDays)) ? Number(fin.operationalDays) : null,
     daysLabel: Number.isFinite(Number(fin.operationalDays)) ? `${number(fin.operationalDays,0)} days` : "Not confirmed",
     daysBasis: fin.daysBasisLabel || "",
-    daysBasisNote: fin.daysBasisNote || "",
-    actualCapex: Number(fin.actualCapex || 0),
-    modelCapex: Number(fin.modelCapex || 0),
-    capexDelta: Number(fin.capexDelta || 0),
-    capexVariancePct: Number(fin.modelCapex || 0) > 0 ? Number(fin.capexDelta || 0) / Number(fin.modelCapex || 0) : null,
+    actualCapex: Number.isFinite(actualCapex) ? actualCapex : null,
+    capexNote: fin.hasActualCapex ? `${modelCapex > 0 ? `model ${currency(modelCapex, 0)} · ` : ""}Δ ${currency(capexDelta, 0)}` : "CAPEX missing · payback blocked",
     annualKwh: Number(fin.annualKwh || 0),
-    modelKwh: Number(r.modelledAnnualKwh || 0),
-    kwhVariancePct: Number.isFinite(Number(r.annualKwhVariance)) ? Number(r.annualKwhVariance) : null,
+    kwhNote: modelKwh > 0 ? `model ${kwh(modelKwh, 0)} · ${portfolioFinancialVarianceLabel(r.annualKwhVariance)}` : "",
     annualRevenue: Number(fin.annualRevenue || 0),
-    revenueBasis: fin.revenueEstimated ? `Estimated · ${fin.revenueSource || "kWh × net tariff"}` : (fin.revenueSource || "Projected run-rate"),
-    revenueEstimated: fin.revenueEstimated ? "Yes" : "No",
+    revenueBasis: portfolioFinancialExportRevenueSub(fin),
     opexExElectricity: Number(fin.opexExElectricity || 0),
-    electricityCost: Number(fin.electricityCost || 0),
-    grossProfit: Number(fin.grossProfit || 0),
+    opexNote: fin.landlordApplied ? "excl. electricity" : "excl. electricity & landlord",
     ebitda: Number(fin.operatingCashflow || 0),
+    ebitdaNote: fin.landlordApplied ? "run-rate" : "pre-landlord",
     paybackYears: Number.isFinite(Number(fin.paybackYears)) ? Number(fin.paybackYears) : null,
-    paybackStatus: portfolioPaybackLabel(fin.paybackYears, fin.paybackState),
-    commercialTerms: commercial.label,
-    landlordApplied: fin.landlordApplied ? "Yes" : "No",
-    landlordNote: fin.landlordNote || "",
-    annualSessions: Number(fin.annualSessions || 0),
-    micKva: Number(fin.site?.realMicKva || 0),
-    aadt: Number(fin.site?.aadt || 0),
-    category: fin.site?.category || "",
-    configuration: fin.site?.modelEquivalentSummary || ""
+    paybackLabel,
+    paybackNote
   };
 }
 function portfolioFinancialExportMatrixRows(rows) {
   const display = rows.map(portfolioFinancialExportDisplayRow);
   return [[
-    "Site", "Status", "Data quality", "Operational days", "Days basis", "Days basis note",
-    "Actual CAPEX EUR", "Model CAPEX EUR", "CAPEX delta EUR", "CAPEX delta %",
-    "Annualised kWh", "Matched model kWh", "kWh variance %",
-    "Revenue per year EUR", "Revenue basis", "Revenue estimated",
-    "OPEX per year EUR excl electricity", "Electricity per year EUR", "Gross profit EUR", "EBITDA proxy EUR",
-    "Payback years", "Payback status", "Commercial terms", "Landlord applied", "Landlord note",
-    "Annualised sessions", "MIC kVA", "AADT", "Category", "Configuration"
+    "Site", "Site detail", "Commercial terms",
+    "Days", "Days basis",
+    "CAPEX EUR", "CAPEX note",
+    "kWh / yr", "kWh note",
+    "Revenue / yr EUR", "Revenue basis",
+    "OPEX / yr EUR", "OPEX basis",
+    "EBITDA / yr EUR", "EBITDA basis",
+    "Payback", "Payback note",
+    "Status", "Quality"
   ], ...display.map(r => [
-    r.site, r.status, r.dataQuality, portfolioFinancialExportNumber(r.daysLabel.replace(/[^0-9.-]/g, "")), r.daysBasis, r.daysBasisNote,
-    portfolioFinancialExportNumber(r.actualCapex), portfolioFinancialExportNumber(r.modelCapex), portfolioFinancialExportNumber(r.capexDelta), portfolioFinancialExportNumber(r.capexVariancePct),
-    portfolioFinancialExportNumber(r.annualKwh), portfolioFinancialExportNumber(r.modelKwh), portfolioFinancialExportNumber(r.kwhVariancePct),
-    portfolioFinancialExportNumber(r.annualRevenue), r.revenueBasis, r.revenueEstimated,
-    portfolioFinancialExportNumber(r.opexExElectricity), portfolioFinancialExportNumber(r.electricityCost), portfolioFinancialExportNumber(r.grossProfit), portfolioFinancialExportNumber(r.ebitda),
-    portfolioFinancialExportNumber(r.paybackYears), r.paybackStatus, r.commercialTerms, r.landlordApplied, r.landlordNote,
-    portfolioFinancialExportNumber(r.annualSessions), portfolioFinancialExportNumber(r.micKva), portfolioFinancialExportNumber(r.aadt), r.category, r.configuration
+    r.site, r.configuration, r.commercialTerms,
+    portfolioFinancialExportNumber(r.days), r.daysBasis,
+    portfolioFinancialExportNumber(r.actualCapex), r.capexNote,
+    portfolioFinancialExportNumber(r.annualKwh), r.kwhNote,
+    portfolioFinancialExportNumber(r.annualRevenue), r.revenueBasis,
+    portfolioFinancialExportNumber(r.opexExElectricity), r.opexNote,
+    portfolioFinancialExportNumber(r.ebitda), r.ebitdaNote,
+    r.paybackLabel, r.paybackNote,
+    r.status, r.dataQuality
   ])];
 }
 function portfolioFinancialExportPayload() {
@@ -3729,7 +3737,7 @@ function portfolioFinancialExportPayload() {
     ["CAPEX delta", "Model CAPEX minus actual CAPEX. Positive means actual spend is below model; negative means overspend."],
     ["kWh variance", "Matched model variance. Positive means under model; negative means above benchmark in the app's status logic."]
   ];
-  return { summary: summaryObject, horizon, filtersText: portfolioFinancialActiveFilterText(), matrixRows: portfolioFinancialExportMatrixRows(filteredRows), summaryRows, dictionaryRows, displayRows: filteredRows.map(portfolioFinancialExportDisplayRow) };
+  return { summary: summaryObject, horizon, filtersText: portfolioFinancialActiveFilterText(), matrixRows: portfolioFinancialExportMatrixRows(filteredRows), displayRows: filteredRows.map(portfolioFinancialExportDisplayRow) };
 }
 
 function portfolioPaybackLabel(years, state = null) {
@@ -3925,7 +3933,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.23 financial exports</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.24 export layout fix</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }

@@ -712,68 +712,56 @@ export function exportAnnualFinancialsExcel(state, results) {
 
 export function exportPortfolioFinancialsExcel(payload) {
   const matrixRows = payload?.matrixRows || [];
-  const summaryRows = payload?.summaryRows || [];
-  const dictionaryRows = payload?.dictionaryRows || [];
   downloadXlsx("ev_hub_portfolio_financials.xlsx", [
-    { name: "Portfolio Financials", rows: matrixRows, autoFilter: true },
-    { name: "Dashboard Summary", rows: summaryRows, autoFilter: true },
-    { name: "Data Dictionary", rows: dictionaryRows, autoFilter: true }
+    { name: "Portfolio Financials", rows: matrixRows, autoFilter: true }
   ]);
+}
+
+function compactPdfCell(main, sub = "") {
+  return `<div class="pf-pdf-main">${esc(main)}</div>${sub ? `<div class="pf-pdf-sub">${esc(sub)}</div>` : ""}`;
 }
 
 export async function exportPortfolioFinancialsPdf(payload) {
   const summary = payload?.summary || {};
   const rows = payload?.displayRows || [];
   const filtersText = payload?.filtersText || "All sites";
-  const horizon = Number(payload?.horizon || 5);
   const exportedAt = new Date().toLocaleString("en-IE");
   const tableRows = rows.map(r => [
-    esc(r.site),
-    esc(r.status),
-    esc(r.daysLabel),
-    esc(r.daysBasis),
-    currency(r.actualCapex, 0),
-    currency(r.modelCapex, 0),
-    currency(r.capexDelta, 0),
-    kwh(r.annualKwh, 0),
-    kwh(r.modelKwh, 0),
-    Number.isFinite(r.kwhVariancePct) ? pct(r.kwhVariancePct, 1) : "—",
-    currency(r.annualRevenue, 0),
-    esc(r.revenueBasis),
-    currency(r.opexExElectricity, 0),
-    currency(r.electricityCost, 0),
-    currency(r.ebitda, 0),
-    Number.isFinite(r.paybackYears) ? number(r.paybackYears, 1) + " yrs" : esc(r.paybackStatus),
-    esc(r.commercialTerms)
+    compactPdfCell(r.site, r.configuration || r.commercialTerms),
+    compactPdfCell(r.daysLabel, r.daysBasis),
+    compactPdfCell(Number.isFinite(r.actualCapex) ? currency(r.actualCapex, 0) : "CAPEX missing", r.capexNote),
+    compactPdfCell(kwh(r.annualKwh, 0), r.kwhNote),
+    compactPdfCell(currency(r.annualRevenue, 0), r.revenueBasis),
+    compactPdfCell(currency(r.opexExElectricity, 0), r.opexNote),
+    compactPdfCell(currency(r.ebitda, 0), r.ebitdaNote),
+    compactPdfCell(r.paybackLabel, r.paybackNote),
+    compactPdfCell(r.status, r.dataQuality)
   ]);
   const report = `
-  <section class="print-page portfolio-page">
-    <div class="report-hero">
+  <section class="print-page portfolio-page portfolio-financial-print-page">
+    <div class="report-hero portfolio-financial-print-hero">
       <div>
         <img class="report-logo" src="./assets/epower-logo.png" alt="ePower" />
-        <div class="eyebrow">Portfolio Financials report</div>
+        <div class="eyebrow">Portfolio Financials export</div>
         <h1>Portfolio Financial Performance</h1>
-        <p>Independent export · ${esc(exportedAt)} · filters: ${esc(filtersText)}</p>
+        <p>Independent export of the Portfolio Financials tab · ${esc(exportedAt)} · filters: ${esc(filtersText)}</p>
       </div>
-      <div class="report-grid">
+      <div class="report-grid portfolio-financial-print-kpis">
         ${reportMetric("Selected sites", number(summary.selectedSites || 0, 0))}
         ${reportMetric("Actual CAPEX", currency(summary.actualCapex || 0, 0))}
-        ${reportMetric("Model CAPEX", currency(summary.modelCapex || 0, 0))}
-        ${reportMetric("CAPEX Δ", currency(summary.capexDelta || 0, 0))}
+        ${reportMetric("Annualised kWh", kwh(summary.annualKwh || 0, 0))}
+        ${reportMetric("EBITDA / yr", currency(summary.annualEbitda || 0, 0))}
       </div>
     </div>
-    <div class="report-grid">
-      ${reportMetric("This-year revenue", currency(summary.thisYearRevenue || 0, 0))}
-      ${reportMetric("Next-year revenue", currency(summary.nextYearRevenue || 0, 0))}
-      ${reportMetric(`${horizon}yr revenue`, currency(summary.horizonRevenue || 0, 0))}
-      ${reportMetric(`${horizon}yr EBITDA`, currency(summary.horizonEbitda || 0, 0))}
-      ${reportMetric(`${horizon}yr net after CAPEX`, currency(summary.netAfterCapex || 0, 0))}
-      ${reportMetric("Profitability margin", Number.isFinite(summary.profitabilityMargin) ? pct(summary.profitabilityMargin, 1) : "—")}
-    </div>
-    <div class="panel">
-      <h3>Portfolio Financials matrix</h3>
-      <p class="report-caption">Standalone export of the Portfolio Financials tab. Revenue is projected unless a trusted trailing-12-month revenue field exists. Days use commercial operational basis: first session, first kWh, energy-delivered days, then reported/stored fallback.</p>
-      ${htmlTable(["Site", "Status", "Days", "Days basis", "Actual CAPEX", "Model CAPEX", "CAPEX Δ", "kWh / yr", "Model kWh", "kWh variance", "Revenue / yr", "Revenue basis", "OPEX / yr", "Electricity / yr", "EBITDA / yr", "Payback", "Commercial terms"], tableRows)}
+    <div class="panel portfolio-financial-print-panel">
+      <h3>Site financial performance table</h3>
+      <p class="report-caption">Same investor table as the app: Site, Days, CAPEX, kWh/year, Revenue/year, OPEX/year, EBITDA/year, Payback and Status/quality.</p>
+      <div class="report-table-wrap portfolio-financial-pdf-table-wrap">
+        <table class="portfolio-financial-pdf-table">
+          <thead><tr>${["Site", "Days", "CAPEX", "kWh / yr", "Revenue / yr", "OPEX / yr", "EBITDA / yr", "Payback", "Status / quality"].map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+          <tbody>${tableRows.map(row => `<tr>${row.map(x => `<td>${x}</td>`).join("")}</tr>`).join("")}</tbody>
+        </table>
+      </div>
     </div>
   </section>`;
 
@@ -785,11 +773,22 @@ export async function exportPortfolioFinancialsPdf(payload) {
     document.body.appendChild(container);
   }
   container.innerHTML = report;
-  document.body.classList.add("print-mode");
+  let pageStyle = document.getElementById("portfolioFinancialPrintPageStyle");
+  if (!pageStyle) {
+    pageStyle = document.createElement("style");
+    pageStyle.id = "portfolioFinancialPrintPageStyle";
+    document.head.appendChild(pageStyle);
+  }
+  pageStyle.textContent = "@page { size: A4 landscape; margin: 8mm; }";
+  document.body.classList.add("print-mode", "portfolio-financial-print-mode");
   await waitForImages(container);
   setTimeout(() => {
     window.print();
-    setTimeout(() => document.body.classList.remove("print-mode"), 500);
+    setTimeout(() => {
+      document.body.classList.remove("print-mode", "portfolio-financial-print-mode");
+      const staleStyle = document.getElementById("portfolioFinancialPrintPageStyle");
+      if (staleStyle) staleStyle.remove();
+    }, 500);
   }, 250);
 }
 

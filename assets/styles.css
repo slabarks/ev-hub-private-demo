@@ -2731,6 +2731,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 .portfolio-financial-dashboard-window.investment { background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(239,248,244,.92)); }
 .portfolio-financial-dashboard-window.operating { background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(246,250,248,.94)); }
 .portfolio-financial-dashboard-window.projection { background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(235,247,242,.94)); }
+.portfolio-financial-dashboard-window.maturity { background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(244,249,247,.95)); }
 .portfolio-financial-window-head h4 {
   margin: 0 0 4px;
   font-size: 17px;
@@ -2835,6 +2836,43 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   color: var(--muted);
   font-size: 10px;
   font-weight: 700;
+}
+.portfolio-maturity-panel .portfolio-summary-grid {
+  margin: 12px 0 10px;
+}
+.portfolio-maturity-details {
+  margin-top: 12px;
+  border: 1px solid rgba(0,112,74,.12);
+  border-radius: 16px;
+  background: rgba(255,255,255,.72);
+  overflow: hidden;
+}
+.portfolio-maturity-details > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f2d25;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.portfolio-maturity-details > summary::-webkit-details-marker { display: none; }
+.portfolio-maturity-details > summary::after {
+  content: "+";
+  font-size: 16px;
+  color: #00704a;
+}
+.portfolio-maturity-details[open] > summary::after { content: "−"; }
+.portfolio-maturity-detail-body {
+  padding: 0 14px 14px;
+  border-top: 1px solid rgba(0,112,74,.08);
+}
+.portfolio-maturity-detail-body .chart-card,
+.portfolio-maturity-detail-body .chart-wrap,
+.portfolio-maturity-detail-body canvas {
+  max-width: 100%;
 }
 @media (max-width: 1180px) {
   .portfolio-financial-window-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -3392,7 +3430,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 .aadt-popup button { width:100%; }
 @media (max-width: 760px) { .tii-candidate-title { align-items:flex-start; flex-direction:column; } .toggle-inline { width:100%; justify-content:center; } }
 
-/* V17.37 portfolio financials: CAPEX accuracy bands and maturity-adjusted forecast */
+/* V17.38 portfolio financials: CAPEX accuracy bands, maturity summary and cleaner forecast UI */
 .portfolio-financial-table { min-width: 1320px; }
 .portfolio-financial-metric.capex-delta-green,
 .portfolio-financial-metric.capex-delta-amber,

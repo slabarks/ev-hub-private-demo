@@ -23,8 +23,8 @@ const app = fs.readFileSync(path.join(root, "js", "app.js"), "utf8");
 const server = fs.readFileSync(path.join(root, "server.py"), "utf8");
 const css = fs.readFileSync(path.join(root, "assets", "styles.css"), "utf8");
 const bundle = JSON.parse(fs.readFileSync(path.join(root, "data", "tii_counter_locations_bundled_vetted.json"), "utf8"));
-assert.match(app, /V17\.37 browser provenance-controlled AADT engine/);
-assert.match(server, /V17\.37 AADT audited resolver/);
+assert.match(app, /V17\.38 browser provenance-controlled AADT engine/);
+assert.match(server, /V17\.38 AADT audited resolver/);
 assert.match(app, /if \(absolute <= 30000\).*capex-delta-green/);
 assert.match(app, /if \(absolute <= 50000\).*capex-delta-amber/);
 assert.match(app, /return \{ key: "red", cls: "capex-delta-red"/);
@@ -98,7 +98,7 @@ try {
   const versionResp = await waitFor(`http://127.0.0.1:${port}/api/version`);
   const version = await versionResp.json();
   assert.equal(version.ok, true);
-  assert.match(version.aadt_engine_version, /V17\.37/);
+  assert.match(version.aadt_engine_version, /V17\.38/);
 
   const empty = await fetch(`http://127.0.0.1:${port}/api/auto-tii-aadt`);
   assert.equal(empty.status, 400);
@@ -123,7 +123,7 @@ try {
   const indexResp = await fetch(`http://127.0.0.1:${port}/`);
   assert.equal(indexResp.status, 200);
   const indexText = await indexResp.text();
-  assert.match(indexText, /EV Charging Hub Investment Tool V17\.37/i);
+  assert.match(indexText, /EV Charging Hub Investment Tool V17\.38/i);
 
   const maturityResp = await fetch(`http://127.0.0.1:${port}/js/engines/maturityEngine.js`);
   assert.equal(maturityResp.status, 200);
@@ -137,5 +137,5 @@ try {
 }
 
 console.log("\n[6/6] Result");
-console.log("PASS — V17.37 AADT, CAPEX bands, monthly history, maturity forecasting, exports, API and static smoke tests completed successfully.");
+console.log("PASS — V17.38 AADT, CAPEX bands, monthly history, maturity forecasting, exports, API and static smoke tests completed successfully.");
 if (logs.trim()) console.log("Server smoke log:\n" + logs.trim());

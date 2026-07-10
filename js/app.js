@@ -419,9 +419,9 @@ function portfolioLoadBlockReason(site) {
 function portfolioCanLoadSite(site) {
   return !!site && !portfolioLoadBlockReason(site);
 }
-function portfolioCapexInfo(site, modelInitialCapex = 0) {
+function portfolioCapexInfo(site, model20YearCapex = 0) {
   const actual = Number(site?.actualCapexExVat || actualCapexForSite(site) || 0);
-  const model = Number(modelInitialCapex || 0);
+  const model = Number(model20YearCapex || 0);
   const note = site?.capexCalibrationNote || capexNoteForSite(site);
   return { actual, model, note, variance: actual > 0 && Number.isFinite(model) ? model - actual : null };
 }
@@ -774,7 +774,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.37 maturity-adjusted portfolio financials + audited AADT";
+const APP_BUILD_VERSION = "V17.38 maturity-adjusted portfolio financials + audited AADT";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -939,12 +939,12 @@ function aadtEngineMismatchWarning(ctx) {
   const source = String(t.source || "").toLowerCase();
   const mode = String(t.sample_mode || t.aadt_engine_mode || "").toLowerCase();
   const engineVersion = String(t.aadt_engine_version || "");
-  const hasCurrentServer = engineVersion.includes("V17.37");
+  const hasCurrentServer = engineVersion.includes("V17.38");
   const isOldCoordinateEngine = source.includes("ranked coordinate-enriched lookup") || mode.includes("ranked coordinate-enriched");
   const hasCandidates = Array.isArray(t.candidates) && t.candidates.length > 0;
   if (t.client_side_aadt_recalculated) return "";
   if (isOldCoordinateEngine && !hasCurrentServer) {
-    return "AADT API version mismatch: the browser is V17.37 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
+    return "AADT API version mismatch: the browser is V17.38 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
   }
   const plotted = (t.candidates || []).filter(c => c.official_location || c.mappable_location).length;
   if (hasCandidates && plotted === 0 && source.includes("tii")) {
@@ -956,7 +956,7 @@ function aadtEngineMismatchWarning(ctx) {
   return "";
 }
 
-const CLIENT_AADT_ENGINE_VERSION = "V17.37 browser provenance-controlled AADT engine";
+const CLIENT_AADT_ENGINE_VERSION = "V17.38 browser provenance-controlled AADT engine";
 let clientAadtRecordsPromise = null;
 // Coordinate provenance is supplied by the server/bundled location dataset; no hidden browser-only coordinate overrides.
 function clientAadtCounterId(rec) {
@@ -3647,7 +3647,7 @@ function portfolioCommercialManualTermsForCalculation(site) {
 }
 function portfolioCommercialImpact(site, withTerms = true) {
   const result = portfolioSiteResults(site, portfolioBenchmarksByCategory(portfolioSites({ includeAdditional: false })));
-  const capex = portfolioCapexInfo(site, result.financialSummary?.initialInvestment || 0);
+  const capex = portfolioCapexInfo(site, result.financialSummary?.totalCapex || result.financialSummary?.initialInvestment || 0);
   const annualActual = portfolioAnnualOperatingValues(site, result.metrics);
   const revenueInfo = portfolioActualRevenueInfo(site, annualActual, result.metrics);
   const opex = portfolioFinancialOpexFromActuals(result, annualActual.annualKwh, revenueInfo.annualSessions, revenueInfo.annualRevenue, withTerms ? site : { ...site, ignoreManualCommercialTerms: true });
@@ -3841,7 +3841,7 @@ function portfolioFinancialStatus(fin, r) {
 }
 function portfolioFinancialRow(site, benchmarks, maturityModel) {
   const result = portfolioSiteResults(site, benchmarks);
-  const capex = portfolioCapexInfo(site, result.financialSummary?.initialInvestment || 0);
+  const capex = portfolioCapexInfo(site, result.financialSummary?.totalCapex || result.financialSummary?.initialInvestment || 0);
   const annualActual = portfolioAnnualOperatingValues(site, result.metrics);
   const operationalDaysInfo = portfolioOperationalDaysInfo(site, annualActual);
   const operationalDays = operationalDaysInfo.days;
@@ -3918,7 +3918,7 @@ function portfolioFinancialRows() {
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "daysBasis", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_37";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_38";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
@@ -4130,19 +4130,50 @@ function portfolioFinancialDashboardWindow(title, subtitle, metrics, cls = "") {
 function portfolioFinancialStatusPill(label, value, note = "") {
   return `<div class="portfolio-financial-status-pill"><span>${h(label)}</span><strong>${value}</strong>${note ? `<small>${h(note)}</small>` : ""}</div>`;
 }
-function portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon) {
+function portfolioFinancialMaturitySummary(model, rows) {
+  const usable = rows.filter(r => r.hasActualKwh && r.hasOperationalDays && r.maturityForecast);
+  const maturityRows = usable.filter(r => Number.isFinite(Number(r.maturityForecast?.currentMaturityFactor)));
+  const remainingRows = maturityRows.filter(r => Number(r.maturityForecast?.monthsToMaturity || 0) > 0);
+  const matureNowCount = maturityRows.filter(r => Number(r.maturityForecast?.monthsToMaturity || 0) <= 0 || Number(r.maturityForecast?.currentMaturityFactor || 0) >= 0.95).length;
+  const avgCurrentFactor = maturityRows.length
+    ? maturityRows.reduce((acc, row) => acc + (Number(row.maturityForecast?.currentMaturityFactor) || 0), 0) / maturityRows.length
+    : null;
+  const avgMonthsRemaining = remainingRows.length
+    ? remainingRows.reduce((acc, row) => acc + (Number(row.maturityForecast?.monthsToMaturity) || 0), 0) / remainingRows.length
+    : 0;
+  const typicalMonthsToMaturity = (model?.curve || []).find(point => Number(point.p50 || 0) >= 0.95)?.month || null;
+  const confidenceCounts = maturityRows.reduce((acc, row) => {
+    const key = String(row.maturityForecast?.confidence?.label || "Low");
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  return {
+    usableSiteCount: usable.length,
+    maturitySiteCount: maturityRows.length,
+    matureNowCount,
+    remainingSiteCount: remainingRows.length,
+    avgCurrentFactor,
+    avgMonthsRemaining,
+    typicalMonthsToMaturity,
+    confidenceCounts,
+    source: model?.source || "prior",
+    trainingSiteCount: Number(model?.trainingSiteCount || 0),
+    stableSiteCount: Number(model?.stableSiteCount || 0)
+  };
+}
+function portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon, maturityModel) {
   const selectedText = filteredRows.length === rows.length ? "all active sites" : `${number(filteredRows.length,0)} of ${number(rows.length,0)} active sites`;
   const capexDeltaPct = summary.modelCapexForCapexRows > 0 ? summary.capexDelta / summary.modelCapexForCapexRows : null;
   const capexDeltaNote = summary.capexDelta < 0 ? "overspend vs model" : summary.capexDelta > 0 ? "underspend vs model" : "in line with model";
-  const investment = portfolioFinancialDashboardWindow("Investment position", "Actual investment against modelled CAPEX for the selected sites.", [
+  const investment = portfolioFinancialDashboardWindow("Investment position", "Actual investment against modelled 20-year CAPEX for the selected sites.", [
     portfolioFinancialDashboardMetric("Selected sites", number(filteredRows.length,0), selectedText),
     portfolioFinancialDashboardMetric("Actual CAPEX tracked", currency(summary.actualCapex,0), `${number(summary.rowsWithCapex,0)} of ${number(summary.totalSites,0)} selected sites`),
-    portfolioFinancialDashboardMetric("Model CAPEX", currency(summary.modelCapexForCapexRows,0), "same sites with actual CAPEX"),
-    portfolioFinancialDashboardMetric("CAPEX Δ", currency(summary.capexDelta,0), `model minus actual · ${capexDeltaNote}`),
+    portfolioFinancialDashboardMetric("Model 20yr CAPEX", currency(summary.modelCapexForCapexRows,0), "same sites with actual CAPEX"),
+    portfolioFinancialDashboardMetric("CAPEX Δ", currency(summary.capexDelta,0), `20-year model minus actual · ${capexDeltaNote}`),
     portfolioFinancialDashboardMetric("Within €30k", number(summary.capexWithin30k,0), "green model-accuracy band", "good"),
     portfolioFinancialDashboardMetric("€30k–€50k", number(summary.capex30to50k,0), "amber model-accuracy band"),
     portfolioFinancialDashboardMetric("Over €50k", number(summary.capexOver50k,0), "red model-accuracy band", summary.capexOver50k > 0 ? "bad" : "good"),
-    portfolioFinancialDashboardMetric("CAPEX Δ %", capexDeltaPct === null ? "—" : pct(capexDeltaPct,1), "model minus actual / model")
+    portfolioFinancialDashboardMetric("CAPEX Δ %", capexDeltaPct === null ? "—" : pct(capexDeltaPct,1), "20-year model minus actual / 20-year model")
   ]);
   const operating = portfolioFinancialDashboardWindow("Current & next-12-month performance", "Current annual basis beside the maturity-adjusted monthly forecast.", [
     portfolioFinancialDashboardMetric("Current annual revenue", currency(projection.thisYearRevenue,0), "actual T12M or current annualised basis"),
@@ -4159,7 +4190,17 @@ function portfolioFinancialDashboardWindows(rows, filteredRows, summary, project
     portfolioFinancialDashboardMetric(`${number(horizon,0)}yr net after CAPEX`, currency(projection.netAfterCapex,0), "forecast EBITDA minus tracked CAPEX", projection.netAfterCapex < 0 ? "bad" : "good"),
     portfolioFinancialDashboardMetric("Profitability margin", projection.profitabilityMargin === null ? "—" : pct(projection.profitabilityMargin,1), `${number(horizon,0)}yr EBITDA / revenue`)
   ], "projection");
-  return `<div class="portfolio-financial-dashboard-grid">${investment}${operating}${projectionWindow}</div>`;
+  const maturitySummary = portfolioFinancialMaturitySummary(maturityModel, filteredRows);
+  const mediumCount = Number(maturitySummary.confidenceCounts.Medium || 0) + Number(maturitySummary.confidenceCounts["Medium-low"] || 0);
+  const maturityWindow = portfolioFinancialDashboardWindow("Maturity outlook", "Simple maturity view for the currently selected sites. Mature means about 95% of steady-state daily demand.", [
+    portfolioFinancialDashboardMetric("Typical time to maturity", maturitySummary.typicalMonthsToMaturity ? `${number(maturitySummary.typicalMonthsToMaturity,0)} mo` : "—", "portfolio median curve to ~95% mature demand"),
+    portfolioFinancialDashboardMetric("Average current maturity", maturitySummary.avgCurrentFactor === null ? "—" : pct(Math.min(1, maturitySummary.avgCurrentFactor),0), `${number(maturitySummary.maturitySiteCount,0)} sites with usable maturity forecast`),
+    portfolioFinancialDashboardMetric("Average months remaining", maturitySummary.remainingSiteCount ? `${number(maturitySummary.avgMonthsRemaining,1)} mo` : "0 mo", maturitySummary.remainingSiteCount ? `${number(maturitySummary.remainingSiteCount,0)} sites still ramping` : "all selected sites already mature or near-mature"),
+    portfolioFinancialDashboardMetric("Already mature", number(maturitySummary.matureNowCount,0), `${number(maturitySummary.maturitySiteCount,0)} sites assessed`),
+    portfolioFinancialDashboardMetric("Forecast mode", maturitySummary.source === "empirical" ? "Empirical" : "Conservative prior", `${number(maturitySummary.trainingSiteCount,0)} training sites · ${number(maturitySummary.stableSiteCount,0)} stable mature`),
+    portfolioFinancialDashboardMetric("Confidence mix", `${number(maturitySummary.confidenceCounts.High || 0,0)} H · ${number(mediumCount,0)} M · ${number(maturitySummary.confidenceCounts.Low || 0,0)} L`, "high / medium / low forecast confidence")
+  ], "maturity");
+  return `<div class="portfolio-financial-dashboard-grid">${investment}${operating}${projectionWindow}${maturityWindow}</div>`;
 }
 function portfolioFinancialMaturityPanel(model, rows) {
   const selectedMonths = new Set([1, 3, 6, 9, 12, 15, 18, 24]);
@@ -4173,20 +4214,17 @@ function portfolioFinancialMaturityPanel(model, rows) {
   const bt9 = model?.backtest?.[9];
   const statusClass = model?.source === "empirical" ? "good" : "warn";
   const statusLabel = model?.source === "empirical" ? "Empirical curve active" : "Conservative prior active";
-  const confidenceCounts = rows.reduce((acc, row) => {
-    const key = row.maturityForecast?.confidence?.label || "Low";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
+  const maturitySummary = portfolioFinancialMaturitySummary(model, rows);
+  const mediumCount = Number(maturitySummary.confidenceCounts.Medium || 0) + Number(maturitySummary.confidenceCounts["Medium-low"] || 0);
   const backtestText = bt6?.sampleCount
-    ? `Leave-one-site-out plateau error: ${pct(bt6.medianAbsoluteError,1)} median from month 6${bt9?.sampleCount ? ` · ${pct(bt9.medianAbsoluteError,1)} from month 9` : ""}.`
+    ? `Back-test quality: median mature-revenue error ${pct(bt6.medianAbsoluteError,1)} when only the first 6 months are visible${bt9?.sampleCount ? ` · ${pct(bt9.medianAbsoluteError,1)} when the first 9 months are visible` : ""}.`
     : "Back-testing activates automatically when at least three mature sites have usable monthly histories.";
   const chart = curveRows.length ? lineChart("portfolioMaturityCurve", curveRows, "month", [
     { key: "downside", label: "Downside (P25)" },
     { key: "base", label: "Base (P50)" },
     { key: "upside", label: "Upside (P75)" }
-  ], { title: "Portfolio maturity curve", xLabel: "Month since first commercial session", yLabel: "% of mature daily demand", ySuffix: "%", yDigits: 0, height: 250 }) : "";
-  return `<section class="panel portfolio-maturity-panel"><div class="panel-title-row"><div><span class="eyebrow">Revenue forecast engine</span><h3>Maturity curve & forecast confidence</h3><p class="muted small">${h(model?.methodology || "Maturity forecast unavailable.")}</p></div><span class="badge ${statusClass}">${h(statusLabel)}</span></div><div class="portfolio-summary-grid">${kpi("Curve training sites", number(model?.trainingSiteCount || 0,0), `${number(model?.eligibleTrainingSiteCount ?? model?.trainingSiteCount ?? 0,0)} eligible with 365+ days`)}${kpi("Stable mature sites", number(model?.stableSiteCount || 0,0), "late-stage slope within ±15%")}${kpi("Empirical months", number(model?.empiricalMonths || 0,0), "months with ≥2 mature-site observations")}${kpi("Forecast confidence", `${number(confidenceCounts.High || 0,0)} high · ${number((confidenceCounts.Medium || 0) + (confidenceCounts["Medium-low"] || 0),0)} medium`, `${number(confidenceCounts.Low || 0,0)} low`)}</div><p class="muted small">${h(backtestText)}</p>${chart}</section>`;
+  ], { title: "How mature sites usually ramp up", xLabel: "Months since first commercial session", yLabel: "Share of mature daily demand", ySuffix: "%", yDigits: 0, height: 250 }) : "";
+  return `<section class="panel portfolio-maturity-panel"><div class="panel-title-row"><div><span class="eyebrow">Revenue forecast engine</span><h3>Maturity forecast summary</h3><p class="muted small">This section explains how the Financials tab projects young sites toward steady-state performance. A site is treated as mature when it reaches about 95% of its long-run daily demand.</p></div><span class="badge ${statusClass}">${h(statusLabel)}</span></div><div class="portfolio-summary-grid">${kpi("Typical time to maturity", maturitySummary.typicalMonthsToMaturity ? `${number(maturitySummary.typicalMonthsToMaturity,0)} months` : "—", "portfolio median curve to ~95% mature demand")}${kpi("Average months remaining", maturitySummary.remainingSiteCount ? `${number(maturitySummary.avgMonthsRemaining,1)} months` : "0 months", maturitySummary.remainingSiteCount ? `${number(maturitySummary.remainingSiteCount,0)} selected sites still ramping` : "all selected sites already mature or near-mature")}${kpi("Training sites", number(model?.trainingSiteCount || 0,0), `${number(model?.eligibleTrainingSiteCount ?? model?.trainingSiteCount ?? 0,0)} eligible with 365+ days`) }${kpi("Forecast confidence", `${number(maturitySummary.confidenceCounts.High || 0,0)} high · ${number(mediumCount,0)} medium`, `${number(maturitySummary.confidenceCounts.Low || 0,0)} low`)}</div><p class="muted small">${h(model?.methodology || "Maturity forecast unavailable.")} ${h(backtestText)}</p>${chart ? `<details class="portfolio-maturity-details"><summary>Optional detail: show maturity curve and explanation</summary><div class="portfolio-maturity-detail-body"><p class="muted small">The chart below is not a site scorecard. It shows the portfolio-level ramp used by the forecast engine. 100% means a mature steady-state daily demand level. The blue Base line is the median ramp learned from mature sites. The green Downside line shows a slower ramp. The amber Upside line shows a stronger ramp.</p>${chart}</div></details>` : ""}</section>`;
 }
 function portfolioFinancialPerformanceCards(summary) {
   return `<div class="portfolio-summary-grid portfolio-financial-performance-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "actual kWh within ±15%")}${kpi("Underperforming", number(summary.underperforming,0), "actual kWh below model")}${kpi("Above benchmark", number(summary.outperforming,0), "actual kWh above model")}${kpi("Low / missing history", number(summary.notEnoughData,0), "greyed out in table")}${kpi("CAPEX missing", number(summary.capexMissing,0), "payback blocked only")}${kpi("No payback", number(summary.noPayback,0), "not recovered within 20 years")}</div>`;
@@ -4344,7 +4382,7 @@ function portfolioFinancialExportDisplayRow(fin) {
     daysBasis: fin.daysBasisLabel || "",
     actualCapex: Number.isFinite(actualCapex) ? actualCapex : null,
     capexBand: fin.capexDeltaBand?.label || "",
-    capexNote: fin.hasActualCapex ? `${modelCapex > 0 ? `model ${currency(modelCapex, 0)} · ` : ""}${currency(Math.abs(capexDelta),0)} ${capexDelta > 0 ? "underspend" : capexDelta < 0 ? "overspend" : "in line"}` : "CAPEX missing · payback blocked",
+    capexNote: fin.hasActualCapex ? `${modelCapex > 0 ? `model 20yr ${currency(modelCapex, 0)} · ` : ""}${currency(Math.abs(capexDelta),0)} ${capexDelta > 0 ? "underspend" : capexDelta < 0 ? "overspend" : "in line"}` : "CAPEX missing · payback blocked",
     annualKwh: Number(fin.annualKwh || 0),
     next12mKwh: Number(fin.next12mKwh || 0),
     kwhNote: modelKwh > 0 ? `model ${kwh(modelKwh, 0)} · ${portfolioFinancialVarianceLabel(r.annualKwhVariance)}` : "",
@@ -4455,7 +4493,7 @@ function portfolioFinancialExportPayload() {
     ["Active filters", portfolioFinancialActiveFilterText(), "Reset filters to export all active sites"],
     ["Selected sites", summaryObject.selectedSites, `${summaryObject.totalSites} active Portfolio Financial sites available`],
     ["Actual CAPEX tracked EUR", summaryObject.actualCapex, `${summary.rowsWithCapex} selected sites with actual CAPEX`],
-    ["Model CAPEX same sites EUR", summaryObject.modelCapex, "Modelled CAPEX for sites with actual CAPEX"],
+    ["Model 20-year CAPEX same sites EUR", summaryObject.modelCapex, "Modelled 20-year CAPEX for sites with actual CAPEX"],
     ["CAPEX delta EUR", summaryObject.capexDelta, "Model minus actual"],
     ["CAPEX delta %", summaryObject.capexDeltaPct ?? "", "Model minus actual / model"],
     ["Annualised kWh", summaryObject.annualKwh, "Current run-rate based on Portfolio Financials commercial-days basis"],
@@ -4478,7 +4516,7 @@ function portfolioFinancialExportPayload() {
     ["EBITDA proxy", "Revenue minus electricity cost minus OPEX."],
     ["Payback years", "Month when cumulative maturity-adjusted cash flow recovers actual CAPEX, capped at a 20-year forecast horizon."],
     ["Commercial terms", "Manual landlord rent/share terms saved in the Portfolio Financials modal; defaults to no landlord terms."],
-    ["CAPEX delta", "Model CAPEX minus actual CAPEX. Absolute delta ≤€30k is green, >€30k to €50k amber, and >€50k red; sign still shows underspend or overspend."],
+    ["CAPEX delta", "Modelled 20-year CAPEX minus actual CAPEX. Absolute delta ≤€30k is green, >€30k to €50k amber, and >€50k red; sign still shows underspend or overspend."],
     ["Maturity", "Current seasonality-adjusted performance as a percentage of blended mature potential; confidence and months to 95% maturity are shown separately."],
     ["kWh variance", "Matched model variance. Positive means under model; negative means above benchmark in the app's status logic."]
   ];
@@ -4597,9 +4635,9 @@ function portfolioFinancialTableRow(fin) {
   const modelKwh = Number(r.modelledAnnualKwh || 0);
   const capexDirection = Number(fin.capexDelta) > 0 ? "underspend" : Number(fin.capexDelta) < 0 ? "overspend" : "in line";
   const capexDeltaLabel = Number.isFinite(Number(fin.capexDelta)) ? `${currency(Math.abs(fin.capexDelta), 0)} ${capexDirection}` : "Δ n/a";
-  const capexTitle = Number.isFinite(Number(fin.capexDelta)) ? `${fin.capexDeltaBand?.label || "CAPEX variance"}. Model CAPEX minus actual CAPEX is ${currency(fin.capexDelta,0)}.` : "CAPEX delta unavailable.";
+  const capexTitle = Number.isFinite(Number(fin.capexDelta)) ? `${fin.capexDeltaBand?.label || "CAPEX variance"}. Modelled 20-year CAPEX minus actual CAPEX is ${currency(fin.capexDelta,0)}.` : "CAPEX delta unavailable.";
   const actualCapexCell = fin.hasActualCapex
-    ? portfolioFinancialMetric(currency(fin.actualCapex, 0), `${Number(fin.modelCapex) > 0 ? `model ${currency(fin.modelCapex, 0)} · ` : ""}${capexDeltaLabel}`, fin.capexDeltaBand?.cls || "", capexTitle)
+    ? portfolioFinancialMetric(currency(fin.actualCapex, 0), `${Number(fin.modelCapex) > 0 ? `model 20yr ${currency(fin.modelCapex, 0)} · ` : ""}${capexDeltaLabel}`, fin.capexDeltaBand?.cls || "", capexTitle)
     : `<span class="badge neutral">CAPEX missing</span><small class="portfolio-financial-cell-note">payback blocked</small>`;
   const kwhCell = fin.hasActualKwh
     ? portfolioFinancialMetric(kwh(fin.annualKwh, 0), `${modelKwh > 0 ? `model ${kwh(modelKwh, 0)} · ` : ""}${portfolioFinancialVarianceLabel(r.annualKwhVariance)}`)
@@ -4688,10 +4726,10 @@ function renderPortfolioFinancialPerformance() {
     ${sectionTitle("Portfolio Financial Performance", "Financial view of all active Portfolio Calibration sites: CAPEX control, current run-rate, long-term projection and site-level performance quality.")}
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
-    <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
+    <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon, maturityModel)}<p class="muted small">${h(projectionNote)}</p></section>
     ${portfolioFinancialMaturityPanel(maturityModel, filteredRows)}
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.37 maturity-adjusted financial forecast</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows the maturity-adjusted next 12 months, with current and mature annual values underneath. The forecast is trained on 365+ day monthly histories when available and falls back conservatively when they are not. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback uses cumulative maturity-adjusted monthly cash flow over a maximum 20-year horizon. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.38 maturity-adjusted financial forecast</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. CAPEX comparison in this tab now uses the modelled 20-year CAPEX projection so it is apples-to-apples with the provided CAPEX basis. Revenue shows the maturity-adjusted next 12 months, with current and mature annual values underneath. Maturity shows each site’s current position as a share of mature steady-state demand, plus months remaining to about 95% maturity. The forecast is trained on 365+ day monthly histories when available and falls back conservatively when they are not. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback uses cumulative maturity-adjusted monthly cash flow over a maximum 20-year horizon. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }

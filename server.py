@@ -41,7 +41,7 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-AADT_ENGINE_VERSION = "V17.37 AADT audited resolver + maturity-adjusted portfolio financials"
+AADT_ENGINE_VERSION = "V17.38 AADT audited resolver + maturity-adjusted portfolio financials"
 
 
 LOCAL_DATASETS = {
@@ -732,7 +732,7 @@ AADT_ADDRESS_ALIAS_RULES = [
     ({"douglas"}, ["douglas", "N40", "south", "ring"]),
     ({"ballincollig"}, ["ballincollig", "ovens", "N22"]),
     ({"galway"}, ["galway", "bothar", "treabh", "N06", "N84", "N83"]),
-    # V17.37: Bandon and Kinsale otherwise appear as incidental road names on the
+    # V17.38: Bandon and Kinsale otherwise appear as incidental road names on the
     # unrelated N40 Cork South Ring corridor. Anchor them to the N71 corridor.
     ({"bandon"}, ["N71", "innishannon", "ballinhassig", "halfway"]),
     ({"kinsale"}, ["N71", "ballinhassig"]),

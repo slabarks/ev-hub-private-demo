@@ -754,7 +754,7 @@ function pfPdfDashboard(summary = {}, horizon = 5) {
       pfPdfMetric("Within €30k", number(summary.capexWithin30k || 0, 0), "green accuracy band", "good"),
       pfPdfMetric("€30k–€50k", number(summary.capex30to50k || 0, 0), "amber accuracy band"),
       pfPdfMetric("Over €50k", number(summary.capexOver50k || 0, 0), "red accuracy band", Number(summary.capexOver50k || 0) > 0 ? "bad" : "good"),
-      pfPdfMetric("CAPEX Δ %", capexDeltaPct, "day-one model minus actual / model")
+      pfPdfMetric("CAPEX Δ %", capexDeltaPct, "day-one model minus actual / model", Number(summary.capexDeltaPct || 0) < 0 ? "bad" : Number(summary.capexDeltaPct || 0) > 0 ? "good" : "")
     ], "investment")}
     ${pfPdfWindow("Forward 12-month performance", "One consistent forward period for every selected site. Maturity is excluded from year 1.", [
       pfPdfMetric("Next 12m kWh", kwh(summary.next12mKwh || 0, 0), `${number(summary.rowsWithActuals || 0,0)} selected sites with usable actuals`),
@@ -764,35 +764,26 @@ function pfPdfDashboard(summary = {}, horizon = 5) {
       pfPdfMetric("Next 12m site EBITDA", currency(summary.nextYearEbitda || 0, 0), "revenue − electricity − OPEX"),
       pfPdfMetric("Portfolio run-rate payback", payback, "actual day-one CAPEX / next-12-month site EBITDA")
     ], "operating")}
-    ${pfPdfWindow("Projection & profitability", `Selected ${number(horizon || 5,0)}-year projection. Maturity begins only from month 13.`, [
-      pfPdfMetric("Projection horizon", `${number(horizon || 5,0)} yrs`, "active report setting"),
-      pfPdfMetric(`${number(horizon || 5,0)}yr revenue`, currency(summary.horizonRevenue || 0, 0), "base cumulative projection"),
-      pfPdfMetric(`${number(horizon || 5,0)}yr EBITDA`, currency(summary.horizonEbitda || 0, 0), "base cumulative site EBITDA"),
-      pfPdfMetric(`${number(horizon || 5,0)}yr net after CAPEX`, currency(summary.netAfterCapex || 0, 0), "EBITDA minus tracked CAPEX", Number(summary.netAfterCapex || 0) < 0 ? "bad" : "good"),
+    ${pfPdfWindow(`${number(horizon || 5,0)}-year projection & profitability`, `Exact selected horizon. Year 1 is actual-led and maturity begins only from month 13.`, [
+      pfPdfMetric("Projection horizon", `${number(horizon || 5,0)} yrs`, "selectable from 1 to 20 years"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr revenue`, currency(summary.horizonRevenue || 0, 0), "cumulative net revenue"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr electricity`, currency(summary.horizonElectricity || 0, 0), "cumulative electricity purchase cost"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr OPEX excl. electricity`, currency(summary.horizonOpex || 0, 0), "cumulative site operating cost"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr EBITDA`, currency(summary.horizonEbitda || 0, 0), "cumulative site EBITDA"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr net after CAPEX`, currency(summary.netAfterCapex || 0, 0), "cumulative EBITDA minus tracked CAPEX", Number(summary.netAfterCapex || 0) < 0 ? "bad" : "good"),
+      pfPdfMetric("Projected portfolio payback", Number.isFinite(Number(summary.projectedPaybackYears)) ? `${number(summary.projectedPaybackYears,1)} yrs` : "No payback", "full 20-year monthly path"),
       pfPdfMetric("Profitability margin", margin, `${number(horizon || 5,0)}yr EBITDA / revenue`)
     ], "projection")}
-    ${pfPdfWindow("Portfolio maturity & forecast quality", "Investor view of existing-site ramp-up and long-term evidence quality.", [
-      pfPdfMetric("Revenue-weighted maturity", Number.isFinite(Number(summary.revenueWeightedMaturity)) ? pct(Number(summary.revenueWeightedMaturity),0) : "—", "share of steady-state portfolio revenue achieved"),
-      pfPdfMetric("Portfolio position", `${number(summary.empiricalMatureCount || 0,0)} mature · ${number(summary.rampingCount || 0,0)} ramping`, `${number(summary.insufficientHistoryCount || 0,0)} insufficient history`),
-      pfPdfMetric("Remaining annual revenue uplift", currency(summary.remainingRevenueUplift || 0,0), "existing sites reaching steady state"),
-      pfPdfMetric("Remaining annual EBITDA uplift", currency(summary.remainingEbitdaUplift || 0,0), "existing-site steady-state uplift"),
-      pfPdfMetric("Typical time to steady state", summary.typicalMonthsToMaturity ? `${number(summary.typicalMonthsToMaturity,0)} mo` : "—", summary.maturitySource === "empirical" ? "empirical portfolio curve" : "conservative prior assumption"),
-      pfPdfMetric("Long-term confidence", summary.longTermConfidence || "Low", `${number(summary.maturityTrainingSites || 0,0)} training sites`),
-      pfPdfMetric(`${number(horizon || 5,0)}yr revenue range`, `${currency(summary.horizonRevenueLow || 0,0)} – ${currency(summary.horizonRevenueHigh || 0,0)}`, `base ${currency(summary.horizonRevenue || 0,0)}`),
-      pfPdfMetric(`${number(horizon || 5,0)}yr EBITDA range`, `${currency(summary.horizonEbitdaLow || 0,0)} – ${currency(summary.horizonEbitdaHigh || 0,0)}`, `base ${currency(summary.horizonEbitda || 0,0)}`)
-    ], "maturity")}
   </section>`;
 }
 
 function pfPdfPerformance(summary = {}) {
-  return `<section class="pf-pdf-performance"><div class="pf-pdf-section-head"><h2>Performance position</h2><p>Demand and data-quality status for the currently selected sites.</p></div><div class="pf-pdf-performance-grid">
-    ${pfPdfMetric("In benchmark", number(summary.inBenchmark || 0, 0), "actual kWh within ±15%")}
-    ${pfPdfMetric("Underperforming", number(summary.underperforming || 0, 0), "actual kWh below model")}
-    ${pfPdfMetric("Above benchmark", number(summary.outperforming || 0, 0), "actual kWh above model")}
-    ${pfPdfMetric("Low / missing history", number(summary.notEnoughData || 0, 0), "greyed out in table")}
-    ${pfPdfMetric("CAPEX missing", number(summary.capexMissing || 0, 0), "payback blocked only")}
-    ${pfPdfMetric("No payback", number(summary.noPayback || 0, 0), "negative run-rate cashflow")}
-  </div></section>`;
+  return `<section class="pf-pdf-performance"><div class="pf-pdf-section-head"><h2>Performance versus model</h2><p>Next-12-month actual-led forecast compared with the calibrated model for the same period.</p></div><div class="pf-pdf-performance-grid">
+    ${pfPdfMetric("In benchmark", number(summary.inBenchmark || 0, 0), "forward variance within ±15%")}
+    ${pfPdfMetric("Underperforming", number(summary.underperforming || 0, 0), "forward forecast below model")}
+    ${pfPdfMetric("Above benchmark", number(summary.outperforming || 0, 0), "forward forecast above model")}
+    ${pfPdfMetric("Low / missing history", number(summary.notEnoughData || 0, 0), "variance remains visible where calculable")}
+  </div><div class="pf-pdf-warning"><strong>Investment data warnings:</strong> ${number(summary.capexMissing || 0,0)} sites missing actual CAPEX · ${number(summary.noPayback || 0,0)} sites with no positive run-rate payback.</div></section>`;
 }
 
 export async function exportPortfolioFinancialsPdf(payload) {
@@ -806,13 +797,13 @@ export async function exportPortfolioFinancialsPdf(payload) {
     compactPdfCell(r.site, r.configuration || r.commercialTerms),
     compactPdfCell(r.daysLabel, r.daysBasis),
     compactPdfCell(Number.isFinite(r.actualCapex) ? currency(r.actualCapex, 0) : "CAPEX missing", `${r.capexBand || ""}${r.capexBand && r.capexNote ? " · " : ""}${r.capexNote || ""}`),
-    compactPdfCell(kwh(r.next12mKwh, 0), r.forecastConfidence),
+    compactPdfCell(kwh(r.next12mKwh, 0), `model ${kwh(r.modelForward12mKwh,0)}`),
+    compactPdfCell(Number.isFinite(r.performanceVariance) ? `${r.performanceVariance >= 0 ? "+" : ""}${pct(r.performanceVariance,1)}` : "—", `${r.performanceClassification || "Review"} · ${r.dataQualityNote || ""}`),
     compactPdfCell(currency(r.next12mRevenue, 0), `range ${currency(r.next12mRevenueLow,0)}–${currency(r.next12mRevenueHigh,0)}`),
     compactPdfCell(currency(r.electricityCost, 0), "included in EBITDA"),
     compactPdfCell(currency(r.opexExElectricity, 0), r.commercialTerms),
     compactPdfCell(currency(r.ebitda, 0), "revenue − electricity − OPEX"),
-    compactPdfCell(r.paybackLabel, r.paybackNote),
-    compactPdfCell(r.forecastConfidence, r.dataQuality)
+    compactPdfCell(r.paybackLabel, r.paybackNote)
   ]);
   const report = `
   <section class="print-page portfolio-page portfolio-financial-print-page portfolio-financial-summary-page">
@@ -837,10 +828,10 @@ export async function exportPortfolioFinancialsPdf(payload) {
   <section class="print-page portfolio-page portfolio-financial-print-page portfolio-financial-table-page">
     <div class="panel portfolio-financial-print-panel">
       <h3>Site financial performance table</h3>
-      <p class="report-caption">Same investor table as the app: Site, Days, day-one CAPEX, next-12-month kWh/revenue/electricity/OPEX/site EBITDA, run-rate payback and forecast confidence.</p>
+      <p class="report-caption">Same investor table as the app: forward kWh, matched model benchmark, performance variance, revenue, electricity, OPEX, site EBITDA and run-rate payback.</p>
       <div class="report-table-wrap portfolio-financial-pdf-table-wrap">
         <table class="portfolio-financial-pdf-table">
-          <thead><tr>${["Site", "Days", "Day-one CAPEX", "Next 12m kWh", "Next 12m revenue", "Electricity", "OPEX excl. elec.", "Site EBITDA", "Run-rate payback", "Confidence"].map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+          <thead><tr>${["Site", "Days", "Day-one CAPEX", "Next 12m kWh", "Performance vs model", "Next 12m revenue", "Electricity", "OPEX excl. elec.", "Site EBITDA", "Run-rate payback"].map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
           <tbody>${tableRows.map(row => `<tr>${row.map(x => `<td>${x}</td>`).join("")}</tr>`).join("")}</tbody>
         </table>
       </div>

@@ -1,46 +1,45 @@
-# EV Charging Hub Investment Tool — V17.40 Lean Production Build
+# EV Charging Hub Investment Tool — V17.41 Lean Production Build
 
-V17.40 strengthens the **Portfolio Financials** tab and fixes the uploaded monthly-history linkage used by forecast confidence and long-term maturity modelling.
+This release refocuses **Portfolio Financials** on the information an investor needs: forward site performance against the calibrated model, day-one investment accuracy, next-12-month EBITDA and selectable long-term returns.
 
-## Financial basis
-- **Day-one CAPEX:** actual as-built CAPEX versus the complete modelled day-one build.
-- **Next 12 months:** observed site run-rate, bounded short-term trend, seasonality, traffic growth and tariff.
-- **Maturity:** excluded from year 1 and used only from month 13 in the 5/10/15/20-year projections.
-- **OPEX:** one next-12-month value excluding electricity.
-- **Electricity:** shown separately.
-- **Site EBITDA:** revenue minus electricity minus OPEX.
-- **Run-rate payback:** actual day-one CAPEX divided by next-12-month site EBITDA.
+## Portfolio Financials
 
-## V17.40 investor maturity view
-The previous duplicated maturity diagnostics have been replaced by one investor-oriented section showing:
-- revenue-weighted portfolio maturity,
-- empirically mature versus ramping sites,
-- remaining annual revenue uplift,
-- remaining annual site-EBITDA uplift,
-- typical time to steady state,
-- long-term forecast confidence,
-- selected-horizon revenue and EBITDA ranges.
+- **Day-one CAPEX:** actual as-built CAPEX versus the complete modelled day-one build. Replacements, later plugs and progressive CAPEX are excluded.
+- **CAPEX direction:** negative CAPEX delta and delta percentage use red text; positive values use green text. The existing green/amber/red background continues to show the absolute model-accuracy band.
+- **Next 12 months:** actual-led forecast based on observed run-rate, bounded trend, calendar seasonality and near-term growth. Maturity is excluded.
+- **Performance versus model:** next-12-month forecast kWh compared with a calibrated benchmark for the same forward period and commercial age.
+- **Performance bands:** above +15% is Above benchmark, below -15% is Underperforming and the range between is In benchmark. Low or missing history is displayed separately and never removes the calculated variance.
+- **Financial outputs:** next-12-month net revenue, electricity, OPEX excluding electricity, site EBITDA and run-rate payback.
+- **Projection horizon:** any whole year from 1 to 20, with one-year controls and 5/10/15/20-year shortcuts.
+- **Long-term maturity:** applied only from month 13 and retained inside the collapsed Advanced forecast methodology audit.
 
-Technical training-site, coverage, back-test and curve details remain available in an expandable audit section.
+## Uploaded-history integrity
 
-## Uploaded-history protection
-- New upload schema: `v17.40-live-history-v1`.
-- Old cached snapshots are cleared automatically.
-- A daily charger upload returning zero monthly histories is rejected rather than silently shown as valid.
-- The upload card now reports matched sites, sites with active monthly histories, retained monthly observations and schema version.
-- A per-site uploaded-history mapping audit is available in the app.
+The frontend and backend share a production build ID, upload-schema version and parser ID. The browser checks `/api/version` before accepting a live-data upload and rejects a mismatched or incomplete backend. The upload response also reports the server fingerprint, deployment-root status, matched monthly histories and retained monthly observations.
 
 ## Run locally
+
 ```bash
 python server.py
 ```
+
 Open `http://localhost:10314/`.
 
 ## Test
+
 ```bash
 npm test
 ```
 
+## Deployment
+
+Deploy the **contents of this folder** together. The required root files are listed in `DEPLOYMENT_MANIFEST.json`, and the start command is:
+
+```bash
+python server.py
+```
+
 ## Release documents
-- `RELEASE_NOTES_V17.40_INVESTOR_MATURITY.md`
-- `V17.40_PRODUCTION_VALIDATION.md`
+
+- `RELEASE_NOTES_V17.41_INVESTOR_PERFORMANCE.md`
+- `V17.41_PRODUCTION_VALIDATION.md`

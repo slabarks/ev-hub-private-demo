@@ -41,7 +41,53 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-AADT_ENGINE_VERSION = "V17.40 AADT audited resolver + validated live history + investor maturity"
+APP_VERSION = "V17.41"
+APP_BUILD_ID = "EVHUB-V17.41-20260710-R1"
+LIVE_UPLOAD_SCHEMA_VERSION = "v17.41-live-history-v2"
+LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.41.1"
+AADT_ENGINE_VERSION = "V17.41 AADT audited resolver + validated live history + forward performance benchmark"
+DEPLOYMENT_REQUIRED_FILES = ("index.html", "js/app.js", "js/engines/maturityEngine.js", "assets/styles.css", "DEPLOYMENT_MANIFEST.json")
+SERVER_FILE_FINGERPRINT = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
+
+def _deployment_integrity() -> dict:
+    missing = [name for name in DEPLOYMENT_REQUIRED_FILES if not (ROOT / name).exists()]
+    manifest = {}
+    manifest_path = ROOT / "DEPLOYMENT_MANIFEST.json"
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            manifest = {}
+    manifest_build = str(manifest.get("buildId") or "missing")
+    if manifest_build != APP_BUILD_ID:
+        missing.append(f"manifest build {manifest_build} != {APP_BUILD_ID}")
+    return {"ok": not missing, "missing": missing, "root": str(ROOT), "rootName": ROOT.name, "manifest": manifest}
+
+def _version_payload() -> dict:
+    integrity = _deployment_integrity()
+    return {
+        "ok": True,
+        "server": "server.py",
+        "appVersion": APP_VERSION,
+        "app_version": APP_VERSION,
+        "buildId": APP_BUILD_ID,
+        "build_id": APP_BUILD_ID,
+        "uploadSchemaVersion": LIVE_UPLOAD_SCHEMA_VERSION,
+        "upload_schema_version": LIVE_UPLOAD_SCHEMA_VERSION,
+        "parserBuildId": LIVE_UPLOAD_PARSER_BUILD_ID,
+        "parser_build_id": LIVE_UPLOAD_PARSER_BUILD_ID,
+        "monthlyHistorySupported": True,
+        "monthly_history_supported": True,
+        "serverFileFingerprint": SERVER_FILE_FINGERPRINT,
+        "server_file_fingerprint": SERVER_FILE_FINGERPRINT,
+        "deploymentRootOk": integrity["ok"],
+        "deployment_root_ok": integrity["ok"],
+        "missingDeploymentFiles": integrity["missing"],
+        "missing_deployment_files": integrity["missing"],
+        "deploymentRootName": integrity["rootName"],
+        "deployment_root_name": integrity["rootName"],
+        "aadt_engine_version": AADT_ENGINE_VERSION,
+    }
 
 
 LOCAL_DATASETS = {
@@ -732,7 +778,7 @@ AADT_ADDRESS_ALIAS_RULES = [
     ({"douglas"}, ["douglas", "N40", "south", "ring"]),
     ({"ballincollig"}, ["ballincollig", "ovens", "N22"]),
     ({"galway"}, ["galway", "bothar", "treabh", "N06", "N84", "N83"]),
-    # V17.40: Bandon and Kinsale otherwise appear as incidental road names on the
+    # V17.41: Bandon and Kinsale otherwise appear as incidental road names on the
     # unrelated N40 Cork South Ring corridor. Anchor them to the N71 corridor.
     ({"bandon"}, ["N71", "innishannon", "ballinhassig", "halfway"]),
     ({"kinsale"}, ["N71", "ballinhassig"]),
@@ -4119,7 +4165,23 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         "ok": True,
         "source": "uploaded_live_calibration_files",
         "status": "active",
-        "schemaVersion": "v17.40-live-history-v1",
+        "schemaVersion": LIVE_UPLOAD_SCHEMA_VERSION,
+        "uploadSchemaVersion": LIVE_UPLOAD_SCHEMA_VERSION,
+        "upload_schema_version": LIVE_UPLOAD_SCHEMA_VERSION,
+        "appVersion": APP_VERSION,
+        "app_version": APP_VERSION,
+        "buildId": APP_BUILD_ID,
+        "build_id": APP_BUILD_ID,
+        "parserBuildId": LIVE_UPLOAD_PARSER_BUILD_ID,
+        "parser_build_id": LIVE_UPLOAD_PARSER_BUILD_ID,
+        "monthlyHistorySupported": True,
+        "monthly_history_supported": True,
+        "serverFileFingerprint": SERVER_FILE_FINGERPRINT,
+        "server_file_fingerprint": SERVER_FILE_FINGERPRINT,
+        "deploymentRootOk": _deployment_integrity()["ok"],
+        "deployment_root_ok": _deployment_integrity()["ok"],
+        "missingDeploymentFiles": _deployment_integrity()["missing"],
+        "missing_deployment_files": _deployment_integrity()["missing"],
         "aadtEngineVersion": AADT_ENGINE_VERSION,
         "latestDate": latest_date.isoformat(),
         "rollingWindowDays": 30,
@@ -4412,7 +4474,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._is_authenticated():
             return self._redirect_to_login()
         if parsed.path == "/api/version":
-            return self._send_json({"ok": True, "server": "server.py", "aadt_engine_version": AADT_ENGINE_VERSION})
+            return self._send_json(_version_payload())
 
         if parsed.path == "/api/tii-counter-locations":
             try:
@@ -4445,7 +4507,7 @@ class Handler(BaseHTTPRequestHandler):
                 parsed_actuals = parse_live_calibration_uploads(files)
                 return self._send_json(parsed_actuals)
             except Exception as exc:
-                return self._send_json({
+                error_payload = {
                     "ok": False,
                     "error": str(exc),
                     "message": "Live calibration upload failed. The app will continue using the stored calibration dataset.",
@@ -4454,7 +4516,10 @@ class Handler(BaseHTTPRequestHandler):
                         "Check that the file contains Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns.",
                         "If the export format changed, re-export from the dashboard and try again."
                     ]
-                }, status=400)
+                }
+                error_payload.update(_version_payload())
+                error_payload["ok"] = False
+                return self._send_json(error_payload, status=400)
 
         if parsed.path == "/api/import-tii-monthly-volume":
             try:
@@ -4490,7 +4555,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_file(ROOT / "index.html")
 
         if parsed.path == "/api/version":
-            return self._send_json({"ok": True, "server": "server.py", "aadt_engine_version": AADT_ENGINE_VERSION})
+            return self._send_json(_version_payload())
 
         if parsed.path == "/api/tii-counter-locations":
             try:

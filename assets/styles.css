@@ -3430,7 +3430,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 .aadt-popup button { width:100%; }
 @media (max-width: 760px) { .tii-candidate-title { align-items:flex-start; flex-direction:column; } .toggle-inline { width:100%; justify-content:center; } }
 
-/* V17.40 portfolio financials: CAPEX accuracy bands, maturity summary and cleaner forecast UI */
+/* V17.41 portfolio financials: CAPEX accuracy bands, maturity summary and cleaner forecast UI */
 .portfolio-financial-table { min-width: 1320px; }
 .portfolio-financial-metric.capex-delta-green,
 .portfolio-financial-metric.capex-delta-amber,
@@ -3501,7 +3501,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(10) { width: 10%; text-align: center; }
 }
 
-/* V17.40 Portfolio Financials: forward-12-month logic and production table rendering */
+/* V17.41 Portfolio Financials: forward-12-month logic and production table rendering */
 .portfolio-financial-table-panel .panel-title-row {
   align-items: flex-start;
 }
@@ -3701,7 +3701,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   .portfolio-financial-table { min-width: 1160px; }
 }
 
-/* V17.40 investor maturity summary and live-history audit */
+/* V17.41 advanced methodology and live-history audit */
 .portfolio-investor-maturity-panel .panel-title-row {
   align-items: flex-start;
 }
@@ -3766,4 +3766,111 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 @media (max-width: 640px) {
   .portfolio-investor-maturity-grid { grid-template-columns: 1fr; }
   .portfolio-investor-maturity-grid .kpi { min-height: auto; }
+}
+
+/* V17.41 investor performance benchmark, flexible horizon and directional CAPEX deltas */
+.portfolio-financial-dashboard-metric.capex-direction-negative strong,
+.capex-direction-negative { color: #b42318 !important; }
+.portfolio-financial-dashboard-metric.capex-direction-positive strong,
+.capex-direction-positive { color: #087443 !important; }
+.portfolio-financial-dashboard-metric.capex-direction-neutral strong,
+.capex-direction-neutral { color: inherit; }
+.portfolio-financial-metric small .capex-direction-negative,
+.portfolio-financial-metric small .capex-direction-positive { font-weight: 850; }
+
+.portfolio-financial-table { min-width: 1280px; }
+.portfolio-financial-table th:nth-child(1),
+.portfolio-financial-table td:nth-child(1) { width: 20%; text-align: left; }
+.portfolio-financial-table th:nth-child(2),
+.portfolio-financial-table td:nth-child(2) { width: 6%; text-align: center; }
+.portfolio-financial-table th:nth-child(3),
+.portfolio-financial-table td:nth-child(3) { width: 12%; text-align: right; }
+.portfolio-financial-table th:nth-child(4),
+.portfolio-financial-table td:nth-child(4) { width: 9%; text-align: right; }
+.portfolio-financial-table th:nth-child(5),
+.portfolio-financial-table td:nth-child(5) { width: 10%; text-align: center; }
+.portfolio-financial-table th:nth-child(6),
+.portfolio-financial-table td:nth-child(6) { width: 9%; text-align: right; }
+.portfolio-financial-table th:nth-child(7),
+.portfolio-financial-table td:nth-child(7) { width: 8%; text-align: right; }
+.portfolio-financial-table th:nth-child(8),
+.portfolio-financial-table td:nth-child(8) { width: 9%; text-align: right; }
+.portfolio-financial-table th:nth-child(9),
+.portfolio-financial-table td:nth-child(9) { width: 9%; text-align: right; }
+.portfolio-financial-table th:nth-child(10),
+.portfolio-financial-table td:nth-child(10) { width: 8%; text-align: center; }
+.portfolio-financial-table td:nth-child(5) .portfolio-financial-metric,
+.portfolio-financial-table td:nth-child(10) .portfolio-financial-metric { align-items: center; text-align: center; }
+.portfolio-financial-table td:nth-child(6) .portfolio-financial-metric,
+.portfolio-financial-table td:nth-child(9) .portfolio-financial-metric { align-items: flex-end; text-align: right; }
+.portfolio-performance-cell { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; text-align: center; }
+.portfolio-performance-cell .performance-variance { font-size: 14px; line-height: 1; white-space: nowrap; }
+.portfolio-performance-cell .performance-variance.good { color: #087443; }
+.portfolio-performance-cell .performance-variance.bad { color: #b42318; }
+.portfolio-performance-cell .performance-variance.warn { color: #9a6700; }
+.portfolio-performance-cell small { font-size: 10.4px; line-height: 1.2; color: #5e6d67; }
+.portfolio-performance-cell small.low-history-note { color: #946200; font-weight: 750; }
+
+.portfolio-financial-performance-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.portfolio-investment-warnings { margin-top: 12px; padding: 10px 12px; border: 1px solid #e5bd63; background: #fff8e7; border-radius: 12px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px 12px; }
+.portfolio-investment-warnings strong { color: #725000; }
+.portfolio-investment-warnings span { color: #6a6250; font-size: 12px; }
+.portfolio-investment-warnings.good { border-color: #a6d9bf; background: #edf9f3; }
+.portfolio-investment-warnings.good strong { color: #087443; }
+
+.portfolio-financial-dashboard-window.projection .portfolio-financial-window-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.portfolio-financial-dashboard-metric.horizon-control { grid-column: 1 / -1; align-items: stretch; text-align: left; }
+.portfolio-financial-horizon { display: grid; gap: 6px; width: 100%; min-width: 0; }
+.portfolio-horizon-value-row { display: grid; grid-template-columns: 34px minmax(90px, 1fr) 34px; gap: 7px; align-items: center; }
+.portfolio-horizon-value-row output { min-height: 34px; display: grid; place-items: center; border-radius: 10px; background: #edf8f3; border: 1px solid rgba(0,112,74,.18); color: #0d513d; font-size: 15px; font-weight: 900; }
+.portfolio-horizon-step { width: 34px; height: 34px; padding: 0; border-radius: 10px; border: 1px solid rgba(0,112,74,.22); background: #fff; color: #0b684d; font-size: 19px; font-weight: 850; cursor: pointer; }
+.portfolio-horizon-step:disabled { opacity: .35; cursor: default; }
+.portfolio-horizon-range { width: 100%; accent-color: #087443; cursor: pointer; }
+.portfolio-horizon-ticks { display: flex; justify-content: space-between; color: #6a7772; font-size: 9.5px; padding: 0 2px; }
+.portfolio-horizon-quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+.portfolio-horizon-quick button { padding: 5px 4px; border-radius: 8px; border: 1px solid rgba(0,112,74,.16); background: #fff; color: #315d4f; font-size: 10.5px; font-weight: 800; cursor: pointer; }
+.portfolio-horizon-quick button.active { background: #087443; border-color: #087443; color: #fff; }
+.portfolio-horizon-mobile { display: none; width: 100%; }
+
+.portfolio-financial-advanced-methodology { padding: 0; overflow: hidden; }
+.portfolio-financial-advanced-methodology > summary { cursor: pointer; padding: 13px 15px; display: flex; flex-direction: column; gap: 3px; list-style-position: inside; color: #244f42; font-weight: 850; }
+.portfolio-financial-advanced-methodology > summary small { color: #6a7772; font-size: 10.5px; font-weight: 600; }
+.portfolio-financial-advanced-methodology .portfolio-maturity-detail-body { padding: 0 15px 15px; border-top: 1px solid rgba(0,112,74,.1); }
+
+@media (max-width: 1100px) {
+  .portfolio-financial-performance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .portfolio-financial-dashboard-window.projection .portfolio-financial-window-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .portfolio-financial-performance-grid { grid-template-columns: 1fr; }
+  .portfolio-financial-dashboard-window.projection .portfolio-financial-window-grid { grid-template-columns: 1fr; }
+  .portfolio-horizon-range, .portfolio-horizon-ticks, .portfolio-horizon-quick { display: none; }
+  .portfolio-horizon-mobile { display: block; }
+}
+
+@media print {
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(1),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(1) { width: 17%; }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(2),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(2) { width: 6%; }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(3),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(3) { width: 11%; }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(4),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(4) { width: 9%; }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(5),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(5) { width: 10%; text-align: center; }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(6),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(6) { width: 9%; text-align: right; }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(7),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(7) { width: 8%; text-align: right; }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(8),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(8) { width: 9%; text-align: right; }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(9),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(9) { width: 10%; text-align: right; }
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table th:nth-child(10),
+  body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(10) { width: 11%; text-align: center; }
+}
+@media print {
+  body.portfolio-financial-print-mode .print-report .pf-pdf-performance-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  body.portfolio-financial-print-mode .print-report .pf-pdf-warning { margin-top: 4px; padding: 5px 7px; border: 1px solid #e5bd63; background: #fff8e7 !important; border-radius: 6px; font-size: 6.4px; color: #66532c; }
 }

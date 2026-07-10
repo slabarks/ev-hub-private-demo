@@ -13,7 +13,7 @@ Render Web Service, because this app uses the included Python server.
 
 ## Deploy steps
 1. Create a private GitHub repository.
-2. Upload the contents of this folder to the repository.
+2. Upload the contents of this folder to the repository. Do not copy only the static assets over an older deployment.
 3. In Render, choose **New > Web Service**.
 4. Connect the GitHub repository.
 5. Use:
@@ -24,7 +24,7 @@ Render Web Service, because this app uses the included Python server.
    - `DEMO_PASSWORD` = your chosen demo password
    - `DEMO_SESSION_SECRET` = a long random secret string
    - `DISABLE_BROWSER_OPEN` = `1`
-7. Deploy.
+7. Deploy and confirm `/api/version` reports build `EVHUB-V17.41-20260710-R1`, schema `v17.41-live-history-v2` and `deploymentRootOk: true`.
 8. Send the generated Render URL and password to your reviewer.
 
 ## Taking it fully offline

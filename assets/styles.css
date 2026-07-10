@@ -3430,7 +3430,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 .aadt-popup button { width:100%; }
 @media (max-width: 760px) { .tii-candidate-title { align-items:flex-start; flex-direction:column; } .toggle-inline { width:100%; justify-content:center; } }
 
-/* V17.41 portfolio financials: CAPEX accuracy bands, maturity summary and cleaner forecast UI */
+/* V17.42 portfolio financials: CAPEX accuracy bands, maturity summary and cleaner forecast UI */
 .portfolio-financial-table { min-width: 1320px; }
 .portfolio-financial-metric.capex-delta-green,
 .portfolio-financial-metric.capex-delta-amber,
@@ -3501,7 +3501,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table td:nth-child(10) { width: 10%; text-align: center; }
 }
 
-/* V17.41 Portfolio Financials: forward-12-month logic and production table rendering */
+/* V17.42 Portfolio Financials: forward-12-month logic and production table rendering */
 .portfolio-financial-table-panel .panel-title-row {
   align-items: flex-start;
 }
@@ -3701,7 +3701,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   .portfolio-financial-table { min-width: 1160px; }
 }
 
-/* V17.41 advanced methodology and live-history audit */
+/* V17.42 advanced methodology and live-history audit */
 .portfolio-investor-maturity-panel .panel-title-row {
   align-items: flex-start;
 }
@@ -3768,7 +3768,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   .portfolio-investor-maturity-grid .kpi { min-height: auto; }
 }
 
-/* V17.41 investor performance benchmark, flexible horizon and directional CAPEX deltas */
+/* V17.42 investor performance benchmark, flexible horizon and directional CAPEX deltas */
 .portfolio-financial-dashboard-metric.capex-direction-negative strong,
 .capex-direction-negative { color: #b42318 !important; }
 .portfolio-financial-dashboard-metric.capex-direction-positive strong,

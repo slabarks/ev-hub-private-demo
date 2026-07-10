@@ -1,41 +1,37 @@
-# Deploying the EV Hub Investment Tool as a private demo
+# Render deployment — V17.42 flat-root package
 
-This package is ready for a temporary password-protected web deployment.
+This release must be deployed as a complete root-level application. The ZIP intentionally has no outer wrapper folder.
 
-## Recommended host
-Render Web Service, because this app uses the included Python server.
+## Clean deployment procedure
 
-## What the password protection does
-- If `DEMO_PASSWORD` is set, all pages and API routes require login.
-- The login page stores a 12-hour HTTP-only session cookie.
-- Change `DEMO_PASSWORD` any time to invalidate access for new sessions.
-- Delete the Render service to take the demo fully offline.
-
-## Deploy steps
-1. Create a private GitHub repository.
-2. Upload the contents of this folder to the repository. Do not copy only the static assets over an older deployment.
-3. In Render, choose **New > Web Service**.
-4. Connect the GitHub repository.
-5. Use:
+1. Delete the old repository contents or create a fresh private repository.
+2. Extract `EVHub_V17_42_lean.zip`.
+3. Upload everything extracted directly to the repository root. At the root you must see:
+   - `server.py`
+   - `index.html`
+   - `DEPLOYMENT_MANIFEST.json`
+   - `js/`
+   - `assets/`
+   - `data/`
+4. In Render, use:
    - Environment: `Python`
-   - Build command: leave blank
+   - Build command: `python -m py_compile server.py`
    - Start command: `python server.py`
-6. Add environment variables:
-   - `DEMO_PASSWORD` = your chosen demo password
-   - `DEMO_SESSION_SECRET` = a long random secret string
-   - `DISABLE_BROWSER_OPEN` = `1`
-7. Deploy and confirm `/api/version` reports build `EVHUB-V17.41-20260710-R1`, schema `v17.41-live-history-v2` and `deploymentRootOk: true`.
-8. Send the generated Render URL and password to your reviewer.
+   - Health-check path: `/api/health`
+5. Set:
+   - `DEMO_PASSWORD` as required
+   - `SESSION_SECRET` or `DEMO_SESSION_SECRET` to a long random value
+   - `DISABLE_BROWSER_OPEN=1`
+6. Trigger **Clear build cache & deploy** or create a new service. A normal static-file merge is not sufficient.
+7. Open `/api/health` and confirm:
+   - build `EVHUB-V17.42-20260710-R1`
+   - parser `EVHUB-LIVE-PARSER-17.42.1`
+   - schema `v17.42-live-history-v3`
+   - layout `flat-root-v1`
+   - `deploymentRootOk: true`
+   - `frontendBuildVerified: true`
+8. Hard-refresh the browser, clear old uploaded actuals, then upload either the complete dashboard ZIP or `Daily_Charger_kWh.xlsx`.
 
-## Taking it fully offline
-1. In Render, open the web service.
-2. Delete the service.
-3. Delete the GitHub repository or make it private/empty.
-4. Remove any custom DNS records if you added them.
-5. Confirm the Render URL no longer loads.
+## Why the clean deployment matters
 
-## Local test with password
-```bash
-DEMO_PASSWORD=test123 DISABLE_BROWSER_OPEN=1 python server.py
-```
-Then open http://localhost:10314/ and log in with `test123`.
+The previous error occurred because the V17.41 browser files were served by an older Python process. V17.42 prevents an internally mixed package from starting and reports a clearly labelled deployment mismatch when the running server is still old.

@@ -1,21 +1,24 @@
-# EV Charging Hub Investment Tool — V17.41 Lean Production Build
+# EV Charging Hub Investment Tool — V17.42 Lean Production Build
 
-This release refocuses **Portfolio Financials** on the information an investor needs: forward site performance against the calibrated model, day-one investment accuracy, next-12-month EBITDA and selectable long-term returns.
+V17.42 is a deployment and live-calibration hotfix built on the approved V17.41 investor-performance release.
 
-## Portfolio Financials
+## What is fixed
 
-- **Day-one CAPEX:** actual as-built CAPEX versus the complete modelled day-one build. Replacements, later plugs and progressive CAPEX are excluded.
-- **CAPEX direction:** negative CAPEX delta and delta percentage use red text; positive values use green text. The existing green/amber/red background continues to show the absolute model-accuracy band.
-- **Next 12 months:** actual-led forecast based on observed run-rate, bounded trend, calendar seasonality and near-term growth. Maturity is excluded.
-- **Performance versus model:** next-12-month forecast kWh compared with a calibrated benchmark for the same forward period and commercial age.
-- **Performance bands:** above +15% is Above benchmark, below -15% is Underperforming and the range between is In benchmark. Low or missing history is displayed separately and never removes the calculated variance.
-- **Financial outputs:** next-12-month net revenue, electricity, OPEX excluding electricity, site EBITDA and run-rate payback.
-- **Projection horizon:** any whole year from 1 to 20, with one-year controls and 5/10/15/20-year shortcuts.
-- **Long-term maturity:** applied only from month 13 and retained inside the collapsed Advanced forecast methodology audit.
+- The deployment ZIP is **flat-root**: `server.py`, `index.html`, `js/`, `assets/` and `data/` sit directly at the archive root.
+- The Python server refuses to start when the manifest, frontend build markers or required root files do not match.
+- `/api/version` and `/api/health` report the application build, parser build, upload schema, package-layout version, server fingerprint and deployment-root status.
+- Deployment mismatches are shown as deployment errors, not misleading spreadsheet errors.
+- The live-calibration importer accepts either individual Excel/CSV files or the complete dashboard ZIP pack.
+- ZIP uploads are expanded safely; `Ignore` folders, hidden folders and unsupported files are skipped.
+- Browser cache-busters were advanced so an older `app.js` cannot remain paired with a newer server after a normal redeployment.
 
-## Uploaded-history integrity
+## Build identity
 
-The frontend and backend share a production build ID, upload-schema version and parser ID. The browser checks `/api/version` before accepting a live-data upload and rejects a mismatched or incomplete backend. The upload response also reports the server fingerprint, deployment-root status, matched monthly histories and retained monthly observations.
+- Application: `V17.42`
+- Build: `EVHUB-V17.42-20260710-R1`
+- Upload schema: `v17.42-live-history-v3`
+- Parser: `EVHUB-LIVE-PARSER-17.42.1`
+- Package layout: `flat-root-v1`
 
 ## Run locally
 
@@ -31,15 +34,34 @@ Open `http://localhost:10314/`.
 npm test
 ```
 
-## Deployment
+## Deploy
 
-Deploy the **contents of this folder** together. The required root files are listed in `DEPLOYMENT_MANIFEST.json`, and the start command is:
+Deploy the **complete contents of this ZIP** as the application root. Do not place the files inside another folder and do not merge them over an older deployment.
+
+Start command:
 
 ```bash
 python server.py
 ```
 
+After deployment, open:
+
+```text
+https://YOUR-APP-URL/api/health
+```
+
+The response must report:
+
+- `buildId: EVHUB-V17.42-20260710-R1`
+- `parserBuildId: EVHUB-LIVE-PARSER-17.42.1`
+- `packageLayoutVersion: flat-root-v1`
+- `deploymentRootOk: true`
+- `frontendBuildVerified: true`
+- `health: ok`
+
+The calibration page can then accept either `Daily_Charger_kWh.xlsx`, the individual recommended Excel files, or the complete dashboard ZIP.
+
 ## Release documents
 
-- `RELEASE_NOTES_V17.41_INVESTOR_PERFORMANCE.md`
-- `V17.41_PRODUCTION_VALIDATION.md`
+- `RELEASE_NOTES_V17.42_DEPLOYMENT_HOTFIX.md`
+- `V17.42_PRODUCTION_VALIDATION.md`

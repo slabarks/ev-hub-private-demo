@@ -299,17 +299,18 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const APP_RELEASE_VERSION = "V17.41";
-const APP_BUILD_ID = "EVHUB-V17.41-20260710-R1";
-const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.41.1";
-const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v17_41";
-const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v17.41-live-history-v2";
+const APP_RELEASE_VERSION = "V17.42";
+const APP_BUILD_ID = "EVHUB-V17.42-20260710-R1";
+const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.42.1";
+const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v17_42";
+const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v17.42-live-history-v3";
 const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
   "evHub.portfolio.liveActuals.v1",
   "evHub.portfolio.liveActuals.v35_39",
   "evHub.portfolio.liveActuals.v35_40",
   "evHub.portfolio.liveActuals.v17_39",
-  "evHub.portfolio.liveActuals.v17_40"
+  "evHub.portfolio.liveActuals.v17_40",
+  "evHub.portfolio.liveActuals.v17_41"
 ];
 function portfolioServerCompatibility(info) {
   const actualBuild = String(info?.buildId || info?.build_id || "missing");
@@ -317,13 +318,29 @@ function portfolioServerCompatibility(info) {
   const actualParser = String(info?.parserBuildId || info?.parser_build_id || "missing");
   const monthlySupported = info?.monthlyHistorySupported ?? info?.monthly_history_supported;
   const rootOk = info?.deploymentRootOk ?? info?.deployment_root_ok;
+  const layout = String(info?.packageLayoutVersion || info?.package_layout_version || "not reported");
   const fingerprint = String(info?.serverFileFingerprint || info?.server_file_fingerprint || "not reported");
-  if (actualBuild !== APP_BUILD_ID) return { ok: false, reason: `Frontend/backend build mismatch. Expected ${APP_BUILD_ID}; server returned ${actualBuild}. Server fingerprint: ${fingerprint}.` };
-  if (actualSchema !== PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION) return { ok: false, reason: `Live-upload schema mismatch. Expected ${PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION}; server returned ${actualSchema}.` };
-  if (actualParser !== LIVE_UPLOAD_PARSER_BUILD_ID) return { ok: false, reason: `Live-history parser mismatch. Expected ${LIVE_UPLOAD_PARSER_BUILD_ID}; server returned ${actualParser}.` };
-  if (monthlySupported !== true) return { ok: false, reason: "The running backend does not report monthly-history support." };
-  if (rootOk === false) return { ok: false, reason: `The backend reports an incomplete deployment root: ${(info?.missingDeploymentFiles || info?.missing_deployment_files || []).join(", ") || "required files missing"}.` };
-  return { ok: true, fingerprint };
+  const legacyVersion = String(info?.appVersion || info?.app_version || info?.aadt_engine_version || "legacy backend");
+  const deploymentSteps = [
+    "This is a deployment mismatch, not an Excel-file error.",
+    "Replace the complete application with the contents of the flat-root V17.42 ZIP and restart the Python service.",
+    `Confirm /api/version reports build ${APP_BUILD_ID}, parser ${LIVE_UPLOAD_PARSER_BUILD_ID}, layout flat-root-v1 and deploymentRootOk true.`,
+    "Then hard-refresh the browser and upload the ZIP pack or Daily_Charger_kWh.xlsx again."
+  ];
+  if (actualBuild !== APP_BUILD_ID) return {
+    ok: false,
+    type: "deployment",
+    reason: `The browser is ${APP_RELEASE_VERSION}, but the running Python backend is ${actualBuild === "missing" ? `${legacyVersion} without a build ID` : actualBuild}. Expected ${APP_BUILD_ID}. Server fingerprint: ${fingerprint}.`,
+    what_to_do: deploymentSteps,
+    actualBuild,
+    fingerprint
+  };
+  if (actualSchema !== PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION) return { ok: false, type: "deployment", reason: `Live-upload schema mismatch. Expected ${PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION}; server returned ${actualSchema}.`, what_to_do: deploymentSteps, actualBuild, fingerprint };
+  if (actualParser !== LIVE_UPLOAD_PARSER_BUILD_ID) return { ok: false, type: "deployment", reason: `Live-history parser mismatch. Expected ${LIVE_UPLOAD_PARSER_BUILD_ID}; server returned ${actualParser}.`, what_to_do: deploymentSteps, actualBuild, fingerprint };
+  if (monthlySupported !== true) return { ok: false, type: "deployment", reason: "The running backend does not report monthly-history support.", what_to_do: deploymentSteps, actualBuild, fingerprint };
+  if (layout !== "flat-root-v1") return { ok: false, type: "deployment", reason: `The backend is not running from the approved flat-root package layout. Reported layout: ${layout}.`, what_to_do: deploymentSteps, actualBuild, fingerprint };
+  if (rootOk === false) return { ok: false, type: "deployment", reason: `The backend reports an incomplete deployment root: ${(info?.missingDeploymentFiles || info?.missing_deployment_files || []).join(", ") || "required files missing"}.`, what_to_do: deploymentSteps, actualBuild, fingerprint };
+  return { ok: true, fingerprint, actualBuild, layout };
 }
 function portfolioSnapshotValidation(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.siteActuals)) return { ok: false, reason: "Upload response did not contain site actuals." };
@@ -620,8 +637,9 @@ function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {
   const requiredFiles = ["Daily_Charger_kWh.xlsx"];
   const recommendedFiles = ["Daily_Charger_kWh.xlsx", "Daily_kWh_All_Sites.xlsx", "Daily_Euro_All_Sites.xlsx", "Rolling_30_Day_Total_-_Euro_All_Sites.xlsx", "kWh_-_Per_Socket.xlsx", "ePF_-_Overview_Averages.xlsx"];
   const optionalFiles = ["ePower_Funded_-_Monthly_kWh_Total.xlsx", "kWh_-_Running_Total.xlsx", "ePF_-_Overview_Energy_-_Daily.xlsx", "ePF_-_Overview_Energy_-_Weekly.xlsx", "ePF_-_Overview_Value_-_Daily.xlsx", "ePF_-_Overview_Value_-_Weekly.xlsx"];
-  const todo = portfolioLiveUploadError?.what_to_do || portfolioLiveUploadError?.whatToDo || ["Upload Daily_Charger_kWh.xlsx or the full recommended pack.", "Check the file includes Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns."];
-  const errorHtml = portfolioLiveUploadError ? `<div class="notice bad"><strong>Upload could not be used.</strong><br>${h(portfolioLiveUploadError.message || portfolioLiveUploadError.error || "Could not validate uploaded files.")}<br><span class="muted small">The app is still using the stored calibration dataset.</span><ol>${todo.map(item => `<li>${h(item)}</li>`).join("")}</ol></div>` : "";
+  const todo = portfolioLiveUploadError?.what_to_do || portfolioLiveUploadError?.whatToDo || ["Upload Daily_Charger_kWh.xlsx, the individual Excel pack, or the complete dashboard ZIP.", "Check the file includes Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns."];
+  const errorTitle = portfolioLiveUploadError?.errorType === "deployment" ? "Deployment mismatch detected." : "Upload could not be used.";
+  const errorHtml = portfolioLiveUploadError ? `<div class="notice bad"><strong>${h(errorTitle)}</strong><br>${h(portfolioLiveUploadError.message || portfolioLiveUploadError.error || "Could not validate uploaded files.")}<br><span class="muted small">The app is still using the stored calibration dataset.</span><ol>${todo.map(item => `<li>${h(item)}</li>`).join("")}</ol></div>` : "";
   return `<section class="panel live-calibration-card ${hasLive ? "active" : "stored"}">
     <div class="live-calibration-head">
       <div><span class="eyebrow">Live calibration data</span><h3>${hasLive ? "Uploaded actuals active" : "Using stored calibration data"}</h3><p>${hasLive ? "Portfolio Calibration is using validated uploaded operating-hub actuals for this browser session." : "Upload the latest dashboard exports to refresh actual kWh, sessions and revenue. Validation runs automatically after file selection."}</p></div>
@@ -632,11 +650,11 @@ function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {
     ${errorHtml}
     ${warnings.length ? `<div class="notice warn"><strong>Upload warnings</strong><br>${warnings.slice(0,4).map(h).join("<br>")}</div>` : ""}
     ${supportingFiles.length ? `<details class="live-calibration-details"><summary>Supporting files detected</summary><p class="muted small">These files were accepted as supporting files. They are not used as the primary charger-level daily actuals source.</p><ul>${supportingFiles.slice(0,12).map(w => `<li>${h(String(w).replace(": not a charger-level daily actuals export; kept as supporting file only", ""))}</li>`).join("")}</ul></details>` : ""}
-    ${hasLive && status.zeroHistoryMatches ? `<div class="notice bad"><strong>Monthly history is not linked for ${number(status.zeroHistoryMatches,0)} matched sites.</strong><br>This usually means the browser and server are running different package versions. Reset the upload, hard-refresh and redeploy the full V17.41 package before relying on the performance benchmark.</div>` : ""}
+    ${hasLive && status.zeroHistoryMatches ? `<div class="notice bad"><strong>Monthly history is not linked for ${number(status.zeroHistoryMatches,0)} matched sites.</strong><br>This usually means the browser and server are running different package versions. Reset the upload, hard-refresh and redeploy the flat-root V17.42 package before relying on the performance benchmark.</div>` : ""}
     ${portfolioLiveMappingAudit(sites)}
     <div class="live-calibration-actions">
-      <label class="file-button" for="portfolioCalibrationFiles">Choose calibration Excel files</label>
-      <input id="portfolioCalibrationFiles" type="file" accept=".xlsx,.xlsm,.csv" multiple style="display:none" />
+      <label class="file-button" for="portfolioCalibrationFiles">Choose calibration files or ZIP pack</label>
+      <input id="portfolioCalibrationFiles" type="file" accept=".xlsx,.xlsm,.csv,.zip" multiple style="display:none" />
       ${hasLive ? `<button type="button" class="secondary" id="clearPortfolioCalibrationUpload">Reset to stored app data</button>` : ""}
     </div>
     <div id="portfolioCalibrationUploadStatus" class="muted small">${hasLive ? `Source files: ${h(parsedFiles.join(", ") || "uploaded dashboard export")}` : "Choose one or more calibration Excel files. The app validates them automatically and only uses them if they pass."}</div>
@@ -908,7 +926,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.41 investor performance benchmark + flexible horizon + deployment integrity";
+const APP_BUILD_VERSION = "V17.42 flat-root deployment hotfix + ZIP calibration upload";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -1073,12 +1091,12 @@ function aadtEngineMismatchWarning(ctx) {
   const source = String(t.source || "").toLowerCase();
   const mode = String(t.sample_mode || t.aadt_engine_mode || "").toLowerCase();
   const engineVersion = String(t.aadt_engine_version || "");
-  const hasCurrentServer = engineVersion.includes("V17.41");
+  const hasCurrentServer = engineVersion.includes("V17.42");
   const isOldCoordinateEngine = source.includes("ranked coordinate-enriched lookup") || mode.includes("ranked coordinate-enriched");
   const hasCandidates = Array.isArray(t.candidates) && t.candidates.length > 0;
   if (t.client_side_aadt_recalculated) return "";
   if (isOldCoordinateEngine && !hasCurrentServer) {
-    return "AADT API version mismatch: the browser is V17.41 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
+    return "AADT API version mismatch: the browser is V17.42 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
   }
   const plotted = (t.candidates || []).filter(c => c.official_location || c.mappable_location).length;
   if (hasCandidates && plotted === 0 && source.includes("tii")) {
@@ -1090,7 +1108,7 @@ function aadtEngineMismatchWarning(ctx) {
   return "";
 }
 
-const CLIENT_AADT_ENGINE_VERSION = "V17.41 browser provenance-controlled AADT engine";
+const CLIENT_AADT_ENGINE_VERSION = "V17.42 browser provenance-controlled AADT engine";
 let clientAadtRecordsPromise = null;
 // Coordinate provenance is supplied by the server/bundled location dataset; no hidden browser-only coordinate overrides.
 function clientAadtCounterId(rec) {
@@ -5514,16 +5532,23 @@ function wirePage(r) {
     const form = new FormData();
     files.forEach(file => form.append("files", file, file.name));
     portfolioUploadInput.disabled = true;
-    if (portfolioUploadStatus) portfolioUploadStatus.textContent = "Validating uploaded calibration files automatically…";
+    if (portfolioUploadStatus) portfolioUploadStatus.textContent = "Validating calibration files and deployment compatibility…";
     try {
       const versionRes = await fetch(`/api/version?_=${Date.now()}`, { cache: "no-store" });
       const versionInfo = await versionRes.json().catch(() => ({}));
       const compatibility = portfolioServerCompatibility(versionInfo);
-      if (!versionRes.ok || !compatibility.ok) throw { message: compatibility.reason || "Unable to verify the running backend build.", expectedBuildId: APP_BUILD_ID, actualBuildId: versionInfo?.buildId || versionInfo?.build_id || "missing", serverFileFingerprint: versionInfo?.serverFileFingerprint || versionInfo?.server_file_fingerprint || "not reported" };
+      if (!versionRes.ok || !compatibility.ok) throw {
+        message: compatibility.reason || "Unable to verify the running backend build.",
+        errorType: compatibility.type || "deployment",
+        what_to_do: compatibility.what_to_do,
+        expectedBuildId: APP_BUILD_ID,
+        actualBuildId: versionInfo?.buildId || versionInfo?.build_id || "missing",
+        serverFileFingerprint: versionInfo?.serverFileFingerprint || versionInfo?.server_file_fingerprint || "not reported"
+      };
       const res = await fetch("/api/import-live-calibration", { method: "POST", body: form, cache: "no-store" });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok || !payload.ok) throw payload;
-      if (!savePortfolioLiveActuals(payload)) throw portfolioLiveUploadError || { message: "The upload did not pass the V17.41 build and monthly-history validation." };
+      if (!savePortfolioLiveActuals(payload)) throw portfolioLiveUploadError || { message: "The upload did not pass the V17.42 build and monthly-history validation." };
       render();
     } catch (err) {
       portfolioLiveUploadError = err || { message: "Unknown upload error" };

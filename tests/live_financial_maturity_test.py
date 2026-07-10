@@ -7,6 +7,7 @@ import io
 import sys
 from pathlib import Path
 import unittest
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -37,9 +38,9 @@ class LiveFinancialMaturityTests(unittest.TestCase):
             ]))
         ])
         self.assertTrue(payload["ok"])
-        self.assertEqual(payload["schemaVersion"], "v17.41-live-history-v2")
-        self.assertEqual(payload["buildId"], "EVHUB-V17.41-20260710-R1")
-        self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-17.41.1")
+        self.assertEqual(payload["schemaVersion"], "v17.42-live-history-v3")
+        self.assertEqual(payload["buildId"], "EVHUB-V17.42-20260710-R1")
+        self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-17.42.1")
         self.assertTrue(payload["monthlyHistorySupported"])
         self.assertEqual(payload["siteCount"], 2)
         self.assertEqual(payload["monthlyHistorySiteCount"], 2)
@@ -64,6 +65,25 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         self.assertGreaterEqual(len(early["actual"]["monthlyHistory"]), 4)
         self.assertEqual(early["diagnostics"]["commercialDaysBasis"], "first_session")
         self.assertEqual(early["diagnostics"]["monthlyHistoryMonths"], len(early["actual"]["monthlyHistory"]))
+
+    def test_complete_dashboard_zip_pack_is_supported(self):
+        start = dt.date(2026, 1, 1)
+        daily = daily_csv([("ZIP Pack Site - Charger 1", start, 70)])
+        archive_stream = io.BytesIO()
+        with zipfile.ZipFile(archive_stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("Funded_Overview_Data/Overview/Daily_Charger_kWh.csv", daily)
+            archive.writestr("Funded_Overview_Data/Ignore/Daily_Charger_kWh.csv", daily)
+            archive.writestr("Funded_Overview_Data/Overview/readme.txt", b"supporting note")
+        payload = server.parse_live_calibration_uploads([
+            ("Funded_Overview_Data.zip", archive_stream.getvalue())
+        ])
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["uploadedArchiveCount"], 1)
+        self.assertEqual(payload["expandedSpreadsheetCount"], 1)
+        self.assertEqual(payload["siteCount"], 1)
+        self.assertEqual(payload["monthlyHistorySiteCount"], 1)
+        self.assertGreaterEqual(payload["monthlyObservationCount"], 3)
+        self.assertTrue(any("expanded 1 calibration spreadsheet" in warning for warning in payload["warnings"]))
 
     def test_zero_demand_days_remain_inside_calendar_denominator(self):
         start = dt.date(2026, 1, 1)

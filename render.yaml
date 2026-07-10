@@ -3,8 +3,9 @@ services:
     name: ev-hub-investment-tool-demo
     env: python
     plan: free
-    buildCommand: ""
+    buildCommand: "python -m py_compile server.py"
     startCommand: "python server.py"
+    healthCheckPath: /api/health
     envVars:
       - key: DEMO_PASSWORD
         sync: false

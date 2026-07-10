@@ -41,27 +41,60 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-APP_VERSION = "V17.41"
-APP_BUILD_ID = "EVHUB-V17.41-20260710-R1"
-LIVE_UPLOAD_SCHEMA_VERSION = "v17.41-live-history-v2"
-LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.41.1"
-AADT_ENGINE_VERSION = "V17.41 AADT audited resolver + validated live history + forward performance benchmark"
+APP_VERSION = "V17.42"
+APP_BUILD_ID = "EVHUB-V17.42-20260710-R1"
+LIVE_UPLOAD_SCHEMA_VERSION = "v17.42-live-history-v3"
+LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.42.1"
+AADT_ENGINE_VERSION = "V17.42 AADT audited resolver + flat-root deployment integrity + ZIP live-history upload"
 DEPLOYMENT_REQUIRED_FILES = ("index.html", "js/app.js", "js/engines/maturityEngine.js", "assets/styles.css", "DEPLOYMENT_MANIFEST.json")
 SERVER_FILE_FINGERPRINT = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
+PACKAGE_LAYOUT_VERSION = "flat-root-v1"
 
 def _deployment_integrity() -> dict:
-    missing = [name for name in DEPLOYMENT_REQUIRED_FILES if not (ROOT / name).exists()]
+    problems = [name for name in DEPLOYMENT_REQUIRED_FILES if not (ROOT / name).exists()]
     manifest = {}
     manifest_path = ROOT / "DEPLOYMENT_MANIFEST.json"
     if manifest_path.exists():
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
-            manifest = {}
-    manifest_build = str(manifest.get("buildId") or "missing")
-    if manifest_build != APP_BUILD_ID:
-        missing.append(f"manifest build {manifest_build} != {APP_BUILD_ID}")
-    return {"ok": not missing, "missing": missing, "root": str(ROOT), "rootName": ROOT.name, "manifest": manifest}
+        except Exception as exc:
+            problems.append(f"deployment manifest could not be read: {exc}")
+    checks = {
+        "buildId": APP_BUILD_ID,
+        "uploadSchemaVersion": LIVE_UPLOAD_SCHEMA_VERSION,
+        "parserBuildId": LIVE_UPLOAD_PARSER_BUILD_ID,
+        "packageLayoutVersion": PACKAGE_LAYOUT_VERSION,
+    }
+    for key, expected in checks.items():
+        actual = str(manifest.get(key) or "missing")
+        if actual != expected:
+            problems.append(f"manifest {key} {actual} != {expected}")
+    app_path = ROOT / "js/app.js"
+    if app_path.exists():
+        try:
+            app_text = app_path.read_text(encoding="utf-8")
+            for marker in (APP_BUILD_ID, LIVE_UPLOAD_SCHEMA_VERSION, LIVE_UPLOAD_PARSER_BUILD_ID):
+                if marker not in app_text:
+                    problems.append(f"js/app.js does not contain expected build marker {marker}")
+        except Exception as exc:
+            problems.append(f"js/app.js could not be verified: {exc}")
+    index_path = ROOT / "index.html"
+    if index_path.exists():
+        try:
+            index_text = index_path.read_text(encoding="utf-8")
+            if "17.42-deployment-hotfix-20260710" not in index_text:
+                problems.append("index.html cache-buster is not the V17.42 deployment build")
+        except Exception as exc:
+            problems.append(f"index.html could not be verified: {exc}")
+    return {
+        "ok": not problems,
+        "missing": problems,
+        "root": str(ROOT),
+        "rootName": ROOT.name,
+        "manifest": manifest,
+        "packageLayoutVersion": PACKAGE_LAYOUT_VERSION,
+        "frontendBuildVerified": not any("js/app.js" in item or "index.html" in item for item in problems),
+    }
 
 def _version_payload() -> dict:
     integrity = _deployment_integrity()
@@ -86,6 +119,10 @@ def _version_payload() -> dict:
         "missing_deployment_files": integrity["missing"],
         "deploymentRootName": integrity["rootName"],
         "deployment_root_name": integrity["rootName"],
+        "packageLayoutVersion": integrity["packageLayoutVersion"],
+        "package_layout_version": integrity["packageLayoutVersion"],
+        "frontendBuildVerified": integrity["frontendBuildVerified"],
+        "frontend_build_verified": integrity["frontendBuildVerified"],
         "aadt_engine_version": AADT_ENGINE_VERSION,
     }
 
@@ -3755,6 +3792,61 @@ def _extract_multipart_files(body: bytes, content_type: str) -> list[tuple[str, 
     return files
 
 
+def _expand_calibration_upload_files(files: list[tuple[str, bytes]]) -> tuple[list[tuple[str, bytes]], list[str], int]:
+    """Expand a user-selected dashboard ZIP pack safely.
+
+    The UI still supports selecting individual XLSX/CSV files, but production
+    users often receive the complete dashboard export as one ZIP archive. Only
+    spreadsheet-like members are retained. Archive entries inside folders named
+    Ignore, __MACOSX, or hidden folders are skipped to avoid duplicate/supporting
+    exports being parsed accidentally.
+    """
+    expanded: list[tuple[str, bytes]] = []
+    warnings: list[str] = []
+    archive_count = 0
+    max_members = 100
+    max_total_uncompressed = 120 * 1024 * 1024
+    max_member_size = 30 * 1024 * 1024
+    total_uncompressed = 0
+
+    for filename, raw in files:
+        if not filename.lower().endswith(".zip"):
+            expanded.append((filename, raw))
+            continue
+        archive_count += 1
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                members = [m for m in archive.infolist() if not m.is_dir()]
+                if len(members) > max_members:
+                    raise ValueError(f"archive contains {len(members)} files; maximum is {max_members}")
+                used = 0
+                for member in members:
+                    safe_name = member.filename.replace("\\", "/").lstrip("/")
+                    parts = [part for part in safe_name.split("/") if part]
+                    if not parts or any(part in {"..", "."} for part in parts):
+                        warnings.append(f"{filename}: ignored unsafe archive entry {member.filename}")
+                        continue
+                    lower_parts = [part.lower() for part in parts[:-1]]
+                    if "ignore" in lower_parts or "__macosx" in lower_parts or any(part.startswith(".") for part in parts):
+                        continue
+                    lower_name = parts[-1].lower()
+                    if not lower_name.endswith((".xlsx", ".xlsm", ".csv")):
+                        continue
+                    if member.file_size > max_member_size:
+                        raise ValueError(f"archive member {safe_name} is larger than {max_member_size // (1024 * 1024)} MB")
+                    total_uncompressed += member.file_size
+                    if total_uncompressed > max_total_uncompressed:
+                        raise ValueError("archive expands beyond the 120 MB safety limit")
+                    expanded.append((safe_name, archive.read(member)))
+                    used += 1
+                if used == 0:
+                    raise ValueError("archive contained no XLSX, XLSM, or CSV calibration files outside Ignore folders")
+                warnings.append(f"{filename}: expanded {used} calibration spreadsheet file(s).")
+        except zipfile.BadZipFile as exc:
+            raise ValueError(f"{filename} is not a readable ZIP archive") from exc
+    return expanded, warnings, archive_count
+
+
 def _xlsx_col_index(cell_ref: str) -> int:
     letters = re.sub(r"[^A-Z]", "", (cell_ref or "").upper())
     idx = 0
@@ -3979,13 +4071,14 @@ def _build_monthly_live_history(daily: dict, first_active: dt.date | None, lates
 
 def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
     errors: list[str] = []
-    warnings: list[str] = []
+    expanded_files, archive_warnings, uploaded_archive_count = _expand_calibration_upload_files(files)
+    warnings: list[str] = list(archive_warnings)
     supporting_files: list[str] = []
     parsed_sources: list[str] = []
     site_days: dict[str, dict] = {}
     total_rows = 0
 
-    for filename, raw in files:
+    for filename, raw in expanded_files:
         lower = filename.lower()
         if not lower.endswith((".xlsx", ".xlsm", ".csv")):
             warnings.append(f"Ignored unsupported file type: {filename}")
@@ -4182,12 +4275,18 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         "deployment_root_ok": _deployment_integrity()["ok"],
         "missingDeploymentFiles": _deployment_integrity()["missing"],
         "missing_deployment_files": _deployment_integrity()["missing"],
+        "packageLayoutVersion": PACKAGE_LAYOUT_VERSION,
+        "package_layout_version": PACKAGE_LAYOUT_VERSION,
+        "frontendBuildVerified": _deployment_integrity()["frontendBuildVerified"],
+        "frontend_build_verified": _deployment_integrity()["frontendBuildVerified"],
         "aadtEngineVersion": AADT_ENGINE_VERSION,
         "latestDate": latest_date.isoformat(),
         "rollingWindowDays": 30,
         "siteActuals": actuals,
         "siteCount": len(actuals),
         "rowCount": total_rows,
+        "uploadedArchiveCount": uploaded_archive_count,
+        "expandedSpreadsheetCount": len(expanded_files),
         "monthlyHistorySiteCount": monthly_history_site_count,
         "monthlyObservationCount": monthly_observation_count,
         "completeMonthObservationCount": complete_month_observation_count,
@@ -4475,6 +4574,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._redirect_to_login()
         if parsed.path == "/api/version":
             return self._send_json(_version_payload())
+        if parsed.path == "/api/health":
+            payload = _version_payload()
+            payload["health"] = "ok" if payload.get("deploymentRootOk") else "deployment_error"
+            return self._send_json(payload, status=200 if payload.get("deploymentRootOk") else 503)
 
         if parsed.path == "/api/tii-counter-locations":
             try:
@@ -4556,6 +4659,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/version":
             return self._send_json(_version_payload())
+        if parsed.path == "/api/health":
+            payload = _version_payload()
+            payload["health"] = "ok" if payload.get("deploymentRootOk") else "deployment_error"
+            return self._send_json(payload, status=200 if payload.get("deploymentRootOk") else 503)
 
         if parsed.path == "/api/tii-counter-locations":
             try:
@@ -4625,9 +4732,19 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     os.chdir(ROOT)
+    integrity = _deployment_integrity()
+    if not integrity["ok"]:
+        print("FATAL: EV Hub deployment integrity check failed.", file=sys.stderr)
+        print(f"Expected build: {APP_BUILD_ID}", file=sys.stderr)
+        print(f"Deployment root: {ROOT}", file=sys.stderr)
+        for problem in integrity["missing"]:
+            print(f" - {problem}", file=sys.stderr)
+        print("Deploy the contents of the flat-root ZIP together and restart the service.", file=sys.stderr)
+        raise SystemExit(2)
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     url = f"http://localhost:{PORT}/"
-    print(f"EV Hub Investment Tool running at {url}")
+    print(f"EV Hub Investment Tool {APP_VERSION} running at {url}")
+    print(f"Build: {APP_BUILD_ID} | Parser: {LIVE_UPLOAD_PARSER_BUILD_ID} | Layout: {PACKAGE_LAYOUT_VERSION}")
     print("Opening your default browser...")
     print("Press Ctrl+C to stop.")
 

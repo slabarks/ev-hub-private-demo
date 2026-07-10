@@ -23,8 +23,8 @@ const app = fs.readFileSync(path.join(root, "js", "app.js"), "utf8");
 const server = fs.readFileSync(path.join(root, "server.py"), "utf8");
 const css = fs.readFileSync(path.join(root, "assets", "styles.css"), "utf8");
 const bundle = JSON.parse(fs.readFileSync(path.join(root, "data", "tii_counter_locations_bundled_vetted.json"), "utf8"));
-assert.match(app, /V17\.39 browser provenance-controlled AADT engine/);
-assert.match(server, /V17\.39 AADT audited resolver/);
+assert.match(app, /V17\.40 browser provenance-controlled AADT engine/);
+assert.match(server, /V17\.40 AADT audited resolver/);
 assert.match(app, /if \(absolute <= 30000\).*capex-delta-green/);
 assert.match(app, /if \(absolute <= 50000\).*capex-delta-amber/);
 assert.match(app, /return \{ key: "red", cls: "capex-delta-red"/);
@@ -56,6 +56,34 @@ assert.match(css, /portfolio-financial-table th:nth-child\(10\)/);
 assert.match(css, /portfolio-financial-table td:first-child[\s\S]*position: sticky/);
 assert.match(css, /portfolio-financial-table \{[\s\S]*table-layout: fixed/);
 assert.match(server, /"monthlyHistory": monthly_history/);
+assert.match(server, /"schemaVersion": "v17\.40-live-history-v1"/);
+assert.match(server, /"monthlyObservationCount": monthly_observation_count/);
+assert.match(app, /PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v17\.40-live-history-v1"/);
+assert.match(app, /Revenue-weighted maturity/);
+assert.match(app, /Remaining annual EBITDA uplift/);
+assert.match(app, /Long-term forecast confidence/);
+assert.match(fs.readFileSync(path.join(root, "js", "engines", "exportEngine.js"), "utf8"), /name: "Portfolio Summary"/);
+assert.match(fs.readFileSync(path.join(root, "js", "engines", "exportEngine.js"), "utf8"), /name: "Definitions"/);
+assert.doesNotMatch(app, /<h3>Maturity forecast summary<\/h3>/);
+const snapshotValidationSource = app.match(/function portfolioSnapshotValidation\(snapshot\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(snapshotValidationSource, "live-upload snapshot validation must exist");
+const snapshotContext = {};
+vm.runInNewContext(`const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v17.40-live-history-v1"; ${snapshotValidationSource}; this.validate = portfolioSnapshotValidation;`, snapshotContext);
+assert.equal(snapshotContext.validate({ parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: { monthlyHistory: [] } }] }).ok, false, "legacy/empty history upload must be rejected");
+assert.equal(snapshotContext.validate({ schemaVersion: "v17.40-live-history-v1", parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: { monthlyHistory: [{ month: "2026-01" }] } }] }).ok, true, "valid V17.40 monthly history upload must be accepted");
+const maturitySummarySource = app.match(/function portfolioFinancialMaturitySummary\(model, rows\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(maturitySummarySource, "investor maturity summary function must exist");
+const maturitySummaryContext = {};
+vm.runInNewContext(`${maturitySummarySource}; this.summarise = portfolioFinancialMaturitySummary;`, maturitySummaryContext);
+const maturitySample = maturitySummaryContext.summarise({ source: "empirical", trainingSiteCount: 5, eligibleTrainingSiteCount: 5, stableSiteCount: 3, empiricalMonths: 12, curve: [{ month: 18, p50: 0.95 }], backtest: { 6: { medianAbsoluteError: 0.10 } } }, [
+  { hasActualKwh: true, hasOperationalDays: true, operationalDays: 400, annualRevenue: 80, matureAnnualRevenue: 100, maturityRevenueUplift: 20, maturityEbitdaUplift: 10, maturityForecast: { forward12m: { historyMonths: 12 }, recentTrend: { blockChange: 0.05 }, lateRamp: false } },
+  { hasActualKwh: true, hasOperationalDays: true, operationalDays: 200, annualRevenue: 50, matureAnnualRevenue: 100, maturityRevenueUplift: 50, maturityEbitdaUplift: 25, maturityForecast: { forward12m: { historyMonths: 6 }, recentTrend: { blockChange: 0.10 }, lateRamp: false } }
+]);
+assert.equal(Math.round(maturitySample.revenueWeightedMaturity * 100), 65);
+assert.equal(maturitySample.empiricalMatureCount, 1);
+assert.equal(maturitySample.rampingCount, 1);
+assert.equal(maturitySample.remainingRevenueUplift, 70);
+assert.equal(maturitySample.longTermConfidence.label, "High");
 assert.match(app, /Cumulative actual revenue annualised/);
 assert.ok(app.indexOf("serverFallback") < app.indexOf("CLIENT_TII_COUNTER_LOCATION_BUNDLED_URL", app.indexOf("async function loadClientOfficialAadtLocations")), "client should retain server fallback while attempting official data");
 assert.match(app, /coarse-ranking-only/);
@@ -110,7 +138,7 @@ try {
   const versionResp = await waitFor(`http://127.0.0.1:${port}/api/version`);
   const version = await versionResp.json();
   assert.equal(version.ok, true);
-  assert.match(version.aadt_engine_version, /V17\.39/);
+  assert.match(version.aadt_engine_version, /V17\.40/);
 
   const empty = await fetch(`http://127.0.0.1:${port}/api/auto-tii-aadt`);
   assert.equal(empty.status, 400);
@@ -135,7 +163,7 @@ try {
   const indexResp = await fetch(`http://127.0.0.1:${port}/`);
   assert.equal(indexResp.status, 200);
   const indexText = await indexResp.text();
-  assert.match(indexText, /EV Charging Hub Investment Tool V17\.39/i);
+  assert.match(indexText, /EV Charging Hub Investment Tool V17\.40/i);
 
   const maturityResp = await fetch(`http://127.0.0.1:${port}/js/engines/maturityEngine.js`);
   assert.equal(maturityResp.status, 200);
@@ -149,5 +177,5 @@ try {
 }
 
 console.log("\n[6/6] Result");
-console.log("PASS — V17.39 AADT, CAPEX bands, monthly history, maturity forecasting, exports, API and static smoke tests completed successfully.");
+console.log("PASS — V17.40 AADT, CAPEX bands, monthly history, maturity forecasting, exports, API and static smoke tests completed successfully.");
 if (logs.trim()) console.log("Server smoke log:\n" + logs.trim());

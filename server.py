@@ -41,7 +41,7 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-AADT_ENGINE_VERSION = "V17.39 AADT audited resolver + forward-12-month portfolio financials"
+AADT_ENGINE_VERSION = "V17.40 AADT audited resolver + validated live history + investor maturity"
 
 
 LOCAL_DATASETS = {
@@ -732,7 +732,7 @@ AADT_ADDRESS_ALIAS_RULES = [
     ({"douglas"}, ["douglas", "N40", "south", "ring"]),
     ({"ballincollig"}, ["ballincollig", "ovens", "N22"]),
     ({"galway"}, ["galway", "bothar", "treabh", "N06", "N84", "N83"]),
-    # V17.39: Bandon and Kinsale otherwise appear as incidental road names on the
+    # V17.40: Bandon and Kinsale otherwise appear as incidental road names on the
     # unrelated N40 Cork South Ring corridor. Anchor them to the N71 corridor.
     ({"bandon"}, ["N71", "innishannon", "ballinhassig", "halfway"]),
     ({"kinsale"}, ["N71", "ballinhassig"]),
@@ -4107,20 +4107,33 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         actuals.append(actual)
 
     actuals.sort(key=lambda x: x["siteName"].lower())
+    monthly_history_site_count = sum(1 for item in actuals if len(item.get("actual", {}).get("monthlyHistory", [])) > 0)
+    monthly_observation_count = sum(len(item.get("actual", {}).get("monthlyHistory", [])) for item in actuals)
+    complete_month_observation_count = sum(
+        1
+        for item in actuals
+        for row in item.get("actual", {}).get("monthlyHistory", [])
+        if row.get("isCompleteCalendarMonth")
+    )
     return {
         "ok": True,
         "source": "uploaded_live_calibration_files",
         "status": "active",
+        "schemaVersion": "v17.40-live-history-v1",
+        "aadtEngineVersion": AADT_ENGINE_VERSION,
         "latestDate": latest_date.isoformat(),
         "rollingWindowDays": 30,
         "siteActuals": actuals,
         "siteCount": len(actuals),
         "rowCount": total_rows,
+        "monthlyHistorySiteCount": monthly_history_site_count,
+        "monthlyObservationCount": monthly_observation_count,
+        "completeMonthObservationCount": complete_month_observation_count,
         "parsedFiles": parsed_sources,
         "supportingFiles": supporting_files[:25],
         "warnings": warnings[:25],
         "errors": [],
-        "message": f"Uploaded live calibration actuals loaded successfully. Latest actuals date: {latest_date.isoformat()}."
+        "message": f"Uploaded live calibration actuals loaded successfully. Latest actuals date: {latest_date.isoformat()}. Retained {monthly_observation_count} monthly observations across {monthly_history_site_count} sites."
     }
 
 

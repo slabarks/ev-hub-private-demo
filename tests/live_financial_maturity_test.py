@@ -37,7 +37,11 @@ class LiveFinancialMaturityTests(unittest.TestCase):
             ]))
         ])
         self.assertTrue(payload["ok"])
+        self.assertEqual(payload["schemaVersion"], "v17.40-live-history-v1")
         self.assertEqual(payload["siteCount"], 2)
+        self.assertEqual(payload["monthlyHistorySiteCount"], 2)
+        self.assertGreaterEqual(payload["monthlyObservationCount"], 17)
+        self.assertGreater(payload["completeMonthObservationCount"], 0)
         by_name = {row["siteName"]: row for row in payload["siteActuals"]}
 
         mature = by_name["Synthetic Mature Site - Charger 1"]

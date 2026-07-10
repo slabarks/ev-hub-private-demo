@@ -711,9 +711,13 @@ export function exportAnnualFinancialsExcel(state, results) {
 
 
 export function exportPortfolioFinancialsExcel(payload) {
+  const summaryRows = payload?.summaryRows || [];
   const matrixRows = payload?.matrixRows || [];
+  const dictionaryRows = payload?.dictionaryRows || [];
   downloadXlsx("ev_hub_portfolio_financials.xlsx", [
-    { name: "Portfolio Financials", rows: matrixRows, autoFilter: true }
+    { name: "Portfolio Summary", rows: summaryRows },
+    { name: "Portfolio Financials", rows: matrixRows, autoFilter: true },
+    { name: "Definitions", rows: dictionaryRows }
   ]);
 }
 
@@ -760,13 +764,23 @@ function pfPdfDashboard(summary = {}, horizon = 5) {
       pfPdfMetric("Next 12m site EBITDA", currency(summary.nextYearEbitda || 0, 0), "revenue − electricity − OPEX"),
       pfPdfMetric("Portfolio run-rate payback", payback, "actual day-one CAPEX / next-12-month site EBITDA")
     ], "operating")}
-    ${pfPdfWindow("Projection & profitability", `Selected ${number(horizon || 5,0)}-year projection.`, [
+    ${pfPdfWindow("Projection & profitability", `Selected ${number(horizon || 5,0)}-year projection. Maturity begins only from month 13.`, [
       pfPdfMetric("Projection horizon", `${number(horizon || 5,0)} yrs`, "active report setting"),
-      pfPdfMetric(`${number(horizon || 5,0)}yr revenue`, currency(summary.horizonRevenue || 0, 0), "cumulative projection"),
-      pfPdfMetric(`${number(horizon || 5,0)}yr EBITDA`, currency(summary.horizonEbitda || 0, 0), "cumulative pre-landlord"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr revenue`, currency(summary.horizonRevenue || 0, 0), "base cumulative projection"),
+      pfPdfMetric(`${number(horizon || 5,0)}yr EBITDA`, currency(summary.horizonEbitda || 0, 0), "base cumulative site EBITDA"),
       pfPdfMetric(`${number(horizon || 5,0)}yr net after CAPEX`, currency(summary.netAfterCapex || 0, 0), "EBITDA minus tracked CAPEX", Number(summary.netAfterCapex || 0) < 0 ? "bad" : "good"),
       pfPdfMetric("Profitability margin", margin, `${number(horizon || 5,0)}yr EBITDA / revenue`)
     ], "projection")}
+    ${pfPdfWindow("Portfolio maturity & forecast quality", "Investor view of existing-site ramp-up and long-term evidence quality.", [
+      pfPdfMetric("Revenue-weighted maturity", Number.isFinite(Number(summary.revenueWeightedMaturity)) ? pct(Number(summary.revenueWeightedMaturity),0) : "—", "share of steady-state portfolio revenue achieved"),
+      pfPdfMetric("Portfolio position", `${number(summary.empiricalMatureCount || 0,0)} mature · ${number(summary.rampingCount || 0,0)} ramping`, `${number(summary.insufficientHistoryCount || 0,0)} insufficient history`),
+      pfPdfMetric("Remaining annual revenue uplift", currency(summary.remainingRevenueUplift || 0,0), "existing sites reaching steady state"),
+      pfPdfMetric("Remaining annual EBITDA uplift", currency(summary.remainingEbitdaUplift || 0,0), "existing-site steady-state uplift"),
+      pfPdfMetric("Typical time to steady state", summary.typicalMonthsToMaturity ? `${number(summary.typicalMonthsToMaturity,0)} mo` : "—", summary.maturitySource === "empirical" ? "empirical portfolio curve" : "conservative prior assumption"),
+      pfPdfMetric("Long-term confidence", summary.longTermConfidence || "Low", `${number(summary.maturityTrainingSites || 0,0)} training sites`),
+      pfPdfMetric(`${number(horizon || 5,0)}yr revenue range`, `${currency(summary.horizonRevenueLow || 0,0)} – ${currency(summary.horizonRevenueHigh || 0,0)}`, `base ${currency(summary.horizonRevenue || 0,0)}`),
+      pfPdfMetric(`${number(horizon || 5,0)}yr EBITDA range`, `${currency(summary.horizonEbitdaLow || 0,0)} – ${currency(summary.horizonEbitdaHigh || 0,0)}`, `base ${currency(summary.horizonEbitda || 0,0)}`)
+    ], "maturity")}
   </section>`;
 }
 

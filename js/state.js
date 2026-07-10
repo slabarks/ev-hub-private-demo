@@ -9,7 +9,8 @@ export const state = {
     radiusKm: 3,
     minPower: "Any",
     category: "Any",
-    manualAadtOverride: false
+    manualAadtOverride: false,
+    showAllAadtCounters: false
   }
 };
 
@@ -35,4 +36,5 @@ export function resetState() {
   state.filters.minPower = "Any";
   state.filters.category = "Any";
   state.filters.manualAadtOverride = false;
+  state.filters.showAllAadtCounters = false;
 }

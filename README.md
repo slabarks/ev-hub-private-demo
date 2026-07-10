@@ -1,6 +1,6 @@
-# EV Hub Investment Tool — V17.27 Coordinate-first AADT Engine
+# EV Hub Investment Tool — V17.30 Map-led AADT Counter Selection
 
-Current review build: **V17.27 coordinate-first AADT engine**. This release focuses on AADT correctness, because AADT counter selection is the foundation of the demand model.
+Current review build: **V17.30 map-led AADT counter selection**. This release makes the AADT workflow visual and selectable from the map: top 4 recommendations, official TII counter-location overlay where available, and direct map-popup selection.
 
 ## What changed
 

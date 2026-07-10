@@ -41,7 +41,7 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-AADT_ENGINE_VERSION = "V17.29 coordinate-first AADT server + map overlay support"
+AADT_ENGINE_VERSION = "V17.30 coordinate-first AADT server + map-led counter selection"
 
 
 LOCAL_DATASETS = {
@@ -1793,7 +1793,7 @@ def tii_aadt_from_local_excel_name_lookup(address: str, limit: int = 12) -> dict
     }
 
 
-def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit: int = 12, max_km: float = 80.0) -> dict:
+def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit: int = 4, max_km: float = 80.0) -> dict:
     """Coordinate-first, road-aware TII AADT selection.
 
     V17.27 rules:

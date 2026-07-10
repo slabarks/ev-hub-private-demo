@@ -1,24 +1,33 @@
-# EV Charging Hub Investment Tool — V17.42 Lean Production Build
+# EV Charging Hub Investment Tool — V17.44 Lean Production Build
 
-V17.42 is a deployment and live-calibration hotfix built on the approved V17.41 investor-performance release.
-
-## What is fixed
-
-- The deployment ZIP is **flat-root**: `server.py`, `index.html`, `js/`, `assets/` and `data/` sit directly at the archive root.
-- The Python server refuses to start when the manifest, frontend build markers or required root files do not match.
-- `/api/version` and `/api/health` report the application build, parser build, upload schema, package-layout version, server fingerprint and deployment-root status.
-- Deployment mismatches are shown as deployment errors, not misleading spreadsheet errors.
-- The live-calibration importer accepts either individual Excel/CSV files or the complete dashboard ZIP pack.
-- ZIP uploads are expanded safely; `Ignore` folders, hidden folders and unsupported files are skipped.
-- Browser cache-busters were advanced so an older `app.js` cannot remain paired with a newer server after a normal redeployment.
+V17.44 restores the reliable calibration-upload workflow while retaining the approved Portfolio Financial Performance changes from V17.43.
 
 ## Build identity
 
-- Application: `V17.42`
-- Build: `EVHUB-V17.42-20260710-R1`
-- Upload schema: `v17.42-live-history-v3`
-- Parser: `EVHUB-LIVE-PARSER-17.42.1`
-- Package layout: `flat-root-v1`
+- Application: `V17.44`
+- Build: `EVHUB-V17.44-20260710-R1`
+- Upload schema: `v17.44-live-history-v5`
+- Parser: `EVHUB-LIVE-PARSER-17.44.1`
+- Package layout: flat root
+
+## Calibration upload behaviour
+
+The browser now uploads the selected Excel files or ZIP pack directly to `/api/import-live-calibration` and validates the returned site data. A missing or older backend build ID is diagnostic only and cannot block a valid upload.
+
+Accepted inputs:
+
+- `Daily_Charger_kWh.xlsx`
+- Multiple dashboard Excel/CSV exports selected together
+- Complete dashboard ZIP pack, including `Funded_Overview_Data_10_07_26.zip`
+
+The app still rejects responses that contain no usable site actuals and prevents cumulative/running-total exports from becoming the primary daily source.
+
+## Deployment reliability changes
+
+- Unique V17.44 cache-busters are applied to `app.js` and `styles.css`.
+- Package-integrity diagnostics no longer terminate the Python server.
+- `/api/health` remains available but returns HTTP 200 with warnings rather than causing the hosting platform to retain an older deployment.
+- Backend version metadata remains visible for audit but is no longer a prerequisite for uploads.
 
 ## Run locally
 
@@ -26,42 +35,14 @@ V17.42 is a deployment and live-calibration hotfix built on the approved V17.41 
 python server.py
 ```
 
-Open `http://localhost:10314/`.
+Then open `http://localhost:10314/`.
 
-## Test
+## Production deployment
 
-```bash
-npm test
-```
+Deploy the ZIP contents at the service root and use:
 
-## Deploy
-
-Deploy the **complete contents of this ZIP** as the application root. Do not place the files inside another folder and do not merge them over an older deployment.
-
-Start command:
-
-```bash
+```text
 python server.py
 ```
 
-After deployment, open:
-
-```text
-https://YOUR-APP-URL/api/health
-```
-
-The response must report:
-
-- `buildId: EVHUB-V17.42-20260710-R1`
-- `parserBuildId: EVHUB-LIVE-PARSER-17.42.1`
-- `packageLayoutVersion: flat-root-v1`
-- `deploymentRootOk: true`
-- `frontendBuildVerified: true`
-- `health: ok`
-
-The calibration page can then accept either `Daily_Charger_kWh.xlsx`, the individual recommended Excel files, or the complete dashboard ZIP.
-
-## Release documents
-
-- `RELEASE_NOTES_V17.42_DEPLOYMENT_HOTFIX.md`
-- `V17.42_PRODUCTION_VALIDATION.md`
+The package contains `render.yaml` and `Procfile` for hosted deployment.

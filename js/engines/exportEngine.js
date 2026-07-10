@@ -782,7 +782,7 @@ function pfPdfPerformance(summary = {}) {
     ${pfPdfMetric("In benchmark", number(summary.inBenchmark || 0, 0), "forward variance within ±15%")}
     ${pfPdfMetric("Underperforming", number(summary.underperforming || 0, 0), "forward forecast below model")}
     ${pfPdfMetric("Above benchmark", number(summary.outperforming || 0, 0), "forward forecast above model")}
-    ${pfPdfMetric("Low / missing history", number(summary.notEnoughData || 0, 0), "variance remains visible where calculable")}
+    ${pfPdfMetric("Early / limited data", number(summary.notEnoughData || 0, 0), "new, limited or unavailable actual history")}
   </div><div class="pf-pdf-warning"><strong>Investment data warnings:</strong> ${number(summary.capexMissing || 0,0)} sites missing actual CAPEX · ${number(summary.noPayback || 0,0)} sites with no positive run-rate payback.</div></section>`;
 }
 
@@ -799,7 +799,7 @@ export async function exportPortfolioFinancialsPdf(payload) {
     compactPdfCell(Number.isFinite(r.actualCapex) ? currency(r.actualCapex, 0) : "CAPEX missing", `${r.capexBand || ""}${r.capexBand && r.capexNote ? " · " : ""}${r.capexNote || ""}`),
     compactPdfCell(kwh(r.next12mKwh, 0), `model ${kwh(r.modelForward12mKwh,0)}`),
     compactPdfCell(Number.isFinite(r.performanceVariance) ? `${r.performanceVariance >= 0 ? "+" : ""}${pct(r.performanceVariance,1)}` : "—", `${r.performanceClassification || "Review"} · ${r.dataQualityNote || ""}`),
-    compactPdfCell(currency(r.next12mRevenue, 0), `range ${currency(r.next12mRevenueLow,0)}–${currency(r.next12mRevenueHigh,0)}`),
+    compactPdfCell(currency(r.next12mRevenue, 0), "base forecast used in EBITDA"),
     compactPdfCell(currency(r.electricityCost, 0), "included in EBITDA"),
     compactPdfCell(currency(r.opexExElectricity, 0), r.commercialTerms),
     compactPdfCell(currency(r.ebitda, 0), "revenue − electricity − OPEX"),

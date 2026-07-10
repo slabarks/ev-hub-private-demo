@@ -299,64 +299,75 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const APP_RELEASE_VERSION = "V17.42";
-const APP_BUILD_ID = "EVHUB-V17.42-20260710-R1";
-const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.42.1";
-const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v17_42";
-const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v17.42-live-history-v3";
+const APP_RELEASE_VERSION = "V17.44";
+const APP_BUILD_ID = "EVHUB-V17.44-20260710-R1";
+const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.44.1";
+const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v17_44";
+const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v17.44-live-history-v5";
 const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
   "evHub.portfolio.liveActuals.v1",
   "evHub.portfolio.liveActuals.v35_39",
   "evHub.portfolio.liveActuals.v35_40",
   "evHub.portfolio.liveActuals.v17_39",
   "evHub.portfolio.liveActuals.v17_40",
-  "evHub.portfolio.liveActuals.v17_41"
+  "evHub.portfolio.liveActuals.v17_41",
+  "evHub.portfolio.liveActuals.v17_42",
+  "evHub.portfolio.liveActuals.v17_43"
 ];
 function portfolioServerCompatibility(info) {
-  const actualBuild = String(info?.buildId || info?.build_id || "missing");
-  const actualSchema = String(info?.uploadSchemaVersion || info?.upload_schema_version || info?.schemaVersion || "missing");
-  const actualParser = String(info?.parserBuildId || info?.parser_build_id || "missing");
-  const monthlySupported = info?.monthlyHistorySupported ?? info?.monthly_history_supported;
-  const rootOk = info?.deploymentRootOk ?? info?.deployment_root_ok;
-  const layout = String(info?.packageLayoutVersion || info?.package_layout_version || "not reported");
+  // Build metadata is diagnostic only. The upload is accepted or rejected from
+  // the actual response content so older compatible Python backends cannot block
+  // a valid calibration workflow.
+  const actualBuild = String(info?.buildId || info?.build_id || "legacy / not reported");
+  const actualSchema = String(info?.uploadSchemaVersion || info?.upload_schema_version || info?.schemaVersion || "legacy / not reported");
+  const actualParser = String(info?.parserBuildId || info?.parser_build_id || "legacy / not reported");
   const fingerprint = String(info?.serverFileFingerprint || info?.server_file_fingerprint || "not reported");
-  const legacyVersion = String(info?.appVersion || info?.app_version || info?.aadt_engine_version || "legacy backend");
-  const deploymentSteps = [
-    "This is a deployment mismatch, not an Excel-file error.",
-    "Replace the complete application with the contents of the flat-root V17.42 ZIP and restart the Python service.",
-    `Confirm /api/version reports build ${APP_BUILD_ID}, parser ${LIVE_UPLOAD_PARSER_BUILD_ID}, layout flat-root-v1 and deploymentRootOk true.`,
-    "Then hard-refresh the browser and upload the ZIP pack or Daily_Charger_kWh.xlsx again."
-  ];
-  if (actualBuild !== APP_BUILD_ID) return {
-    ok: false,
-    type: "deployment",
-    reason: `The browser is ${APP_RELEASE_VERSION}, but the running Python backend is ${actualBuild === "missing" ? `${legacyVersion} without a build ID` : actualBuild}. Expected ${APP_BUILD_ID}. Server fingerprint: ${fingerprint}.`,
-    what_to_do: deploymentSteps,
-    actualBuild,
-    fingerprint
-  };
-  if (actualSchema !== PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION) return { ok: false, type: "deployment", reason: `Live-upload schema mismatch. Expected ${PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION}; server returned ${actualSchema}.`, what_to_do: deploymentSteps, actualBuild, fingerprint };
-  if (actualParser !== LIVE_UPLOAD_PARSER_BUILD_ID) return { ok: false, type: "deployment", reason: `Live-history parser mismatch. Expected ${LIVE_UPLOAD_PARSER_BUILD_ID}; server returned ${actualParser}.`, what_to_do: deploymentSteps, actualBuild, fingerprint };
-  if (monthlySupported !== true) return { ok: false, type: "deployment", reason: "The running backend does not report monthly-history support.", what_to_do: deploymentSteps, actualBuild, fingerprint };
-  if (layout !== "flat-root-v1") return { ok: false, type: "deployment", reason: `The backend is not running from the approved flat-root package layout. Reported layout: ${layout}.`, what_to_do: deploymentSteps, actualBuild, fingerprint };
-  if (rootOk === false) return { ok: false, type: "deployment", reason: `The backend reports an incomplete deployment root: ${(info?.missingDeploymentFiles || info?.missing_deployment_files || []).join(", ") || "required files missing"}.`, what_to_do: deploymentSteps, actualBuild, fingerprint };
-  return { ok: true, fingerprint, actualBuild, layout };
+  const warnings = [];
+  if (actualBuild !== "legacy / not reported" && actualBuild !== APP_BUILD_ID) {
+    warnings.push(`Upload was parsed by backend ${actualBuild}; browser build is ${APP_BUILD_ID}. Data-content validation was used instead of blocking the upload.`);
+  }
+  if (actualBuild === "legacy / not reported") {
+    warnings.push("The backend did not report a build ID. The upload was validated from its parsed site data instead.");
+  }
+  return { ok: true, warnings, actualBuild, actualSchema, actualParser, fingerprint };
 }
 function portfolioSnapshotValidation(snapshot) {
-  if (!snapshot || !Array.isArray(snapshot.siteActuals)) return { ok: false, reason: "Upload response did not contain site actuals." };
-  const compatibility = portfolioServerCompatibility(snapshot);
-  if (!compatibility.ok) return compatibility;
+  if (!snapshot || !Array.isArray(snapshot.siteActuals) || snapshot.siteActuals.length === 0) {
+    return { ok: false, reason: "Upload response did not contain any site actuals." };
+  }
   const parsed = [...(snapshot.parsedFiles || []), ...(snapshot.siteActuals || []).flatMap(item => [item?.actual?.sourceFile, item?.sourceFile].filter(Boolean))]
     .join(" ")
     .toLowerCase();
-  if (/running[_\s-]*total|cumulative/.test(parsed)) return { ok: false, reason: "A cumulative/running-total file cannot be used as the primary daily actuals source." };
+  if (/running[_\s-]*total|cumulative/.test(parsed) && !/daily[_\s-]*charger[_\s-]*kwh/.test(parsed)) {
+    return { ok: false, reason: "A cumulative/running-total file cannot be used as the primary daily actuals source." };
+  }
   const dailyFilePresent = /daily[_\s-]*charger[_\s-]*kwh/.test(parsed) || (snapshot.parsedFiles || []).some(name => /daily.*charger.*kwh/i.test(String(name)));
   const historySiteCount = (snapshot.siteActuals || []).filter(item => Array.isArray(item?.actual?.monthlyHistory) && item.actual.monthlyHistory.length > 0).length;
   const monthlyObservationCount = (snapshot.siteActuals || []).reduce((acc, item) => acc + (Array.isArray(item?.actual?.monthlyHistory) ? item.actual.monthlyHistory.length : 0), 0);
-  if (dailyFilePresent && historySiteCount === 0) {
-    return { ok: false, reason: `The ${APP_RELEASE_VERSION} backend accepted Daily_Charger_kWh.xlsx but returned zero monthly histories. Expected build ${APP_BUILD_ID}; received ${snapshot.buildId || snapshot.build_id || "missing"}.` };
+  const numericKeys = ["rolling30Kwh", "rolling30Sessions", "rolling30NetRevenue", "dailyKwh", "dailySessions", "annualKwh", "annualSessions", "annualNetRevenue"];
+  const usableSiteCount = (snapshot.siteActuals || []).filter(item => {
+    const actual = item?.actual || {};
+    return numericKeys.some(key => Number.isFinite(Number(actual[key])) && Number(actual[key]) > 0)
+      || (Array.isArray(actual.monthlyHistory) && actual.monthlyHistory.length > 0);
+  }).length;
+  if (usableSiteCount === 0) {
+    return { ok: false, reason: "The server returned site rows, but none contained usable kWh, session, revenue or monthly-history data." };
   }
-  return { ok: true, historySiteCount, monthlyObservationCount, dailyFilePresent, fingerprint: compatibility.fingerprint };
+  const compatibility = portfolioServerCompatibility(snapshot);
+  const warnings = [...compatibility.warnings];
+  if (dailyFilePresent && historySiteCount === 0) {
+    warnings.push("Monthly histories were not returned by the backend. Uploaded run-rate actuals remain active; long-term history diagnostics will use the available fallback basis.");
+  }
+  return {
+    ok: true,
+    historySiteCount,
+    monthlyObservationCount,
+    dailyFilePresent,
+    usableSiteCount,
+    warnings,
+    fingerprint: compatibility.fingerprint,
+    actualBuild: compatibility.actualBuild
+  };
 }
 function portfolioSnapshotLooksSafe(snapshot) {
   return portfolioSnapshotValidation(snapshot).ok;
@@ -591,8 +602,8 @@ function savePortfolioLiveActuals(snapshot) {
     portfolioLiveUploadError = {
       message: validation.reason,
       what_to_do: [
-        `${validation.reason}`,
-        `Deploy the complete ${APP_RELEASE_VERSION} package, restart server.py, clear uploaded actuals, hard-refresh and upload Daily_Charger_kWh.xlsx again.`
+        "Upload Daily_Charger_kWh.xlsx, the individual Excel files, or the complete dashboard ZIP pack.",
+        "Confirm the export contains Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns."
       ]
     };
     try { sessionStorage.removeItem(PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY); } catch (_) {}
@@ -601,9 +612,10 @@ function savePortfolioLiveActuals(snapshot) {
   }
   portfolioLiveActualsSnapshot = {
     ...snapshot,
-    schemaVersion: snapshot.schemaVersion || PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION,
+    schemaVersion: snapshot.schemaVersion || snapshot.uploadSchemaVersion || "legacy-compatible",
     monthlyHistorySiteCount: Number(snapshot.monthlyHistorySiteCount ?? validation.historySiteCount ?? 0),
-    monthlyObservationCount: Number(snapshot.monthlyObservationCount ?? validation.monthlyObservationCount ?? 0)
+    monthlyObservationCount: Number(snapshot.monthlyObservationCount ?? validation.monthlyObservationCount ?? 0),
+    warnings: [...new Set([...(snapshot.warnings || []), ...(validation.warnings || [])])]
   };
   portfolioLiveUploadError = null;
   try {
@@ -638,7 +650,7 @@ function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {
   const recommendedFiles = ["Daily_Charger_kWh.xlsx", "Daily_kWh_All_Sites.xlsx", "Daily_Euro_All_Sites.xlsx", "Rolling_30_Day_Total_-_Euro_All_Sites.xlsx", "kWh_-_Per_Socket.xlsx", "ePF_-_Overview_Averages.xlsx"];
   const optionalFiles = ["ePower_Funded_-_Monthly_kWh_Total.xlsx", "kWh_-_Running_Total.xlsx", "ePF_-_Overview_Energy_-_Daily.xlsx", "ePF_-_Overview_Energy_-_Weekly.xlsx", "ePF_-_Overview_Value_-_Daily.xlsx", "ePF_-_Overview_Value_-_Weekly.xlsx"];
   const todo = portfolioLiveUploadError?.what_to_do || portfolioLiveUploadError?.whatToDo || ["Upload Daily_Charger_kWh.xlsx, the individual Excel pack, or the complete dashboard ZIP.", "Check the file includes Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns."];
-  const errorTitle = portfolioLiveUploadError?.errorType === "deployment" ? "Deployment mismatch detected." : "Upload could not be used.";
+  const errorTitle = "Upload could not be used.";
   const errorHtml = portfolioLiveUploadError ? `<div class="notice bad"><strong>${h(errorTitle)}</strong><br>${h(portfolioLiveUploadError.message || portfolioLiveUploadError.error || "Could not validate uploaded files.")}<br><span class="muted small">The app is still using the stored calibration dataset.</span><ol>${todo.map(item => `<li>${h(item)}</li>`).join("")}</ol></div>` : "";
   return `<section class="panel live-calibration-card ${hasLive ? "active" : "stored"}">
     <div class="live-calibration-head">
@@ -650,7 +662,7 @@ function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {
     ${errorHtml}
     ${warnings.length ? `<div class="notice warn"><strong>Upload warnings</strong><br>${warnings.slice(0,4).map(h).join("<br>")}</div>` : ""}
     ${supportingFiles.length ? `<details class="live-calibration-details"><summary>Supporting files detected</summary><p class="muted small">These files were accepted as supporting files. They are not used as the primary charger-level daily actuals source.</p><ul>${supportingFiles.slice(0,12).map(w => `<li>${h(String(w).replace(": not a charger-level daily actuals export; kept as supporting file only", ""))}</li>`).join("")}</ul></details>` : ""}
-    ${hasLive && status.zeroHistoryMatches ? `<div class="notice bad"><strong>Monthly history is not linked for ${number(status.zeroHistoryMatches,0)} matched sites.</strong><br>This usually means the browser and server are running different package versions. Reset the upload, hard-refresh and redeploy the flat-root V17.42 package before relying on the performance benchmark.</div>` : ""}
+    ${hasLive && status.zeroHistoryMatches ? `<div class="notice warn"><strong>Monthly history is unavailable for ${number(status.zeroHistoryMatches,0)} matched sites.</strong><br>The uploaded run-rate actuals remain active. Those sites use the available fallback basis for trend diagnostics.</div>` : ""}
     ${portfolioLiveMappingAudit(sites)}
     <div class="live-calibration-actions">
       <label class="file-button" for="portfolioCalibrationFiles">Choose calibration files or ZIP pack</label>
@@ -926,7 +938,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.42 flat-root deployment hotfix + ZIP calibration upload";
+const APP_BUILD_VERSION = "V17.44 restored upload compatibility + investor clarity";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -1091,12 +1103,12 @@ function aadtEngineMismatchWarning(ctx) {
   const source = String(t.source || "").toLowerCase();
   const mode = String(t.sample_mode || t.aadt_engine_mode || "").toLowerCase();
   const engineVersion = String(t.aadt_engine_version || "");
-  const hasCurrentServer = engineVersion.includes("V17.42");
+  const hasCurrentServer = engineVersion.includes("V17.44");
   const isOldCoordinateEngine = source.includes("ranked coordinate-enriched lookup") || mode.includes("ranked coordinate-enriched");
   const hasCandidates = Array.isArray(t.candidates) && t.candidates.length > 0;
   if (t.client_side_aadt_recalculated) return "";
   if (isOldCoordinateEngine && !hasCurrentServer) {
-    return "AADT API version mismatch: the browser is V17.42 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
+    return "AADT API version mismatch: the browser is V17.44 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
   }
   const plotted = (t.candidates || []).filter(c => c.official_location || c.mappable_location).length;
   if (hasCandidates && plotted === 0 && source.includes("tii")) {
@@ -1108,7 +1120,7 @@ function aadtEngineMismatchWarning(ctx) {
   return "";
 }
 
-const CLIENT_AADT_ENGINE_VERSION = "V17.42 browser provenance-controlled AADT engine";
+const CLIENT_AADT_ENGINE_VERSION = "V17.44 browser provenance-controlled AADT engine";
 let clientAadtRecordsPromise = null;
 // Coordinate provenance is supplied by the server/bundled location dataset; no hidden browser-only coordinate overrides.
 function clientAadtCounterId(rec) {
@@ -4039,11 +4051,11 @@ function portfolioFinancialPerformanceStatus(forecastKwh, modelKwh) {
 function portfolioFinancialHistoryQuality(fin) {
   const days = Number(fin?.operationalDays || 0);
   const historyMonths = Number(fin?.maturityForecast?.forward12m?.historyMonths ?? fin?.maturityForecast?.historyMonths ?? 0);
-  if (!fin?.hasActualKwh) return { low: true, label: "Low / missing history", note: "No usable actual kWh" };
-  if (!fin?.hasOperationalDays) return { low: true, label: "Low / missing history", note: "Operational days not confirmed" };
-  if (days < 60) return { low: true, label: "Low / missing history", note: `${number(days,0)} days of operation` };
-  if (historyMonths < 2) return { low: true, label: "Low / missing history", note: `${number(historyMonths,0)} monthly observations` };
-  return { low: false, label: "History usable", note: `${number(days,0)} days · ${number(historyMonths,0)} monthly observations` };
+  if (!fin?.hasActualKwh) return { low: true, key: "actual-unavailable", label: "Actual data unavailable", note: "No usable actual kWh" };
+  if (!fin?.hasOperationalDays) return { low: true, key: "start-unavailable", label: "Operating history unavailable", note: "Commercial start date not confirmed" };
+  if (days < 60) return { low: true, key: "early-operation", label: "Early operation", note: `${number(days,0)} day${Math.round(days) === 1 ? "" : "s"}` };
+  if (historyMonths < 2) return { low: true, key: "limited-history", label: "Limited history", note: historyMonths <= 0 ? "No completed monthly history" : "1 completed month" };
+  return { low: false, key: "usable-history", label: "History usable", note: `${number(days,0)} days · ${number(historyMonths,0)} monthly observations` };
 }
 function portfolioFinancialRow(site, benchmarks, maturityModel) {
   const result = portfolioSiteResults(site, benchmarks);
@@ -4135,7 +4147,7 @@ function portfolioFinancialRow(site, benchmarks, maturityModel) {
   fin.historyQuality = portfolioFinancialHistoryQuality(fin);
   fin.performanceBucket = fin.historyQuality.low ? "low-missing-history" : (fin.performanceStatus?.key || "review");
   fin.status = fin.historyQuality.low
-    ? { label: "Low / missing history", cls: "warn", note: fin.historyQuality.note }
+    ? { label: fin.historyQuality.label, cls: "warn", note: fin.historyQuality.note }
     : fin.performanceStatus;
   fin.enoughForPayback = hasActualKwh && hasActualCapex && hasOperationalDays && Number.isFinite(Number(runRatePaybackYears)) && runRatePaybackYears > 0;
   fin.paybackState = portfolioFinancialPaybackState(fin);
@@ -4219,7 +4231,7 @@ function portfolioFinancialCapexKey(fin) {
 function portfolioFinancialFilterDefinitions() {
   return [
     { key: "status", label: "Status", options: [
-      ["all", "All statuses"], ["above-benchmark", "Above benchmark"], ["in-benchmark", "In benchmark"], ["underperforming", "Underperforming"], ["low-missing-history", "Low / missing history"], ["review", "Review"]
+      ["all", "All statuses"], ["above-benchmark", "Above benchmark"], ["in-benchmark", "In benchmark"], ["underperforming", "Underperforming"], ["low-missing-history", "Early / limited data"], ["review", "Review"]
     ]},
     { key: "quality", label: "Data quality", options: [
       ["all", "All quality"], ["high", "High"], ["medium", "Medium"], ["revenue-est", "Revenue estimated"], ["capex-missing", "CAPEX missing"], ["low-days", "Low days"], ["days-missing", "Days missing"], ["no-actual-kwh", "No actual kWh"]
@@ -4475,7 +4487,7 @@ function portfolioFinancialAdvancedMethodologyPanel(model, rows) {
   return `<details class="panel portfolio-financial-advanced-methodology"><summary><span>Advanced forecast methodology & audit</span><small>Collapsed by default · maturity diagnostics are not part of the investor dashboard</small></summary><div class="portfolio-maturity-detail-body"><div class="portfolio-summary-grid">${kpi("Training sites", number(maturity.trainingSiteCount,0), `${number(maturity.eligibleTrainingSiteCount,0)} eligible with 365+ days`)}${kpi("Stable mature sites", number(maturity.stableSiteCount,0), "late-stage monthly slope within ±15%")} ${kpi("Revenue with usable history", pct(maturity.historyCoverage,0), "share of current revenue from sites with ≥5 observations")}${kpi("Mature training coverage", pct(maturity.matureTrainingCoverage,0), "revenue share from 365+ day sites with ≥10 months")}</div><p class="muted small">${h(model?.methodology || "Maturity methodology unavailable.")} The first 12 forecast months remain independent of this curve.</p>${chart}</div></details>`;
 }
 function portfolioFinancialPerformanceCards(summary) {
-  return `<div class="portfolio-summary-grid portfolio-financial-performance-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "forward forecast within ±15% of model")}${kpi("Underperforming", number(summary.underperforming,0), "forward forecast below model")}${kpi("Above benchmark", number(summary.outperforming,0), "forward forecast above model")}${kpi("Low / missing history", number(summary.notEnoughData,0), "variance remains visible where calculable")}</div>`;
+  return `<div class="portfolio-summary-grid portfolio-financial-performance-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "forward forecast within ±15% of model")}${kpi("Underperforming", number(summary.underperforming,0), "forward forecast below model")}${kpi("Above benchmark", number(summary.outperforming,0), "forward forecast above model")}${kpi("Early / limited data", number(summary.notEnoughData,0), "new, limited or unavailable actual history")}</div>`;
 }
 function portfolioFinancialInvestmentWarnings(summary) {
   if (!summary.capexMissing && !summary.noPayback) return `<div class="portfolio-investment-warnings good"><strong>Investment data checks passed</strong><span>All selected sites have tracked CAPEX and a positive run-rate payback calculation.</span></div>`;
@@ -4658,11 +4670,11 @@ function portfolioFinancialExportDisplayRow(fin) {
   return {
     site: fin.site?.name || "", configuration: fin.site?.modelEquivalentSummary || "", commercialTerms: commercial.label,
     status: fin.performanceStatus?.label || "Review", performanceBucket: fin.performanceBucket || "review", dataQuality: portfolioFinancialDataQualityShort(fin.dataQuality),
-    dataQualityNote: fin.historyQuality?.low ? fin.historyQuality.note : `${number(fin.operationalDays || 0,0)} days · ${number(forward.historyMonths || 0,0)} monthly observations`,
+    dataQualityNote: fin.historyQuality?.low ? `${fin.historyQuality.label} · ${fin.historyQuality.note}` : `${number(fin.operationalDays || 0,0)} days · ${number(forward.historyMonths || 0,0)} monthly observations`,
     days: Number.isFinite(Number(fin.operationalDays)) ? Number(fin.operationalDays) : null, daysLabel: Number.isFinite(Number(fin.operationalDays)) ? `${number(fin.operationalDays,0)} days` : "Not confirmed", daysBasis: fin.daysBasisLabel || "",
     actualCapex: Number.isFinite(actualCapex) ? actualCapex : null, modelDayOneCapex: Number.isFinite(modelCapex) ? modelCapex : null, capexDelta: Number.isFinite(capexDelta) ? capexDelta : null, capexDeltaPct, capexBand: fin.capexDeltaBand?.label || "", capexNote: fin.hasActualCapex ? `${modelCapex > 0 ? `model day-one ${currency(modelCapex, 0)} · ` : ""}${currency(capexDelta,0)} delta` : "CAPEX missing · run-rate payback unavailable",
     next12mKwh: Number(fin.next12mKwh || 0), modelForward12mKwh: Number(fin.modelForward12mKwh || 0), modelForward12mBasis: fin.modelForward12mBasis || "", performanceVariance: Number.isFinite(Number(fin.performanceVariance)) ? Number(fin.performanceVariance) : null, performanceClassification: fin.performanceStatus?.label || "Review",
-    next12mRevenue: Number(fin.next12mRevenue || 0), next12mRevenueLow: Number(fin.next12mRevenueLow || 0), next12mRevenueHigh: Number(fin.next12mRevenueHigh || 0), electricityCost: Number(fin.forecastElectricityCost || 0), opexExElectricity: Number(fin.forecastOpexExElectricity || 0), ebitda: Number(fin.forecastOperatingCashflow || 0),
+    next12mRevenue: Number(fin.next12mRevenue || 0), electricityCost: Number(fin.forecastElectricityCost || 0), opexExElectricity: Number(fin.forecastOpexExElectricity || 0), ebitda: Number(fin.forecastOperatingCashflow || 0),
     forecastConfidence: confidence.label || "Low", forecastBasis: forward.methodology || "Forward 12-month actual-trajectory forecast; no maturity uplift.",
     paybackYears: Number.isFinite(Number(fin.paybackYears)) ? Number(fin.paybackYears) : null, paybackLabel, paybackNote, longTermPaybackYears: Number.isFinite(Number(fin.longTermPaybackYears)) ? Number(fin.longTermPaybackYears) : null
   };
@@ -4673,13 +4685,13 @@ function portfolioFinancialExportMatrixRows(rows) {
     "Site", "Site detail", "Commercial terms", "Operating days", "Days basis",
     "Actual day-one CAPEX EUR", "Model day-one CAPEX EUR", "Day-one CAPEX delta EUR", "Day-one CAPEX delta %", "CAPEX accuracy band",
     "Next 12m forecast kWh", "Model forward 12m benchmark kWh", "Performance variance %", "Performance classification", "Data-quality note",
-    "Next 12m net revenue EUR", "Revenue downside EUR", "Revenue upside EUR", "Next 12m electricity EUR", "Next 12m OPEX excl electricity EUR", "Next 12m site EBITDA EUR",
+    "Next 12m net revenue EUR", "Next 12m electricity EUR", "Next 12m OPEX excl electricity EUR", "Next 12m site EBITDA EUR",
     "Run-rate payback years", "Run-rate payback note", "Forward forecast basis", "Long-term forecast payback years"
   ], ...display.map(r => [
     r.site, r.configuration, r.commercialTerms, portfolioFinancialExportNumber(r.days), r.daysBasis,
     portfolioFinancialExportNumber(r.actualCapex), portfolioFinancialExportNumber(r.modelDayOneCapex), portfolioFinancialExportNumber(r.capexDelta), portfolioFinancialExportNumber(r.capexDeltaPct), r.capexBand,
     portfolioFinancialExportNumber(r.next12mKwh), portfolioFinancialExportNumber(r.modelForward12mKwh), portfolioFinancialExportNumber(r.performanceVariance), r.performanceClassification, r.dataQualityNote,
-    portfolioFinancialExportNumber(r.next12mRevenue), portfolioFinancialExportNumber(r.next12mRevenueLow), portfolioFinancialExportNumber(r.next12mRevenueHigh), portfolioFinancialExportNumber(r.electricityCost), portfolioFinancialExportNumber(r.opexExElectricity), portfolioFinancialExportNumber(r.ebitda),
+    portfolioFinancialExportNumber(r.next12mRevenue), portfolioFinancialExportNumber(r.electricityCost), portfolioFinancialExportNumber(r.opexExElectricity), portfolioFinancialExportNumber(r.ebitda),
     portfolioFinancialExportNumber(r.paybackYears), r.paybackNote, r.forecastBasis, portfolioFinancialExportNumber(r.longTermPaybackYears)
   ])];
 }
@@ -4742,11 +4754,7 @@ function portfolioFinancialExportPayload() {
     annualEbitda: summary.operatingCashflow,
     paybackYears: summary.paybackYears,
     horizonRevenue: projection.horizonRevenue,
-    horizonRevenueLow: projection.horizonRevenueLow,
-    horizonRevenueHigh: projection.horizonRevenueHigh,
     horizonEbitda: projection.horizonEbitda,
-    horizonEbitdaLow: projection.horizonEbitdaLow,
-    horizonEbitdaHigh: projection.horizonEbitdaHigh,
     horizonElectricity: projection.horizonElectricity,
     horizonOpex: projection.horizonOpex,
     projectedPaybackYears: projection.projectedPaybackYears,
@@ -4768,13 +4776,9 @@ function portfolioFinancialExportPayload() {
     ["Next 12m site EBITDA EUR", summaryObject.nextYearEbitda, "Revenue minus electricity minus OPEX"],
     ["Portfolio run-rate payback years", summaryObject.paybackYears ?? "", "Actual day-one CAPEX / next-12-month site EBITDA"],
     [`${horizon} year revenue EUR`, summaryObject.horizonRevenue, "Base cumulative projection"],
-    [`${horizon} year revenue downside EUR`, summaryObject.horizonRevenueLow, "Downside maturity path"],
-    [`${horizon} year revenue upside EUR`, summaryObject.horizonRevenueHigh, "Upside maturity path"],
     [`${horizon} year electricity EUR`, summaryObject.horizonElectricity, "Cumulative electricity purchase cost"],
     [`${horizon} year OPEX excl electricity EUR`, summaryObject.horizonOpex, "Cumulative site operating cost"],
     [`${horizon} year EBITDA EUR`, summaryObject.horizonEbitda, "Base cumulative EBITDA proxy"],
-    [`${horizon} year EBITDA downside EUR`, summaryObject.horizonEbitdaLow, "Downside maturity path"],
-    [`${horizon} year EBITDA upside EUR`, summaryObject.horizonEbitdaHigh, "Upside maturity path"],
     [`${horizon} year net after CAPEX EUR`, summaryObject.netAfterCapex, "Cumulative EBITDA minus tracked CAPEX"],
     ["Projected portfolio payback years", summaryObject.projectedPaybackYears ?? "", "Calculated from the full 20-year monthly portfolio path"],
     ["Profitability margin", summaryObject.profitabilityMargin ?? "", "Horizon EBITDA / horizon revenue"]
@@ -4905,9 +4909,10 @@ function portfolioFinancialTableRow(fin) {
   const trendLabel = Math.abs(trendPct) < 0.0005 ? "neutral bounded trend" : `${trendPct > 0 ? "+" : ""}${pct(trendPct,1)} bounded monthly trend`;
   const kwhCell = fin.hasActualKwh ? portfolioFinancialMetric(kwh(fin.next12mKwh, 0), `model ${kwh(fin.modelForward12mKwh || 0,0)}`, "", `${forward.methodology || "Forward 12-month actual trajectory."} ${fin.modelForward12mBasis || ""}. ${trendLabel}.`) : "—";
   const varianceLabel = portfolioFinancialVarianceLabel(fin.performanceVariance);
-  const qualityNote = fin.historyQuality?.low ? `${fin.historyQuality.label} · ${fin.historyQuality.note}` : fin.historyQuality?.note || "History usable";
-  const performanceCell = `<div class="portfolio-performance-cell" title="${h(fin.performanceStatus?.note || "Performance comparison unavailable")}"><strong class="performance-variance ${h(fin.performanceStatus?.cls || "neutral")}">${h(varianceLabel)}</strong><span class="badge ${h(fin.performanceStatus?.cls || "neutral")}">${h(fin.performanceStatus?.label || "Review")}</span><small class="${fin.historyQuality?.low ? "low-history-note" : ""}">${h(qualityNote)}</small></div>`;
-  const revenueCell = fin.next12mRevenue > 0 ? portfolioFinancialMetric(currency(fin.next12mRevenue, 0), `range ${currency(fin.next12mRevenueLow,0)}–${currency(fin.next12mRevenueHigh,0)}`, "", "Forward 12-month net revenue from actual trajectory, bounded trend, seasonality, market growth and net tariff. Maturity is not used.") : "—";
+  const qualityNote = fin.historyQuality?.low ? `${fin.historyQuality.label} · ${fin.historyQuality.note}` : "";
+  const qualityHtml = qualityNote ? `<small class="low-history-note">${h(qualityNote)}</small>` : "";
+  const performanceCell = `<div class="portfolio-performance-cell" title="${h(fin.performanceStatus?.note || "Performance comparison unavailable")}"><strong class="performance-variance ${h(fin.performanceStatus?.cls || "neutral")}">${h(varianceLabel)}</strong><span class="badge ${h(fin.performanceStatus?.cls || "neutral")}">${h(fin.performanceStatus?.label || "Review")}</span>${qualityHtml}</div>`;
+  const revenueCell = fin.next12mRevenue > 0 ? portfolioFinancialMetric(currency(fin.next12mRevenue, 0), "base forecast used in EBITDA", "", "Forward 12-month net revenue used in the financial calculations. It is derived from actual trajectory, bounded trend, seasonality, market growth and net tariff. Maturity is not used.") : "—";
   const electricityCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastElectricityCost, 0), "included in EBITDA", "", "Forward 12-month electricity purchase cost based on forecast kWh and electricity-cost escalation.") : "—";
   const landlordShort = fin.landlordApplied ? "landlord included" : "landlord €0 — no terms";
   const opexCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOpexExElectricity, 0), landlordShort, "", `One forward 12-month OPEX value excluding electricity. ${fin.landlordNote || "No actual landlord terms provided."}`) : "—";
@@ -4940,8 +4945,8 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Every operating metric uses the same forward 12-month period. CAPEX compares actual and complete modelled day-one build cost. The projection horizon can be selected in one-year steps from 1 to 20.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
-    <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance versus model</h3><p class="muted small">Actual-led next-12-month forecast compared with the calibrated model for the same forward period.</p></div></div>${portfolioFinancialPerformanceCards(summary)}${portfolioFinancialInvestmentWarnings(summary)}<p class="muted small">Low or missing history is shown separately from the calculated variance; it never replaces the numerical comparison.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table</h3><p class="muted small">Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Showing ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Day-one CAPEX excludes replacements, later plugs and progressive CAPEX.</p><details class="portfolio-financial-methodology"><summary>Calculation definitions</summary><div><p><strong>Next 12m kWh:</strong> observed site trajectory, bounded trend, seasonality and near-term growth.</p><p><strong>Model benchmark:</strong> calibrated demand for the same next 12 months, weighted across applicable commercial-age model years.</p><p><strong>Performance:</strong> forecast minus model divided by model; ±15% is in benchmark. Low history remains a separate note.</p><p><strong>Site EBITDA:</strong> revenue − electricity − OPEX. <strong>Run-rate payback:</strong> actual day-one CAPEX ÷ next-12-month site EBITDA.</p></div></details></div></div>${filteredRows.length ? portfolioFinancialTableMarkup(headers, sorted.map(portfolioFinancialTableRow)) : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance versus model</h3><p class="muted small">Actual-led next-12-month forecast compared with the calibrated model for the same forward period.</p></div></div>${portfolioFinancialPerformanceCards(summary)}${portfolioFinancialInvestmentWarnings(summary)}<p class="muted small">Early or limited data is shown as one concise note and never replaces the numerical performance comparison.</p></section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table</h3><p class="muted small">Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Showing ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Day-one CAPEX excludes replacements, later plugs and progressive CAPEX.</p><details class="portfolio-financial-methodology"><summary>Calculation definitions</summary><div><p><strong>Next 12m kWh:</strong> observed site trajectory, bounded trend, seasonality and near-term growth.</p><p><strong>Model benchmark:</strong> calibrated demand for the same next 12 months, weighted across applicable commercial-age model years.</p><p><strong>Performance:</strong> forecast minus model divided by model; ±15% is in benchmark. Early or limited data remains a separate note.</p><p><strong>Site EBITDA:</strong> revenue − electricity − OPEX. <strong>Run-rate payback:</strong> actual day-one CAPEX ÷ next-12-month site EBITDA.</p></div></details></div></div>${filteredRows.length ? portfolioFinancialTableMarkup(headers, sorted.map(portfolioFinancialTableRow)) : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioFinancialAdvancedMethodologyPanel(maturityModel, filteredRows)}
     ${portfolioCommercialTermsModal(rows)}
   `;
@@ -5532,23 +5537,15 @@ function wirePage(r) {
     const form = new FormData();
     files.forEach(file => form.append("files", file, file.name));
     portfolioUploadInput.disabled = true;
-    if (portfolioUploadStatus) portfolioUploadStatus.textContent = "Validating calibration files and deployment compatibility…";
+    if (portfolioUploadStatus) portfolioUploadStatus.textContent = "Uploading and validating calibration files…";
     try {
-      const versionRes = await fetch(`/api/version?_=${Date.now()}`, { cache: "no-store" });
-      const versionInfo = await versionRes.json().catch(() => ({}));
-      const compatibility = portfolioServerCompatibility(versionInfo);
-      if (!versionRes.ok || !compatibility.ok) throw {
-        message: compatibility.reason || "Unable to verify the running backend build.",
-        errorType: compatibility.type || "deployment",
-        what_to_do: compatibility.what_to_do,
-        expectedBuildId: APP_BUILD_ID,
-        actualBuildId: versionInfo?.buildId || versionInfo?.build_id || "missing",
-        serverFileFingerprint: versionInfo?.serverFileFingerprint || versionInfo?.server_file_fingerprint || "not reported"
-      };
+      // Restore the reliable workflow used in earlier releases: upload first,
+      // then validate the returned site data. Backend build metadata is useful
+      // for diagnostics but must never prevent a valid Excel/ZIP upload.
       const res = await fetch("/api/import-live-calibration", { method: "POST", body: form, cache: "no-store" });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok || !payload.ok) throw payload;
-      if (!savePortfolioLiveActuals(payload)) throw portfolioLiveUploadError || { message: "The upload did not pass the V17.42 build and monthly-history validation." };
+      if (!savePortfolioLiveActuals(payload)) throw portfolioLiveUploadError || { message: "The upload response did not contain usable calibration data." };
       render();
     } catch (err) {
       portfolioLiveUploadError = err || { message: "Unknown upload error" };

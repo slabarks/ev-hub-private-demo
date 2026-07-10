@@ -1,37 +1,27 @@
-# EV Charging Hub Investment Tool — V17.38 Lean Production Build
+# EV Charging Hub Investment Tool — V17.39 Lean Production Build
 
-This is the production deployment package for **V17.38**.
+V17.39 is the production package for the revised Portfolio Financials logic and rendering.
 
-V17.38 retains the audited AADT resolver and maturity-aware financial engine, and refines the **Portfolio Financials** tab with a simpler maturity overview, clearer labels and an optional explanatory chart.
-
-## Included improvements
-- Portfolio Financials dashboard now includes a dedicated **Maturity outlook** window.
-- Portfolio Financials CAPEX comparison now uses the **modelled 20-year CAPEX projection** for apples-to-apples comparison.
-- Average maturity timing and maturity confidence are surfaced directly in the overview dashboard.
-- The maturity chart is no longer forced into the main overview; it is now optional and explanatory.
-- Clearer maturity wording in the site table and summary section.
-- Browser/server/package version alignment uplifted to V17.38.
+## Portfolio Financials basis
+- **Day-one CAPEX:** actual as-built CAPEX versus the complete modelled day-one build.
+- **Next 12 months:** actual site trajectory, bounded trend, seasonality, traffic growth and tariff.
+- **Maturity:** applied only from month 13 in 5/10/15/20-year projections.
+- **OPEX:** one forward value excluding electricity.
+- **Electricity:** separate forward value.
+- **Site EBITDA:** revenue minus electricity minus OPEX.
+- **Run-rate payback:** actual day-one CAPEX divided by next-12-month site EBITDA.
 
 ## Run locally
 ```bash
 python server.py
 ```
-Then open `http://localhost:10314/`.
+Open `http://localhost:10314/`.
 
-## Test command
+## Test
 ```bash
 npm test
 ```
 
-## Validation result
-PASS — V17.38 AADT, CAPEX bands, monthly history, maturity forecasting, exports, API and static smoke tests completed successfully.
-
-## Key files
-- `index.html`
-- `js/app.js`
-- `js/engines/maturityEngine.js`
-- `js/engines/exportEngine.js`
-- `server.py`
-- `tests/runTests.js`
-- `RELEASE_NOTES_V17.38_FINANCIAL_UI_REFINEMENT.md`
-- `V17.38_PRODUCTION_VALIDATION.md`
+## Release documents
+- `RELEASE_NOTES_V17.39_FORWARD_FINANCIALS.md`
+- `V17.39_PRODUCTION_VALIDATION.md`

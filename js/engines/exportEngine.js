@@ -742,23 +742,23 @@ function pfPdfDashboard(summary = {}, horizon = 5) {
   const payback = Number.isFinite(Number(summary.paybackYears)) ? `${number(summary.paybackYears, 1)} yrs` : "No payback";
   const margin = Number.isFinite(Number(summary.profitabilityMargin)) ? pct(Number(summary.profitabilityMargin), 1) : "—";
   return `<section class="pf-pdf-dashboard"><div class="pf-pdf-section-head"><h2>Portfolio dashboard</h2><p>Selected sites together. Revenue is projected unless a trusted trailing-12-month revenue field exists. Landlord costs are not assumed without actual landlord terms.</p></div>
-    ${pfPdfWindow("Investment position", "Actual investment against modelled CAPEX for the selected sites.", [
+    ${pfPdfWindow("Investment position", "Actual day-one investment against the complete modelled day-one build for the selected sites.", [
       pfPdfMetric("Selected sites", number(summary.selectedSites || 0, 0), `${number(summary.totalSites || 0,0)} active sites`),
       pfPdfMetric("Actual CAPEX tracked", currency(summary.actualCapex || 0, 0), `${number(summary.rowsWithCapex || 0,0)} of ${number(summary.selectedSites || 0,0)} selected sites`),
-      pfPdfMetric("Model CAPEX", currency(summary.modelCapex || 0, 0), "same sites with actual CAPEX"),
-      pfPdfMetric("CAPEX Δ", currency(summary.capexDelta || 0, 0), "model minus actual", Number(summary.capexDelta || 0) < 0 ? "bad" : "good"),
+      pfPdfMetric("Model day-one CAPEX", currency(summary.modelCapex || 0, 0), "no replacements or later expansion"),
+      pfPdfMetric("CAPEX Δ", currency(summary.capexDelta || 0, 0), "day-one model minus actual", Number(summary.capexDelta || 0) < 0 ? "bad" : "good"),
       pfPdfMetric("Within €30k", number(summary.capexWithin30k || 0, 0), "green accuracy band", "good"),
       pfPdfMetric("€30k–€50k", number(summary.capex30to50k || 0, 0), "amber accuracy band"),
       pfPdfMetric("Over €50k", number(summary.capexOver50k || 0, 0), "red accuracy band", Number(summary.capexOver50k || 0) > 0 ? "bad" : "good"),
-      pfPdfMetric("CAPEX Δ %", capexDeltaPct, "model minus actual / model")
+      pfPdfMetric("CAPEX Δ %", capexDeltaPct, "day-one model minus actual / model")
     ], "investment")}
-    ${pfPdfWindow("Current & next-12-month performance", "Current annual basis beside the maturity-adjusted monthly forecast.", [
-      pfPdfMetric("Current annual revenue", currency(summary.thisYearRevenue || 0, 0), "actual T12M or annualised basis"),
-      pfPdfMetric("Next 12m revenue", currency(summary.nextYearRevenue || 0, 0), "maturity + seasonality + growth"),
-      pfPdfMetric("Annualised kWh", kwh(summary.annualKwh || 0, 0), `${number(summary.rowsWithActuals || 0,0)} selected sites with usable actuals`),
-      pfPdfMetric("Current OPEX / yr", currency(summary.annualOpex || 0, 0), "excludes electricity; landlord only if provided"),
-      pfPdfMetric("Next 12m EBITDA", currency(summary.nextYearEbitda || 0, 0), "maturity-adjusted monthly cash flow"),
-      pfPdfMetric("Portfolio payback", payback, `${number(summary.paybackEligible || 0,0)} sites forecast within 20 years`)
+    ${pfPdfWindow("Forward 12-month performance", "One consistent forward period for every selected site. Maturity is excluded from year 1.", [
+      pfPdfMetric("Next 12m kWh", kwh(summary.next12mKwh || 0, 0), `${number(summary.rowsWithActuals || 0,0)} selected sites with usable actuals`),
+      pfPdfMetric("Next 12m net revenue", currency(summary.nextYearRevenue || 0, 0), "actual trajectory + bounded trend + seasonality"),
+      pfPdfMetric("Next 12m electricity", currency(summary.nextYearElectricity || 0, 0), "forecast kWh × electricity cost"),
+      pfPdfMetric("Next 12m OPEX excl. electricity", currency(summary.nextYearOpex || 0, 0), "one comparable forward operating-cost value"),
+      pfPdfMetric("Next 12m site EBITDA", currency(summary.nextYearEbitda || 0, 0), "revenue − electricity − OPEX"),
+      pfPdfMetric("Portfolio run-rate payback", payback, "actual day-one CAPEX / next-12-month site EBITDA")
     ], "operating")}
     ${pfPdfWindow("Projection & profitability", `Selected ${number(horizon || 5,0)}-year projection.`, [
       pfPdfMetric("Projection horizon", `${number(horizon || 5,0)} yrs`, "active report setting"),
@@ -792,13 +792,13 @@ export async function exportPortfolioFinancialsPdf(payload) {
     compactPdfCell(r.site, r.configuration || r.commercialTerms),
     compactPdfCell(r.daysLabel, r.daysBasis),
     compactPdfCell(Number.isFinite(r.actualCapex) ? currency(r.actualCapex, 0) : "CAPEX missing", `${r.capexBand || ""}${r.capexBand && r.capexNote ? " · " : ""}${r.capexNote || ""}`),
-    compactPdfCell(kwh(r.annualKwh, 0), r.kwhNote),
-    compactPdfCell(currency(r.next12mRevenue, 0), `current ${currency(r.annualRevenue,0)} · mature ${currency(r.matureAnnualRevenue,0)}`),
-    compactPdfCell(Number.isFinite(r.maturityPct) ? pct(Math.min(1, r.maturityPct), 0) : "—", `${r.monthsToMaturity > 0 ? `${number(r.monthsToMaturity,0)} mo to 95%` : "mature"} · ${r.maturityConfidence}`),
-    compactPdfCell(currency(r.opexExElectricity, 0), r.opexNote),
-    compactPdfCell(currency(r.ebitda, 0), r.ebitdaNote),
+    compactPdfCell(kwh(r.next12mKwh, 0), r.forecastConfidence),
+    compactPdfCell(currency(r.next12mRevenue, 0), `range ${currency(r.next12mRevenueLow,0)}–${currency(r.next12mRevenueHigh,0)}`),
+    compactPdfCell(currency(r.electricityCost, 0), "included in EBITDA"),
+    compactPdfCell(currency(r.opexExElectricity, 0), r.commercialTerms),
+    compactPdfCell(currency(r.ebitda, 0), "revenue − electricity − OPEX"),
     compactPdfCell(r.paybackLabel, r.paybackNote),
-    compactPdfCell(r.status, r.dataQuality)
+    compactPdfCell(r.forecastConfidence, r.dataQuality)
   ]);
   const report = `
   <section class="print-page portfolio-page portfolio-financial-print-page portfolio-financial-summary-page">
@@ -823,10 +823,10 @@ export async function exportPortfolioFinancialsPdf(payload) {
   <section class="print-page portfolio-page portfolio-financial-print-page portfolio-financial-table-page">
     <div class="panel portfolio-financial-print-panel">
       <h3>Site financial performance table</h3>
-      <p class="report-caption">Same investor table as the app: Site, Days, CAPEX, current kWh, next-12-month revenue, maturity, next-12-month OPEX/EBITDA, payback and status/quality.</p>
+      <p class="report-caption">Same investor table as the app: Site, Days, day-one CAPEX, next-12-month kWh/revenue/electricity/OPEX/site EBITDA, run-rate payback and forecast confidence.</p>
       <div class="report-table-wrap portfolio-financial-pdf-table-wrap">
         <table class="portfolio-financial-pdf-table">
-          <thead><tr>${["Site", "Days", "CAPEX", "kWh / yr", "Next 12m revenue", "Maturity", "Next 12m OPEX", "Next 12m EBITDA", "Payback", "Status / quality"].map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+          <thead><tr>${["Site", "Days", "Day-one CAPEX", "Next 12m kWh", "Next 12m revenue", "Electricity", "OPEX excl. elec.", "Site EBITDA", "Run-rate payback", "Confidence"].map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
           <tbody>${tableRows.map(row => `<tr>${row.map(x => `<td>${x}</td>`).join("")}</tr>`).join("")}</tbody>
         </table>
       </div>

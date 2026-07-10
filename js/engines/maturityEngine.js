@@ -383,6 +383,156 @@ function impliedCurveAge(model, factor) {
   }, { age: 1, distance: Number.POSITIVE_INFINITY }).age;
 }
 
+function forwardForecastConfidence(dataDays, historyLength) {
+  if (dataDays >= 365 && historyLength >= 10) return { key: "high", label: "High", uncertainty: 0.12 };
+  if (dataDays >= 180 && historyLength >= 5) return { key: "medium", label: "Medium", uncertainty: 0.18 };
+  if (dataDays >= 60 && historyLength >= 2) return { key: "medium-low", label: "Medium-low", uncertainty: 0.24 };
+  return { key: "low", label: "Low", uncertainty: 0.32 };
+}
+
+function forwardTrendPolicy(dataDays, historyLength, rawMonthlyGrowth) {
+  if (!Number.isFinite(rawMonthlyGrowth) || historyLength < 2 || dataDays < 60) {
+    return { monthlyGrowth: 0, rawMonthlyGrowth: Number.isFinite(rawMonthlyGrowth) ? rawMonthlyGrowth : null, weight: 0, cap: 0 };
+  }
+  let weight = 0.35;
+  let cap = 0.025;
+  let floor = -0.018;
+  if (dataDays >= 365) {
+    weight = 0.75;
+    cap = 0.015;
+    floor = -0.012;
+  } else if (dataDays >= 180) {
+    weight = 0.60;
+    cap = 0.020;
+    floor = -0.015;
+  }
+  return {
+    monthlyGrowth: clamp(rawMonthlyGrowth * weight, floor, cap),
+    rawMonthlyGrowth,
+    weight,
+    cap
+  };
+}
+
+function siteSeasonalityFactors(history, portfolioSeasonality) {
+  if (history.length < 10) return (portfolioSeasonality || []).map(x => Number(x?.factor || 1));
+  const usable = history.filter(row => row.dailyKwh > 0 && row.calendarDays >= 20);
+  const baseline = median(usable.map(row => row.dailyKwh));
+  if (!(baseline > 0)) return (portfolioSeasonality || []).map(x => Number(x?.factor || 1));
+  const grouped = Array.from({ length: 12 }, () => []);
+  usable.forEach(row => grouped[row.calendarMonth - 1].push(row.dailyKwh / baseline));
+  let factors = grouped.map((values, idx) => {
+    const portfolio = Number(portfolioSeasonality?.[idx]?.factor || 1);
+    if (!values.length) return portfolio;
+    const siteFactor = clamp(median(values), 0.78, 1.24);
+    return siteFactor * 0.55 + portfolio * 0.45;
+  });
+  const avg = mean(factors) || 1;
+  factors = factors.map(value => value / avg);
+  return factors;
+}
+
+function forwardBaseAdjustedDaily({ dataDays, annualDaily, recentAdjusted }) {
+  if (!(recentAdjusted > 0)) return Math.max(0, Number(annualDaily || 0));
+  if (!(annualDaily > 0)) return recentAdjusted;
+  const recentWeight = dataDays < 60 ? 0.35 : dataDays < 180 ? 0.55 : dataDays < 365 ? 0.70 : 0.75;
+  return recentAdjusted * recentWeight + annualDaily * (1 - recentWeight);
+}
+
+export function forecastSiteForward12M(params = {}) {
+  const site = params.site || {};
+  const model = params.model || buildMaturityModel([]);
+  const history = historyForSite(site);
+  const dataDays = Math.max(0, Number(params.dataDays ?? maturityDays(site) ?? 0));
+  const latest = currentDateParts(params.latestDate || site?.actual?.asOfDate || site?.liveActuals?.asOfDate);
+  const currentCalendarMonth = latest.month;
+  const currentSeasonality = seasonalityFactor(model.seasonality, currentCalendarMonth);
+  const annualKwh = Math.max(0, Number(params.currentAnnualKwh || 0));
+  const annualRevenue = Math.max(0, Number(params.currentAnnualRevenue || 0));
+  const annualSessions = Math.max(0, Number(params.currentAnnualSessions || 0));
+  const annualDaily = annualKwh > 0 ? annualKwh / 365 : null;
+  const recentDailyInput = finitePositive(params.recentDailyKwh);
+  const historyAdjustedDaily = recentAdjustedDaily(history, model.seasonality);
+  const recentAdjusted = historyAdjustedDaily || (recentDailyInput ? recentDailyInput / currentSeasonality : annualDaily);
+  const baseAdjustedDaily = forwardBaseAdjustedDaily({ dataDays, annualDaily, recentAdjusted });
+  const trend = recentTrendInfo(history, model.seasonality);
+  const trendPolicy = forwardTrendPolicy(dataDays, history.length, trend.monthlyGrowth);
+  const seasonality = siteSeasonalityFactors(history, model.seasonality);
+  const fallbackPrice = Math.max(0, Number(params.fallbackPrice || 0));
+  const currentPrice = annualKwh > 0 && annualRevenue / annualKwh >= 0.20 && annualRevenue / annualKwh <= 2.0
+    ? annualRevenue / annualKwh
+    : fallbackPrice;
+  const avgSessionKwh = annualSessions > 0 && annualKwh > 0
+    ? annualKwh / annualSessions
+    : Math.max(1, Number(params.averageSessionKwh || 30.4));
+  const trafficGrowth = clamp(Number(params.trafficGrowth || 0), -0.20, 0.25);
+  const tariffGrowth = clamp(Number(params.tariffGrowth || 0), -0.20, 0.25);
+  const confidence = forwardForecastConfidence(dataDays, history.length);
+  const monthly = [];
+  let trendFactor = 1;
+  for (let offset = 1; offset <= 12; offset += 1) {
+    if (offset <= 6) {
+      const decay = 1 - (offset - 1) / 6;
+      trendFactor *= 1 + trendPolicy.monthlyGrowth * decay;
+    }
+    const calendarMonth = futureCalendarMonth(currentCalendarMonth, offset);
+    const seasonal = Number(seasonality[calendarMonth - 1] || 1);
+    const marketGrowth = Math.pow(1 + trafficGrowth, offset / 12);
+    const priceGrowth = Math.pow(1 + tariffGrowth, offset / 12);
+    const days = DAYS_PER_MONTH;
+    const adjustedDaily = Math.max(0, baseAdjustedDaily * trendFactor * marketGrowth);
+    const kwh = adjustedDaily * seasonal * days;
+    const sessions = avgSessionKwh > 0 ? kwh / avgSessionKwh : 0;
+    const revenue = kwh * currentPrice * priceGrowth;
+    const lowerKwh = kwh * (1 - confidence.uncertainty);
+    const upperKwh = kwh * (1 + confidence.uncertainty);
+    monthly.push({
+      month: offset,
+      calendarMonth,
+      days,
+      seasonalFactor: seasonal,
+      trendFactor,
+      marketGrowth,
+      priceGrowth,
+      adjustedDailyKwh: adjustedDaily,
+      kwh,
+      sessions,
+      revenue,
+      lowerKwh,
+      upperKwh,
+      lowerRevenue: lowerKwh * currentPrice * priceGrowth,
+      upperRevenue: upperKwh * currentPrice * priceGrowth,
+      forecastStage: "forward-actual-trajectory"
+    });
+  }
+  const sum = (rows, key) => rows.reduce((acc, row) => acc + (Number(row[key]) || 0), 0);
+  const methodology = dataDays < 60
+    ? "Forward 12-month forecast from observed run-rate, conservative stabilisation, portfolio seasonality and near-term market/tariff growth; no maturity uplift."
+    : history.length >= 2
+      ? "Forward 12-month forecast from observed run-rate, bounded recent trend, seasonality and near-term market/tariff growth; no maturity uplift."
+      : "Forward 12-month forecast from the stored observed run-rate with neutral short-term trend, portfolio seasonality and near-term market/tariff growth; no maturity uplift.";
+  return {
+    source: "actual-forward",
+    label: "Actual-trajectory forward forecast",
+    methodology,
+    confidence,
+    dataDays,
+    historyMonths: history.length,
+    baseAdjustedDailyKwh: baseAdjustedDaily,
+    trendPolicy,
+    recentTrend: trend,
+    currentPrice,
+    avgSessionKwh,
+    seasonality,
+    monthly,
+    next12mKwh: sum(monthly, "kwh"),
+    next12mSessions: sum(monthly, "sessions"),
+    next12mRevenue: sum(monthly, "revenue"),
+    next12mRevenueLow: sum(monthly, "lowerRevenue"),
+    next12mRevenueHigh: sum(monthly, "upperRevenue")
+  };
+}
+
 export function forecastSiteMaturity(params = {}) {
   const site = params.site || {};
   const model = params.model || buildMaturityModel([]);
@@ -412,10 +562,12 @@ export function forecastSiteMaturity(params = {}) {
   const currentCurveFactor = clamp(curveFactor(model, forecastAgeMonths, "p50"), MIN_FACTOR, 1.05);
   const observedPlateauDaily = recentAdjusted ? recentAdjusted / Math.max(currentCurveFactor, 0.25) : null;
   let actualWeight = actualCredibilityWeight(dataDays, history.length);
-  if (lateRamp) actualWeight = Math.min(actualWeight, 0.70);
+  if (dataDays >= 365 && !lateRamp) actualWeight = 0.95;
+  else if (lateRamp) actualWeight = Math.min(actualWeight, 0.70);
   let plateauDaily = null;
   if (observedPlateauDaily && modelPlateauDaily) plateauDaily = observedPlateauDaily * actualWeight + modelPlateauDaily * (1 - actualWeight);
   else plateauDaily = observedPlateauDaily || modelPlateauDaily || annualDaily || 0;
+  if (dataDays >= 365 && !lateRamp && recentAdjusted) plateauDaily = recentAdjusted;
   plateauDaily = Math.max(0, plateauDaily || 0);
 
   const annualKwh = Math.max(0, Number(params.currentAnnualKwh || 0));
@@ -441,34 +593,54 @@ export function forecastSiteMaturity(params = {}) {
     monthsToMaturity = foundOffset || Math.max(0, Math.ceil((model.curve.length || 24) - forecastAgeMonths));
   }
 
-  const monthly = [];
-  for (let offset = 1; offset <= horizonMonths; offset += 1) {
+  const forward12 = params.forward12m || forecastSiteForward12M(params);
+  const monthly = forward12.monthly.map(month => ({ ...month }));
+  const month12 = monthly[11] || monthly.at(-1) || null;
+  const month12Seasonality = month12 ? Number(month12.seasonalFactor || 1) : 1;
+  const month12AdjustedDaily = month12 && Number(month12.kwh || 0) > 0
+    ? Number(month12.kwh) / Math.max(1, Number(month12.days || DAYS_PER_MONTH)) / Math.max(0.5, month12Seasonality)
+    : Math.max(0, Number(forward12.baseAdjustedDailyKwh || annualDaily || 0));
+  const maturityEligible = dataDays < 365 || lateRamp;
+
+  for (let offset = 13; offset <= horizonMonths; offset += 1) {
     const age = forecastAgeMonths + offset;
     const calendarMonth = futureCalendarMonth(currentCalendarMonth, offset);
     const seasonal = seasonalityFactor(model.seasonality, calendarMonth);
-    const volumeGrowth = Math.pow(1 + trafficGrowth, offset / 12);
+    const beyondYearOne = offset - 12;
+    const continuationGrowth = Math.pow(1 + trafficGrowth, beyondYearOne / 12);
+    const fullMarketGrowth = Math.pow(1 + trafficGrowth, offset / 12);
     const priceGrowth = Math.pow(1 + tariffGrowth, offset / 12);
     const factor = curveFactor(model, age, "p50");
     const lowerFactor = curveFactor(model, age, "p25");
     const upperFactor = curveFactor(model, age, "p75");
+    const continuationDaily = month12AdjustedDaily * continuationGrowth;
+    const maturityTargetDaily = plateauDaily * factor * fullMarketGrowth;
+    const transitionWeight = maturityEligible ? Math.min(1, beyondYearOne / 12) : 0;
+    const adjustedDaily = continuationDaily * (1 - transitionWeight) + maturityTargetDaily * transitionWeight;
     const days = DAYS_PER_MONTH;
-    const kwh = plateauDaily * factor * seasonal * days * volumeGrowth;
+    const kwh = Math.max(0, adjustedDaily * seasonal * days);
     const sessions = avgSessionKwh > 0 ? kwh / avgSessionKwh : 0;
     const revenue = kwh * currentPrice * priceGrowth;
-    const lowerKwh = plateauDaily * (1 - confidence.uncertainty) * lowerFactor * seasonal * days * volumeGrowth;
-    const upperKwh = plateauDaily * (1 + confidence.uncertainty) * upperFactor * seasonal * days * volumeGrowth;
+    const lowerTargetDaily = plateauDaily * (1 - confidence.uncertainty) * lowerFactor * fullMarketGrowth;
+    const upperTargetDaily = plateauDaily * (1 + confidence.uncertainty) * upperFactor * fullMarketGrowth;
+    const lowerAdjustedDaily = continuationDaily * (1 - transitionWeight) + lowerTargetDaily * transitionWeight;
+    const upperAdjustedDaily = continuationDaily * (1 - transitionWeight) + upperTargetDaily * transitionWeight;
+    const lowerKwh = Math.max(0, lowerAdjustedDaily * seasonal * days);
+    const upperKwh = Math.max(0, upperAdjustedDaily * seasonal * days);
     monthly.push({
       month: offset,
       ageMonth: age,
       calendarMonth,
       curveFactor: factor,
+      transitionWeight,
       kwh,
       sessions,
       revenue,
       lowerKwh,
       upperKwh,
       lowerRevenue: lowerKwh * currentPrice * priceGrowth,
-      upperRevenue: upperKwh * currentPrice * priceGrowth
+      upperRevenue: upperKwh * currentPrice * priceGrowth,
+      forecastStage: maturityEligible ? "long-term-maturity-transition" : "long-term-observed-run-rate"
     });
   }
   const first12 = monthly.slice(0, 12);
@@ -477,8 +649,9 @@ export function forecastSiteMaturity(params = {}) {
   const matureAnnualRevenue = matureAnnualKwh * currentPrice;
   return {
     source: model.source,
-    methodology: model.methodology,
-    confidence,
+    methodology: `${forward12.methodology} Long-term maturity transition begins from month 13 for young or still-ramping sites.`,
+    confidence: forward12.confidence,
+    longTermConfidence: confidence,
     ageMonths,
     forecastAgeMonths,
     currentCurveFactor,
@@ -498,8 +671,9 @@ export function forecastSiteMaturity(params = {}) {
     currentPrice,
     avgSessionKwh,
     monthly,
+    forward12m: forward12,
     historyMonths: history.length,
     trainingSiteCount: model.trainingSiteCount || 0,
-    label: lateRamp ? "Late-ramp observed trend" : model.source === "empirical" ? "Mature-cohort trend" : "Model-prior trend"
+    label: "Actual trajectory Y1; maturity from month 13"
   };
 }

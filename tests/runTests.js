@@ -23,8 +23,8 @@ const app = fs.readFileSync(path.join(root, "js", "app.js"), "utf8");
 const server = fs.readFileSync(path.join(root, "server.py"), "utf8");
 const css = fs.readFileSync(path.join(root, "assets", "styles.css"), "utf8");
 const bundle = JSON.parse(fs.readFileSync(path.join(root, "data", "tii_counter_locations_bundled_vetted.json"), "utf8"));
-assert.match(app, /V17\.38 browser provenance-controlled AADT engine/);
-assert.match(server, /V17\.38 AADT audited resolver/);
+assert.match(app, /V17\.39 browser provenance-controlled AADT engine/);
+assert.match(server, /V17\.39 AADT audited resolver/);
 assert.match(app, /if \(absolute <= 30000\).*capex-delta-green/);
 assert.match(app, /if \(absolute <= 50000\).*capex-delta-amber/);
 assert.match(app, /return \{ key: "red", cls: "capex-delta-red"/);
@@ -42,7 +42,19 @@ assert.match(css, /\.portfolio-financial-metric\.capex-delta-amber/);
 assert.match(css, /\.portfolio-financial-metric\.capex-delta-red/);
 assert.match(app, /buildMaturityModel/);
 assert.match(app, /forecastSiteMaturity/);
+assert.match(app, /forecastSiteForward12M/);
 assert.match(app, /annualElectricityCostEscalation/);
+assert.match(app, /result\.yearByYear\?\.derived\?\.initialInvestmentCapex/);
+assert.doesNotMatch(app, /portfolioCapexInfo\(site, result\.financialSummary\?\.totalCapex/);
+assert.match(app, /portfolioFinancialSortHeader\("electricity", "Electricity"\)/);
+assert.match(app, /portfolioFinancialSortHeader\("confidence", "Forecast confidence"\)/);
+assert.doesNotMatch(app, /portfolioFinancialSortHeader\("maturity", "Maturity"\)/);
+assert.match(app, /revenue − electricity − OPEX/);
+assert.match(app, /actual day-one CAPEX \/ next-12-month site EBITDA/);
+assert.match(app, /portfolio-financial-scroll-top/);
+assert.match(css, /portfolio-financial-table th:nth-child\(10\)/);
+assert.match(css, /portfolio-financial-table td:first-child[\s\S]*position: sticky/);
+assert.match(css, /portfolio-financial-table \{[\s\S]*table-layout: fixed/);
 assert.match(server, /"monthlyHistory": monthly_history/);
 assert.match(app, /Cumulative actual revenue annualised/);
 assert.ok(app.indexOf("serverFallback") < app.indexOf("CLIENT_TII_COUNTER_LOCATION_BUNDLED_URL", app.indexOf("async function loadClientOfficialAadtLocations")), "client should retain server fallback while attempting official data");
@@ -98,7 +110,7 @@ try {
   const versionResp = await waitFor(`http://127.0.0.1:${port}/api/version`);
   const version = await versionResp.json();
   assert.equal(version.ok, true);
-  assert.match(version.aadt_engine_version, /V17\.38/);
+  assert.match(version.aadt_engine_version, /V17\.39/);
 
   const empty = await fetch(`http://127.0.0.1:${port}/api/auto-tii-aadt`);
   assert.equal(empty.status, 400);
@@ -123,7 +135,7 @@ try {
   const indexResp = await fetch(`http://127.0.0.1:${port}/`);
   assert.equal(indexResp.status, 200);
   const indexText = await indexResp.text();
-  assert.match(indexText, /EV Charging Hub Investment Tool V17\.38/i);
+  assert.match(indexText, /EV Charging Hub Investment Tool V17\.39/i);
 
   const maturityResp = await fetch(`http://127.0.0.1:${port}/js/engines/maturityEngine.js`);
   assert.equal(maturityResp.status, 200);
@@ -137,5 +149,5 @@ try {
 }
 
 console.log("\n[6/6] Result");
-console.log("PASS — V17.38 AADT, CAPEX bands, monthly history, maturity forecasting, exports, API and static smoke tests completed successfully.");
+console.log("PASS — V17.39 AADT, CAPEX bands, monthly history, maturity forecasting, exports, API and static smoke tests completed successfully.");
 if (logs.trim()) console.log("Server smoke log:\n" + logs.trim());

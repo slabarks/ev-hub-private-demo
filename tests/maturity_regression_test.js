@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { buildMaturityModel, forecastSiteMaturity, isotonicNonDecreasing } from "../js/engines/maturityEngine.js";
+import { buildMaturityModel, forecastSiteForward12M, forecastSiteMaturity, isotonicNonDecreasing } from "../js/engines/maturityEngine.js";
 
 function syntheticHistory(siteScale = 1, months = 18, startMonth = 1) {
   const ramp = [0.34, 0.43, 0.51, 0.59, 0.66, 0.72, 0.78, 0.83, 0.88, 0.92, 0.95, 0.97, 0.985, 0.995, 1.0, 1.0, 1.01, 1.0];
@@ -90,6 +90,63 @@ assert.ok(forecast.next12mRevenue <= forecast.next12mRevenueHigh);
 assert.ok(forecast.monthly.every(row => [row.kwh, row.sessions, row.revenue, row.lowerRevenue, row.upperRevenue].every(Number.isFinite)));
 assert.ok(forecast.monthly.every(row => row.kwh >= 0 && row.revenue >= 0));
 
+const forwardOnly = forecastSiteForward12M({
+  site: early,
+  model,
+  dataDays: 180,
+  latestDate: "2025-07-31",
+  currentAnnualKwh,
+  currentAnnualRevenue: currentAnnualKwh * 0.64,
+  currentAnnualSessions: currentAnnualKwh / 30.4,
+  recentDailyKwh: currentAnnualKwh / 365,
+  modelMatureAnnualKwh: 56000,
+  trafficGrowth: 0.01,
+  tariffGrowth: 0.02,
+  fallbackPrice: 0.66,
+  averageSessionKwh: 30.4
+});
+assert.equal(forwardOnly.monthly.length, 12);
+assert.equal(forwardOnly.source, "actual-forward");
+assert.ok(forwardOnly.monthly.every(row => row.forecastStage === "forward-actual-trajectory"));
+assert.ok(Math.abs(forwardOnly.next12mRevenue - forecast.next12mRevenue) < 1e-6, "year 1 must equal the independent forward forecast");
+assert.ok(forecast.monthly.slice(0, 12).every(row => row.forecastStage === "forward-actual-trajectory"));
+assert.ok(forecast.monthly.slice(12).some(row => row.forecastStage === "long-term-maturity-transition"));
+
+const lowPlateauForecast = forecastSiteMaturity({
+  site: early,
+  model,
+  dataDays: 180,
+  latestDate: "2025-07-31",
+  currentAnnualKwh,
+  currentAnnualRevenue: currentAnnualKwh * 0.64,
+  currentAnnualSessions: currentAnnualKwh / 30.4,
+  recentDailyKwh: currentAnnualKwh / 365,
+  modelMatureAnnualKwh: 25000,
+  trafficGrowth: 0.01,
+  tariffGrowth: 0.02,
+  fallbackPrice: 0.66,
+  averageSessionKwh: 30.4,
+  horizonMonths: 240
+});
+const highPlateauForecast = forecastSiteMaturity({
+  site: early,
+  model,
+  dataDays: 180,
+  latestDate: "2025-07-31",
+  currentAnnualKwh,
+  currentAnnualRevenue: currentAnnualKwh * 0.64,
+  currentAnnualSessions: currentAnnualKwh / 30.4,
+  recentDailyKwh: currentAnnualKwh / 365,
+  modelMatureAnnualKwh: 120000,
+  trafficGrowth: 0.01,
+  tariffGrowth: 0.02,
+  fallbackPrice: 0.66,
+  averageSessionKwh: 30.4,
+  horizonMonths: 240
+});
+assert.ok(Math.abs(lowPlateauForecast.next12mRevenue - highPlateauForecast.next12mRevenue) < 1e-6, "mature-state estimate must not change next-12-month revenue");
+assert.notEqual(Math.round(lowPlateauForecast.monthly[23].revenue), Math.round(highPlateauForecast.monthly[23].revenue), "mature-state estimate should affect long-term projection after month 12");
+
 const lateRampHistory = Array.from({ length: 14 }, (_, idx) => {
   const calendarMonth = (idx % 12) + 1;
   const days = [31,28,31,30,31,30,31,31,30,31,30,31][calendarMonth - 1];
@@ -113,7 +170,7 @@ const lateRampForecast = forecastSiteMaturity({
 assert.equal(lateRampForecast.lateRamp, true);
 assert.ok(lateRampForecast.forecastAgeMonths < lateRampForecast.ageMonths);
 assert.ok(lateRampForecast.monthsToMaturity > 0);
-assert.notEqual(lateRampForecast.confidence.key, "high");
+assert.notEqual(lateRampForecast.longTermConfidence.key, "high");
 
 const prior = buildMaturityModel([]);
 assert.equal(prior.source, "prior");
@@ -121,4 +178,4 @@ assert.equal(prior.trainingSiteCount, 0);
 assert.equal(prior.curve.length, 24);
 assert.deepEqual(isotonicNonDecreasing([1, 3, 2, 4]), [1, 2.5, 2.5, 4]);
 
-console.log("PASS — maturity curve, confidence bands, back-test and 20-year site forecast regression tests passed.");
+console.log("PASS — forward 12-month separation, maturity curve, confidence bands, back-test and 20-year forecast regression tests passed.");

@@ -28,6 +28,7 @@ let map = null;
 let mapLoaded = false;
 let siteMarker = null;
 let chargerMarkers = [];
+let aadtMarkers = [];
 let mapSearchVersion = 0;
 let lastRenderedMapKey = null;
 let mapPointSelectMode = false;
@@ -769,7 +770,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.28 verified AADT API guard";
+const APP_BUILD_VERSION = "V17.29 AADT map overlay + browser fallback";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -936,13 +937,215 @@ function aadtEngineMismatchWarning(ctx) {
   const engineVersion = String(t.aadt_engine_version || "");
   const isOldCoordinateEngine = source.includes("ranked coordinate-enriched lookup") || mode.includes("ranked coordinate-enriched");
   const hasCandidates = Array.isArray(t.candidates) && t.candidates.length > 0;
+  if (t.client_side_aadt_recalculated) {
+    return "";
+  }
   if (isOldCoordinateEngine) {
-    return "AADT API version mismatch: the browser is V17.28 but the server returned the older V17.26 coordinate-enriched AADT method. This can select distant county/corridor counters such as N22 for Bandon. Redeploy/restart the full package including server.py; do not rely on this AADT result.";
+    return "AADT API version mismatch: the browser is V17.29 but the server returned the older V17.26 coordinate-enriched AADT method. This can select distant county/corridor counters such as N22 for Bandon. The browser will try to recalculate from the local TII counter database, but redeploy/restart the full package including server.py before investor use.";
   }
   if (hasCandidates && !engineVersion && source.includes("tii")) {
     return "AADT API version is not reported by the server. The result may come from an older backend. Redeploy/restart the full package if the candidate list does not show coordinate-first road-aware output.";
   }
   return "";
+}
+
+const CLIENT_AADT_ENGINE_VERSION = "V17.29 browser coordinate-first AADT fallback";
+let clientAadtRecordsPromise = null;
+const CLIENT_AADT_COORD_OVERRIDES = {
+  "000000001069": { lat: 53.2933, lon: -9.0159, location_source: "built-in browser traffic counter coordinate proxy: Bothar na dTreabh, Galway" },
+  "000000001011": { lat: 53.4253, lon: -6.2454, location_source: "built-in browser traffic counter coordinate proxy: Dublin Airport Link" },
+  "000000001271": { lat: 51.8479, lon: -8.4860, location_source: "built-in browser traffic counter coordinate proxy: Cork Airport N27" },
+  "000000020258": { lat: 51.9057, lon: -8.3663, location_source: "built-in browser traffic counter coordinate proxy: Little Island N25/N28 interchange" },
+  "000000001256": { lat: 51.8826, lon: -8.3905, location_source: "built-in browser traffic counter coordinate proxy: Mahon / N40" },
+  "000000001228": { lat: 51.8879, lon: -8.5920, location_source: "built-in browser traffic counter coordinate proxy: Ballincollig Bypass / N22" },
+  "000000001711": { lat: 51.7930, lon: -8.5840, location_source: "built-in browser traffic counter coordinate proxy: N71 Innishannon-Ballinhassig" },
+  "000000001712": { lat: 51.7720, lon: -8.6460, location_source: "built-in browser traffic counter coordinate proxy: N71 Halfway-Inishannon" },
+  "000000001713": { lat: 51.6400, lon: -8.8050, location_source: "built-in browser traffic counter coordinate proxy: N71 Clonakilty-Jones Bridge" },
+  "000000001715": { lat: 51.7000, lon: -9.5200, location_source: "built-in browser traffic counter coordinate proxy: N71 Bantry-Glengarriff" },
+  "000000001716": { lat: 51.8200, lon: -8.5200, location_source: "built-in browser traffic counter coordinate proxy: N71 Ballinhassig-N40" },
+  "000000001717": { lat: 51.5400, lon: -9.4200, location_source: "built-in browser traffic counter coordinate proxy: N71 Ballydehob-Aghadown" }
+};
+
+function clientAadtCounterId(rec) {
+  return String(rec?.site_id || rec?.counter_id || "").trim();
+}
+function clientAadtRoute(route) {
+  return String(route || "").trim().toUpperCase().replace(/\s+/g, "");
+}
+function clientAadtRouteClass(route) {
+  const r = clientAadtRoute(route);
+  if (/^M\d/.test(r)) return "M";
+  if (/^N\d/.test(r)) return "N";
+  if (/^R\d/.test(r)) return "R";
+  return "U";
+}
+function clientAadtSiteFlags(address) {
+  const lower = String(address || "").toLowerCase();
+  return {
+    motorway: /\b(motorway|services?|service area|plaza|junction|j\s*\d+|m\s*\d+)\b/.test(lower),
+    retailDestination: ["tesco", "aldi", "lidl", "supervalu", "dunnes", "retail", "shopping", "hotel", "park", "business", "golf", "afc", "community"].some(k => lower.includes(k))
+  };
+}
+function clientAadtDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = d => Number(d) * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function clientAadtRatioOk(a, b, maxRatio = 3.0) {
+  const x = Number(a), y = Number(b);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x <= 0 || y <= 0) return false;
+  return Math.max(x, y) / Math.min(x, y) <= maxRatio;
+}
+async function loadClientAadtRecords() {
+  if (!clientAadtRecordsPromise) {
+    clientAadtRecordsPromise = fetch("./data/tii_aadt_counters_2019_2026_geocoded.json?v=17.29", { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error(`Could not load local TII AADT database (${r.status})`); return r.json(); })
+      .then(data => {
+        const rows = Array.isArray(data?.records) ? data.records : Array.isArray(data) ? data : [];
+        return rows.map(r => {
+          const override = CLIENT_AADT_COORD_OVERRIDES[clientAadtCounterId(r)] || {};
+          return { ...r, ...override };
+        }).filter(r => Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)) && Number(r.latest_aadt || r.aadt) > 0);
+      });
+  }
+  return clientAadtRecordsPromise;
+}
+function clientAadtScore(record, address, distanceKm) {
+  const route = clientAadtRoute(record.route);
+  const routeClass = clientAadtRouteClass(route);
+  const flags = clientAadtSiteFlags(address);
+  let score = 140 / (1 + Math.max(0.05, distanceKm));
+  if (routeClass === "M" && !flags.motorway) score -= 28;
+  if (routeClass === "M" && flags.motorway) score += 10;
+  if (routeClass === "N") score += 3;
+  if (routeClass === "R") score += 1;
+  if (distanceKm > 15) score -= Math.min(30, (distanceKm - 15) * 1.8);
+  const loc = String(record.location_source || "").toLowerCase();
+  if (loc.includes("official") || loc.includes("tii traffic counter")) score += 4;
+  else if (loc.includes("built-in")) score += 1;
+  else if (loc.includes("offline description")) score -= 2;
+  return score;
+}
+function clientWeightedAadt(group) {
+  const weighted = group.map(c => {
+    const v = Number(c.aadt);
+    const d = Math.max(0.35, Number(c.distance_km) || 1);
+    return Number.isFinite(v) && v > 0 ? [v, 1 / (d ** 1.35)] : null;
+  }).filter(Boolean);
+  if (!weighted.length) return 0;
+  return Math.round(weighted.reduce((a, [v,w]) => a + v*w, 0) / weighted.reduce((a, [,w]) => a + w, 0));
+}
+function clientSelectedAadtGroup(candidates) {
+  const usable = candidates.filter(c => Number(c.aadt) > 0);
+  if (!usable.length) return [];
+  const selected = usable[0];
+  const route = clientAadtRoute(selected.route);
+  const group = [selected];
+  for (const c of usable.slice(1, 12)) {
+    if (!route || clientAadtRoute(c.route) !== route) continue;
+    if (Number(c.selection_score) < Number(selected.selection_score) - 18) continue;
+    if (Math.abs(Number(c.distance_km) - Number(selected.distance_km)) > 8) continue;
+    if (!clientAadtRatioOk(selected.aadt, c.aadt, 3.0)) continue;
+    group.push(c);
+  }
+  return group;
+}
+async function clientCoordinateFirstTraffic(ctx, address) {
+  const site = ctx?.site || {};
+  const siteLat = Number(site.lat), siteLon = Number(site.lon);
+  if (!Number.isFinite(siteLat) || !Number.isFinite(siteLon)) return null;
+  const records = await loadClientAadtRecords();
+  const ranked = records.map(r => {
+    const d = clientAadtDistanceKm(siteLat, siteLon, Number(r.lat), Number(r.lon));
+    const aadt = Number(r.latest_aadt || r.aadt || 0);
+    return {
+      counter_id: clientAadtCounterId(r),
+      counter_name: r.site_name || r.counter_name || "TII counter",
+      description: r.description || "",
+      route: r.route || "route not provided",
+      route_class: clientAadtRouteClass(r.route),
+      aadt,
+      aadt_year: r.latest_year || r.aadt_year || "latest",
+      valid_days: `TII Excel ${r.latest_year || "latest"}`,
+      distance_km: d,
+      selection_score: clientAadtScore(r, address, d),
+      lat: Number(r.lat),
+      lon: Number(r.lon),
+      location_source: r.location_source || "local TII coordinate database",
+      confidence: d <= 3 ? "High" : d <= 8 ? "Medium" : d <= 20 ? "Review" : "Low",
+      match_basis: "browser coordinate-first road-aware TII counter ranking",
+      source_record: r
+    };
+  }).filter(c => Number.isFinite(c.distance_km) && c.distance_km <= 80 && c.aadt > 0)
+    .sort((a, b) => Number(b.selection_score) - Number(a.selection_score) || Number(a.distance_km) - Number(b.distance_km));
+  if (!ranked.length) return null;
+  const group = clientSelectedAadtGroup(ranked);
+  const selectedIds = new Set(group.map(c => c.counter_id));
+  const selectedAadt = clientWeightedAadt(group.length ? group : [ranked[0]]) || ranked[0].aadt;
+  const top = ranked.slice(0, 12).map(c => ({
+    ...c,
+    selected: selectedIds.has(c.counter_id),
+    distance_km: Math.round(c.distance_km * 100) / 100,
+    selection_score: Math.round(c.selection_score * 100) / 100,
+    why: selectedIds.has(c.counter_id) ? "selected" : "candidate ranked by distance, road class and route relevance",
+    source_record: undefined
+  }));
+  const selected = group[0] || ranked[0];
+  const selectedDistance = Number(selected.distance_km);
+  const confidence = selectedDistance <= 3 ? "High / browser coordinate-first same-area TII counter" :
+    selectedDistance <= 8 ? "Medium-high / browser coordinate-first nearby TII counter" :
+    selectedDistance <= 15 ? "Medium / browser coordinate-first corridor proxy" :
+    "Review required / browser coordinate-first fallback — verify counter on TII map";
+  const groupNote = group.length > 1 ? `distance-weighted same-corridor blend of ${group.length} counters` : "single best counter";
+  return {
+    aadt: selectedAadt,
+    raw_aadt: selectedAadt,
+    aadt_engine_version: CLIENT_AADT_ENGINE_VERSION,
+    aadt_engine_mode: "browser-coordinate-first-road-aware",
+    client_side_aadt_recalculated: true,
+    source: `Browser local TII AADT database · coordinate-first road-aware lookup · ${groupNote} · ${group.map(c => c.counter_name).join("; ") || selected.counter_name} · ${selected.aadt_year || "latest"}`,
+    confidence,
+    provider: "Browser local TII AADT database joined to counter coordinates",
+    counter_id: group.map(c => c.counter_id).join(", ") || selected.counter_id,
+    counter_name: group.map(c => c.counter_name).join("; ") || selected.counter_name,
+    route: [...new Set(group.map(c => c.route).filter(Boolean))].join(", ") || selected.route,
+    counter_distance_km: Math.round(selectedDistance * 100) / 100,
+    aadt_year: selected.aadt_year,
+    sample_days: "published annual AADT value from uploaded Excel",
+    sample_mode: "browser coordinate-first road-aware TII Excel lookup",
+    aadt_selection_method: group.length > 1 ? "same_corridor_weighted" : "single_counter_coordinate_first",
+    candidate_count: top.length,
+    candidates: top,
+    reference: "Browser-loaded data/tii_aadt_counters_2019_2026_geocoded.json + built-in counter coordinate proxies",
+    method_note: "Browser-side safety correction: AADT was recalculated from the exact map coordinate using the local TII counter database because the server result may be stale or less road-aware. The nearby-site radius does not control AADT selection.",
+    previous_server_traffic: ctx?.traffic ? { aadt: ctx.traffic.aadt, source: ctx.traffic.source, confidence: ctx.traffic.confidence, counter_name: ctx.traffic.counter_name, counter_distance_km: ctx.traffic.counter_distance_km } : null
+  };
+}
+function shouldUseClientCoordinateAadt(ctx) {
+  const t = ctx?.traffic || {};
+  const provider = String(t.provider || "").toLowerCase();
+  const source = String(t.source || "").toLowerCase();
+  if (provider.includes("curated site-to-aadt mapping workbook") || source.includes("curated tii aadt mapping")) return false;
+  return Boolean(ctx?.site && Number.isFinite(Number(ctx.site.lat)) && Number.isFinite(Number(ctx.site.lon)));
+}
+async function ensureClientCoordinateFirstAadt(ctx, address) {
+  if (!shouldUseClientCoordinateAadt(ctx)) return ctx;
+  try {
+    const browserTraffic = await clientCoordinateFirstTraffic(ctx, address);
+    if (!browserTraffic?.aadt) return ctx;
+    const mergedTraffic = { ...(ctx.traffic || {}), ...browserTraffic };
+    return {
+      ...ctx,
+      traffic: mergedTraffic,
+      warning: ctx?.warning || (browserTraffic.previous_server_traffic ? "AADT was recalculated in the browser from the local TII counter database to protect against stale server AADT ranking." : ctx?.warning)
+    };
+  } catch (err) {
+    console.warn("Browser coordinate-first AADT fallback failed", err);
+    return ctx;
+  }
 }
 
 
@@ -960,7 +1163,7 @@ function tiiCandidateCards(ctx) {
     const confidence = c.confidence ? ` · ${h(c.confidence)} confidence` : "";
     const basis = c.match_basis ? ` · ${h(c.match_basis)}` : "";
     return `<div class="tii-candidate ${c.selected ? "selected" : ""}" data-select-tii-candidate="${idx}" role="button" tabindex="0" aria-label="Use ${h(c.counter_name || c.counter_id || "TII counter")} as AADT source"><div class="tii-candidate-main"><span>${label}</span><strong>${h(c.counter_name || c.counter_id || "TII counter")}</strong><small>${h(c.route || "route not provided")} · ${distance} · ${usable ? number(aadt,0) + " AADT" : "no usable data"} · ${h(c.valid_days || "published AADT")}${confidence}${selectionScore}${routeScore}${terms}</small><small>${basis}</small></div><button type="button" class="tii-select-btn ${c.selected ? "selected" : ""}" data-select-tii-candidate="${idx}" ${usable ? "" : "disabled"}>${c.selected ? "Using this counter" : "Use this counter"}</button></div>`;
-  }).join("")}</div><p class="muted small">AADT candidates are ranked from the exact map coordinate using road-aware scoring. The nearby-site radius is only used for local charger/site screening and does not control AADT.</p></div>`;
+  }).join("")}</div><p class="muted small">AADT candidates are ranked from the exact map coordinate using road-aware scoring. The nearby-site radius is only used for local charger/site screening and does not control AADT. Selected/recommended counters are also overlaid on the map for visual validation.</p></div>`;
 }
 
 function applyTiiCandidateSelection(candidateIndex) {
@@ -4692,16 +4895,17 @@ function wirePage(r) {
     }
     try {
       const ctx = await searchLocation(address, state.filters.radiusKm, { timeoutMs: 18000 });
-      const nextCtx = portfolioSite ? portfolioSearchContext(ctx, portfolioSite) : ctx;
+      const guardedCtx = portfolioSite ? ctx : await ensureClientCoordinateFirstAadt(ctx, address);
+      const nextCtx = portfolioSite ? portfolioSearchContext(guardedCtx, portfolioSite) : guardedCtx;
       setSiteContext(nextCtx);
       state.inputs.siteAddress = address;
       autoApplyZeviFundingForContext(portfolioSite ? grantFundingContextFromSite(portfolioSite) : grantFundingContextFromCurrent({ searchText: address }), { force: !!portfolioSite });
       if (portfolioSite) {
         state.inputs.rawCorridorTrafficAadt = Number(portfolioSite.aadt || nextCtx?.traffic?.aadt || state.inputs.rawCorridorTrafficAadt || 0);
         state.filters.manualAadtOverride = true;
-      } else if (!state.filters.manualAadtOverride && ctx?.traffic?.aadt) {
-        state.inputs.rawCorridorTrafficAadt = Number(ctx.traffic.aadt);
-        const sourceYear = latestYearFromText(ctx.traffic.aadt_year || ctx.traffic.source || ctx.traffic.reference || "");
+      } else if (!state.filters.manualAadtOverride && nextCtx?.traffic?.aadt) {
+        state.inputs.rawCorridorTrafficAadt = Number(nextCtx.traffic.aadt);
+        const sourceYear = latestYearFromText(nextCtx.traffic.aadt_year || nextCtx.traffic.source || nextCtx.traffic.reference || "");
         if (sourceYear) state.inputs.trafficSourceYear = sourceYear;
       }
     } catch (err) {
@@ -4780,12 +4984,13 @@ function wirePage(r) {
     }
     try {
       const ctx = await searchCoordinates(lat, lon, state.filters.radiusKm, label, { timeoutMs: 18000 });
-      setSiteContext(ctx);
+      const guardedCtx = await ensureClientCoordinateFirstAadt(ctx, label);
+      setSiteContext(guardedCtx);
       state.inputs.siteAddress = label;
       autoApplyZeviFundingForContext(grantFundingContextFromCurrent({ searchText: label }), { keepExistingSuggestion: true });
-      if (!state.filters.manualAadtOverride && ctx?.traffic?.aadt) {
-        state.inputs.rawCorridorTrafficAadt = Number(ctx.traffic.aadt);
-        const sourceYear = latestYearFromText(ctx.traffic.aadt_year || ctx.traffic.source || ctx.traffic.reference || "");
+      if (!state.filters.manualAadtOverride && guardedCtx?.traffic?.aadt) {
+        state.inputs.rawCorridorTrafficAadt = Number(guardedCtx.traffic.aadt);
+        const sourceYear = latestYearFromText(guardedCtx.traffic.aadt_year || guardedCtx.traffic.source || guardedCtx.traffic.reference || "");
         if (sourceYear) state.inputs.trafficSourceYear = sourceYear;
       }
     } catch (err) {
@@ -4803,6 +5008,7 @@ function wirePage(r) {
   };
 
   window.__evHubUseManualMapPoint = useManualMapPoint;
+  window.__evHubSelectAadtCandidate = applyTiiCandidateSelection;
 
   const selectMapPoint = el("selectMapPoint");
   if (selectMapPoint) selectMapPoint.addEventListener("click", () => {
@@ -5001,6 +5207,55 @@ function updateRadiusLayer(lat, lon) {
     map.getSource("radius").setData(data);
   }
 }
+
+function aadtPopupHtml(candidate, idx) {
+  const isSelected = Boolean(candidate.selected);
+  const name = h(candidate.counter_name || candidate.counter_id || "TII counter");
+  const distance = Number.isFinite(Number(candidate.distance_km)) ? `${number(Number(candidate.distance_km), 2)} km from site` : "distance unavailable";
+  const aadt = Number(candidate.aadt);
+  return `<div class="aadt-popup"><strong>${name}</strong><span>${h(candidate.route || "route not provided")} · ${distance}</span><span>${Number.isFinite(aadt) ? number(aadt,0) + " AADT" : "AADT not available"}</span><span>${h(candidate.confidence || "confidence not provided")}</span><button type="button" onclick="window.__evHubSelectAadtCandidate && window.__evHubSelectAadtCandidate(${Number(idx)})">${isSelected ? "Using this counter" : "Use this counter"}</button></div>`;
+}
+function updateAadtCounterOverlay(siteLat, siteLon) {
+  if (!map || !mapLoaded || !map.getStyle()) return [];
+  aadtMarkers.forEach(m => m.remove());
+  aadtMarkers = [];
+  const candidates = (state.siteContext?.traffic?.candidates || [])
+    .map((c, idx) => ({ ...c, __idx: idx, lat: Number(c.lat), lon: Number(c.lon) }))
+    .filter(c => Number.isFinite(c.lat) && Number.isFinite(c.lon))
+    .slice(0, 10);
+  const lineFeatures = candidates.map(c => ({
+    type: "Feature",
+    geometry: { type: "LineString", coordinates: [[siteLon, siteLat], [c.lon, c.lat]] },
+    properties: { selected: Boolean(c.selected), route: c.route || "", aadt: Number(c.aadt || 0) }
+  }));
+  const lineData = { type: "FeatureCollection", features: lineFeatures };
+  if (!map.getSource("aadt-lines")) {
+    map.addSource("aadt-lines", { type: "geojson", data: lineData });
+    map.addLayer({
+      id: "aadt-counter-lines",
+      type: "line",
+      source: "aadt-lines",
+      paint: {
+        "line-color": ["case", ["boolean", ["get", "selected"], false], "#0f8f4f", "#64748b"],
+        "line-opacity": ["case", ["boolean", ["get", "selected"], false], 0.72, 0.28],
+        "line-width": ["case", ["boolean", ["get", "selected"], false], 3, 1.5],
+        "line-dasharray": ["case", ["boolean", ["get", "selected"], false], [1, 0], [2, 2]]
+      }
+    });
+  } else {
+    map.getSource("aadt-lines").setData(lineData);
+  }
+  candidates.forEach(c => {
+    const cls = `aadt-marker-el ${c.selected ? "selected" : "candidate"}`;
+    const label = c.selected ? "T" : "t";
+    const marker = new maplibregl.Marker({ element: makeMarker(cls, label) })
+      .setLngLat([c.lon, c.lat])
+      .setPopup(new maplibregl.Popup({ offset: 14 }).setHTML(aadtPopupHtml(c, c.__idx)))
+      .addTo(map);
+    aadtMarkers.push(marker);
+  });
+  return candidates;
+}
 function updateMap() {
   const mapDiv = el("map");
   if (!mapDiv) return;
@@ -5049,9 +5304,12 @@ function updateMap() {
   const mapKey = currentMapKey(ctx);
   try { map.jumpTo({ center: [lon, lat], zoom: Math.max(map.getZoom() || 12, 11) }); } catch (_) { map.setCenter([lon, lat]); }
   updateRadiusLayer(lat, lon);
+  const aadtCandidatesForBounds = updateAadtCounterOverlay(lat, lon);
   if (siteMarker) siteMarker.remove();
   chargerMarkers.forEach(m => m.remove());
   chargerMarkers = [];
+  aadtMarkers.forEach(m => m.remove());
+  aadtMarkers = [];
   siteMarker = new maplibregl.Marker({ element: makeMarker("site-marker-el", "⚡") }).setLngLat([lon, lat]).setPopup(new maplibregl.Popup({ offset: 18 }).setHTML(`<strong>${h(ctx?.site?.name || "Selected site")}</strong><br>Selected site`)).addTo(map);
   const chargers = filteredChargers();
   chargers.forEach(charger => {
@@ -5062,6 +5320,7 @@ function updateMap() {
   const [sw, ne] = radiusBounds(lon, lat, state.filters.radiusKm);
   const bounds = new maplibregl.LngLatBounds(sw, ne);
   chargers.forEach(charger => bounds.extend([charger.lon, charger.lat]));
+  aadtCandidatesForBounds.forEach(c => bounds.extend([c.lon, c.lat]));
   map.fitBounds(bounds, {
     padding: { top: 92, bottom: 74, left: 74, right: 74 },
     maxZoom: 15,
@@ -5069,7 +5328,8 @@ function updateMap() {
   });
   lastRenderedMapKey = mapKey;
   const confidence = ctx?.site?.confidence ? ` Location confidence: ${ctx.site.confidence}.` : "";
-  showMapStatus(`Map centred on ${h(ctx?.site?.name || "selected site")} at ${number(lat, 5)}, ${number(lon, 5)}. Radius: ${state.filters.radiusKm < 1 ? "500 m" : state.filters.radiusKm + " km"}.${confidence}`);
+  const aadtOverlayNote = aadtCandidatesForBounds.length ? ` AADT overlay: ${aadtCandidatesForBounds.filter(c => c.selected).length || 1} selected/recommended counter${aadtCandidatesForBounds.length === 1 ? "" : "s"} shown.` : "";
+  showMapStatus(`Map centred on ${h(ctx?.site?.name || "selected site")} at ${number(lat, 5)}, ${number(lon, 5)}. Radius: ${state.filters.radiusKm < 1 ? "500 m" : state.filters.radiusKm + " km"}.${confidence}${aadtOverlayNote}`);
 }
 
 function goTab(tab) {

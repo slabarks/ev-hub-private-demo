@@ -3367,3 +3367,13 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
     margin: 0;
   }
 }
+
+
+/* V17.29 AADT counter map overlay */
+.aadt-marker-el { width: 30px; height: 30px; border-radius: 999px; display:grid; place-items:center; color:#fff; font-size:13px; font-weight:900; border:2px solid #fff; box-shadow:0 4px 14px rgba(31,41,51,.30); }
+.aadt-marker-el.selected { background:#0f8f4f; width:36px; height:36px; }
+.aadt-marker-el.candidate { background:#64748b; opacity:.92; }
+.aadt-popup { min-width: 210px; display:grid; gap:5px; font-size:12px; color:#10231d; }
+.aadt-popup strong { font-size:13px; }
+.aadt-popup span { color:#52615c; }
+.aadt-popup button { margin-top:5px; border:1px solid #cfe7d8; background:#0f8f4f; color:#fff; border-radius:999px; padding:7px 10px; font-weight:800; cursor:pointer; }

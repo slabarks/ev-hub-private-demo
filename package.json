@@ -1,6 +1,6 @@
 {
   "name": "ev-hub-html-decision-engine",
-  "version": "0.1.0",
+  "version": "17.36.0",
   "type": "module",
   "scripts": {
     "test": "node tests/runTests.js"

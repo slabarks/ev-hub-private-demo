@@ -41,7 +41,7 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-AADT_ENGINE_VERSION = "V17.34 AADT production-ready resolver + bundled vetted overlay"
+AADT_ENGINE_VERSION = "V17.36 AADT audited resolver + official-first fail-safe coordinates + Bandon/Kinsale text hardening"
 
 
 LOCAL_DATASETS = {
@@ -703,6 +703,8 @@ TII_LOCAL_AADT_JSON = ROOT / "data" / "tii_aadt_summary_2019_2026.json"
 TII_BUNDLED_COUNTER_LOCATION_JSON = ROOT / "data" / "tii_counter_locations_bundled_vetted.json"
 TII_LOCAL_AADT_CACHE = {"loaded": False, "records": [], "error": None}
 TII_LOCATION_ENRICHMENT_CACHE = {"attempted": False, "error": None, "matched": 0, "source": None}
+TII_LOCATION_CACHE = {"loaded": False, "counters": [], "error": None, "source_mode": None, "source": None}
+TII_LOCATION_CACHE_LOCK = threading.Lock()
 
 AADT_MATCH_STOPWORDS = {
     # General words that should not drive a traffic-counter match on their own.
@@ -730,6 +732,10 @@ AADT_ADDRESS_ALIAS_RULES = [
     ({"douglas"}, ["douglas", "N40", "south", "ring"]),
     ({"ballincollig"}, ["ballincollig", "ovens", "N22"]),
     ({"galway"}, ["galway", "bothar", "treabh", "N06", "N84", "N83"]),
+    # V17.36: Bandon and Kinsale otherwise appear as incidental road names on the
+    # unrelated N40 Cork South Ring corridor. Anchor them to the N71 corridor.
+    ({"bandon"}, ["N71", "innishannon", "ballinhassig", "halfway"]),
+    ({"kinsale"}, ["N71", "ballinhassig"]),
 ]
 
 # Mission-critical search pipeline rules. These are not intended to replace
@@ -744,6 +750,8 @@ AADT_PRIORITY_COUNTER_RULES = [
     ({"eastgate"}, "000000020258", "place anchor: N25/N28 Little Island / Eastgate corridor"),
     ({"mahon"}, "000000001256", "place anchor: N40 Jack Lynch Tunnel / Mahon corridor"),
     ({"ballincollig"}, "000000001228", "place anchor: N22 Ballincollig Bypass corridor"),
+    ({"bandon"}, "000000001711", "place anchor: N71 Innishannon-Ballinhassig corridor (Bandon approach)"),
+    ({"kinsale"}, "000000001716", "place anchor: N71 Ballinhassig-N40 corridor (Kinsale approach)"),
 ]
 
 
@@ -933,7 +941,7 @@ CURATED_PORTFOLIO_AADT_RULES = [
      "method": "single_counter",
      "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "M07 Between Jn26 Nenagh and Jn27 Birdhill — correct approach."},
     {"match": ["v94tw71", "v94 tw71", "coonagh cross", "ennis road", "limerick", "tesco coonagh"],
-     "aadt": 8492, "ids": ["000000030189"],
+     "aadt": 33319, "ids": ["000000030189"],
      "confidence": "medium / curated — N18 Ennis Road Limerick [VERIFY Coonagh local counter]",
      "method": "single_counter",
      "reviewed_by": "ePower analyst via V14 app + TII DB cross-check", "reviewed_date": "2026-07-02", "note": "N18 Ennis Road approach to Limerick. Previous app value (8,492) was wrong N02 Meath counter."},
@@ -1202,10 +1210,21 @@ def _score_local_aadt_record(rec: dict, address: str) -> tuple[float, list[str],
             has_strong = True
 
     non_region_token_hits = 0
+    record_description_lower = (rec.get("description") or "").lower()
     for tok in tokens:
         if tok in text_tokens:
+            # A token found only as "<place> Road/Street/Avenue" names a road,
+            # not necessarily the searched town. Treat this as weak evidence.
+            # This prevents examples such as Bandon Road and Kinsale Road on the
+            # unrelated N40 corridor from becoming confident place matches.
+            is_incidental_road_name = bool(re.search(
+                rf"\b{re.escape(tok)}\s+(road|street|avenue|st)\b",
+                record_description_lower,
+            ))
             if tok in AADT_REGION_TOKENS:
                 score += 1.25
+            elif is_incidental_road_name:
+                score += 0.5
             else:
                 score += 3
                 non_region_token_hits += 1
@@ -1220,8 +1239,9 @@ def _score_local_aadt_record(rec: dict, address: str) -> tuple[float, list[str],
         score += 2
         has_strong = True
     elif non_region_token_hits >= 1 and any(tok in AADT_REGION_TOKENS for tok in matched):
+        # One place token plus one region token is not enough to establish a
+        # corridor. Keep the small score bump, but do not label it strong.
         score += 1
-        has_strong = True
 
     # Broad city-only matches are weak, but valid as a fallback because the app
     # must return the best available traffic proxy for city/town searches such as
@@ -1425,7 +1445,12 @@ def _valid_aadt_number(value, *, min_value=250) -> bool:
 
 
 def _route_norm_for_group(value) -> str:
-    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+    raw = re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+    m = re.fullmatch(r"([MNR])0*(\d{1,3})", raw)
+    if not m:
+        return raw
+    number = int(m.group(2))
+    return f"{m.group(1)}{number:02d}" if number < 10 else f"{m.group(1)}{number}"
 
 
 def _aadt_ratio_ok(a, b, max_ratio=2.75) -> bool:
@@ -1555,23 +1580,51 @@ def _road_class_penalty(route: str, address: str, distance_km: float) -> float:
         penalty -= min(30.0, (distance_km - 15) * 1.8)
     return penalty
 
+def _coordinate_quality(rec: dict) -> tuple[int, str]:
+    """Classify coordinate provenance for fail-safe ranking and confidence.
+
+    3 = official TII point, 2 = manually/visually reviewed bundled point,
+    1 = explicit route-segment proxy, 0 = coarse description-derived geometry.
+    Coarse geometry can help as a last-resort ranking hint but must never be
+    presented as an exact/high-confidence counter location.
+    """
+    if bool(rec.get("official_location")):
+        return 3, "official-tii"
+    src = str(rec.get("location_source") or "").lower()
+    conf = str(rec.get("location_confidence") or "").lower()
+    status = str(rec.get("map_coordinate_status") or "").lower()
+    if "official-tii" in status or "official tii" in src or "traffic counter location geojson" in src:
+        return 3, "official-tii"
+    if "visual_qa" in conf or "visual qa" in src:
+        return 2, "reviewed-bundled"
+    if "route_segment" in conf or "route proxy" in src or "route-segment" in src:
+        return 1, "route-segment-proxy"
+    return 0, "coarse-ranking-only"
+
+
 def _coordinate_selection_score(rec: dict, address: str, distance_km: float) -> tuple[float, float, float, list[str], bool]:
     text_score, matched_terms, strong_text = _coordinate_text_score(rec, address)
     route_score = route_hint_score(address, {"route": rec.get("route"), "name": rec.get("site_name")})
     # Distance is the primary signal. Broad text/county matching no longer helps;
     # only strict route/phrase evidence can lift a candidate.
     distance_score = 140.0 / (1.0 + max(0.05, float(distance_km)))
-    score = distance_score + (route_score * 6.0) + (text_score * 2.5) + _road_class_penalty(rec.get("route"), address, distance_km)
+    explicit_route_match = _route_norm_for_group(rec.get("route")) in {_route_norm_for_group(x) for x in _aadt_route_codes(address)}
+    score = distance_score + (100.0 if explicit_route_match else 0.0) + (route_score * 6.0) + (text_score * 2.5) + _road_class_penalty(rec.get("route"), address, distance_km)
     # Prefer records with official / curated coordinates over generic offline
     # description geometry, but still allow explicit built-in proxies where official
     # coords were absent.
-    locsrc = str(rec.get("location_source") or "").lower()
-    if "official" in locsrc or "tii traffic counter location" in locsrc:
-        score += 4.0
-    elif "built-in traffic counter coordinate proxy" in locsrc:
-        score += 1.0
-    elif "offline description-geometry" in locsrc:
-        score -= 2.0
+    quality, _quality_label = _coordinate_quality(rec)
+    if quality == 3:
+        score += 8.0
+    elif quality == 2:
+        score += 2.0
+    elif quality == 1:
+        score -= 3.0
+    else:
+        # Coarse description-derived points are often town/route centroids and
+        # can be shared by unrelated counters. Keep them only as a low-trust
+        # last-resort hint and prevent apparent proximity from dominating.
+        score -= 75.0
     return score, text_score, route_score, matched_terms, strong_text
 
 def _weighted_aadt_for_group(group: list[dict], aadt_key="aadt", distance_key="distance_km") -> int:
@@ -1799,15 +1852,12 @@ def tii_aadt_from_local_excel_name_lookup(address: str, limit: int = 12) -> dict
 
 
 def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit: int = 4, max_km: float = 80.0) -> dict:
-    """Coordinate-first, road-aware TII AADT selection.
+    """Coordinate-first, road-aware TII AADT selection with provenance controls.
 
-    V17.27 rules:
-      * The exact map coordinate is the source of truth.
-      * The nearby-site screening radius is not used for AADT.
-      * Broad county/city text matches cannot outrank closer counters.
-      * Multiple counters are blended only when they are same-route/same-corridor.
-      * Weak/distant matches are flagged as review required rather than presented as
-        high-confidence AADT.
+    Official counter points are preferred. Reviewed bundled points and explicit
+    route-segment proxies remain usable with capped confidence. Coarse
+    description-derived geometry is retained only as a last-resort ranking hint;
+    it is never mapped as an exact counter and never receives High confidence.
     """
     records = load_local_tii_aadt_records()
     if not records:
@@ -1818,6 +1868,8 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
     try:
         site_lat = float(site["lat"])
         site_lon = float(site["lon"])
+        if not (math.isfinite(site_lat) and math.isfinite(site_lon)):
+            raise ValueError("non-finite")
     except Exception:
         raise RuntimeError("Site coordinate missing; cannot run coordinate-first AADT lookup")
 
@@ -1832,26 +1884,35 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
         if d > max_km:
             continue
         score, text_score, route_score, matched_terms, strong_text = _coordinate_selection_score(rec, address, d)
-        ranked.append((score, d, text_score, route_score, rec, matched_terms, strong_text))
+        quality, quality_label = _coordinate_quality(rec)
+        ranked.append((score, d, text_score, route_score, rec, matched_terms, strong_text, quality, quality_label))
     if not ranked:
         raise RuntimeError("No coordinate-enriched TII AADT Excel counters were close enough to the searched site")
 
-    # Primary ordering is coordinate score, which is dominated by distance and road
-    # relevance. This removes the previous county-text behaviour (e.g. 'matched Cork').
     ranked.sort(key=lambda x: (-x[0], x[1]))
 
+    # Preserve up to 40 records for diagnostics; the UI still exposes only top 4.
+    audit_limit = min(40, len(ranked))
     candidate_objs = []
-    for score, d, text_score, route_score, r, terms, strong_text in ranked[:limit]:
+    for item in ranked[:audit_limit]:
+        score, d, text_score, route_score, r, terms, strong_text, quality, quality_label = item
         candidate_objs.append({
-            "score_tuple": (score, d, text_score, route_score, r, terms, strong_text),
+            "score_tuple": item,
             "selection_score": score,
             "distance_km": d,
             "route": r.get("route"),
             "aadt": r.get("latest_aadt"),
+            "coordinate_quality": quality,
+            "coordinate_quality_label": quality_label,
         })
-    selected_group = _selected_coordinate_corridor_group(candidate_objs, score_key="selection_score", distance_key="distance_km", aadt_key="aadt")
-    if not selected_group:
+
+    selected_quality = candidate_objs[0]["coordinate_quality"]
+    # Coarse geometry can contain many unrelated counters at one centroid. Never
+    # blend it, even when the route text happens to match.
+    if selected_quality == 0:
         selected_group = [candidate_objs[0]]
+    else:
+        selected_group = _selected_coordinate_corridor_group(candidate_objs, score_key="selection_score", distance_key="distance_km", aadt_key="aadt") or [candidate_objs[0]]
 
     selected = selected_group[0]["score_tuple"]
     rec = selected[4]
@@ -1861,13 +1922,20 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
         selected_aadt = _average_aadt_for_group(selected_group, aadt_key="aadt")
 
     candidates = []
-    for i, (score, d, text_score, route_score, r, terms, strong_text) in enumerate(ranked[:limit]):
-        candidate_conf = "High" if d <= 3 else "Medium" if d <= 8 else "Review" if d <= 20 else "Low"
+    for item in ranked[:audit_limit]:
+        score, d, text_score, route_score, r, terms, strong_text, quality, quality_label = item
+        if quality == 0:
+            candidate_conf = "Review"
+        elif quality == 1:
+            candidate_conf = "Review" if d <= 20 else "Low"
+        elif quality == 2:
+            candidate_conf = "Medium" if d <= 8 else "Review" if d <= 20 else "Low"
+        else:
+            candidate_conf = "High" if d <= 3 else "Medium" if d <= 8 else "Review" if d <= 20 else "Low"
         if _route_class(r.get("route")) == "M" and not _site_context_flags(address)["motorway"]:
             candidate_conf = "Review"
-        locsrc = str(r.get("location_source") or "")
-        official_location = bool(r.get("official_location")) or ("official tii" in locsrc.lower()) or ("traffic counter location geojson" in locsrc.lower())
-        mappable_location = bool(r.get("mappable_location") or official_location)
+        official_location = quality == 3
+        mappable_location = bool(r.get("mappable_location") or official_location) and quality >= 1
         candidates.append({
             "selected": r.get("site_id") in selected_ids,
             "counter_id": r.get("site_id"),
@@ -1884,47 +1952,52 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
             "selection_score": round(score, 2),
             "matched_terms": terms,
             "confidence": candidate_conf,
-            "lat": r.get("lat"),
-            "lon": r.get("lon"),
+            "lat": r.get("lat") if mappable_location else None,
+            "lon": r.get("lon") if mappable_location else None,
             "location_source": r.get("location_source"),
+            "location_confidence": r.get("location_confidence"),
+            "coordinate_quality": quality_label,
             "official_location": official_location,
             "mappable_location": mappable_location,
-            "map_coordinate_status": r.get("map_coordinate_status") or ("official" if official_location else "vetted-bundled-coordinate-not-official"),
+            "map_coordinate_status": r.get("map_coordinate_status") or ("official" if official_location else "ranking-only-coarse-coordinate-not-for-map" if quality == 0 else "reviewed-proxy"),
             "match_basis": "coordinate-first road-aware TII counter ranking",
-            "why": "selected" if r.get("site_id") in selected_ids else "candidate ranked by distance, road class and route relevance",
+            "why": "selected" if r.get("site_id") in selected_ids else "candidate ranked by distance, road class, route relevance and coordinate provenance",
         })
 
     selected_distance = float(selected[1])
     selected_route_class = _route_class(rec.get("route"))
     motorway_mismatch = selected_route_class == "M" and not _site_context_flags(address)["motorway"]
-    selected_location_source = str(rec.get("location_source") or "")
-    if selected_distance <= 3 and not motorway_mismatch:
-        confidence = "High / coordinate-first same-area TII counter"
+    quality, quality_label = _coordinate_quality(rec)
+    if quality == 0:
+        confidence = "Review required / coarse ranking-only coordinate — verify the counter manually"
+    elif quality == 1:
+        confidence = "Review required / route-segment coordinate proxy — verify on the TII map"
+    elif quality == 2:
+        confidence = "Medium / reviewed bundled counter coordinate" if selected_distance <= 8 and not motorway_mismatch else "Review required / reviewed bundled corridor proxy"
+    elif selected_distance <= 3 and not motorway_mismatch:
+        confidence = "High / official coordinate-first same-area TII counter"
     elif selected_distance <= 8 and not motorway_mismatch:
-        confidence = "Medium-high / coordinate-first nearby TII counter"
+        confidence = "Medium-high / official coordinate-first nearby TII counter"
     elif selected_distance <= 15 and not motorway_mismatch:
-        confidence = "Medium / coordinate-first corridor proxy"
+        confidence = "Medium / official coordinate-first corridor proxy"
     else:
-        confidence = "Review required / coordinate-first fallback — verify counter on TII map"
-    if "built-in traffic counter coordinate proxy" in selected_location_source.lower() and "High" in confidence:
-        confidence = confidence.replace("High", "Medium-high")
+        confidence = "Review required / official coordinate-first fallback — verify counter on TII map"
+
     group_note = "single best counter" if len(selected_group) == 1 else f"distance-weighted same-corridor blend of {len(selected_group)} counters"
     counter_ids = ", ".join(str(g["score_tuple"][4].get("site_id")) for g in selected_group)
     counter_names = "; ".join(str(g["score_tuple"][4].get("site_name")) for g in selected_group)
     routes = ", ".join(sorted({str(g["score_tuple"][4].get("route") or "route not provided") for g in selected_group}))
     method_note = (
-        "AADT is selected from the exact screened map coordinate, not from the nearby-site radius. "
-        "The engine ranks official/coordinate-enriched TII counters by distance, explicit route evidence, road class and site-type motorway relevance. "
-        "When several counters are genuinely on the same road corridor, it uses a distance-weighted same-corridor blend; unrelated roads remain alternatives only. "
-        "Broad county/place text such as Cork or Dublin cannot select a distant counter by itself."
+        "AADT is selected from the screened map coordinate, not from the nearby-site radius. "
+        "The engine ranks counters by distance, explicit route evidence, road class, site-type motorway relevance and coordinate provenance. "
+        "Only official TII points or reviewed/route-segment proxies may be plotted. Coarse description-derived coordinates are ranking hints only, are never plotted as exact counters, are never blended and always require manual review. "
+        "Multiple counters are blended only when they are genuinely on the same normalized road corridor with compatible AADT values."
     )
-    if "Review required" in confidence:
-        method_note += " The selected counter is a proxy and should be manually reviewed before investor submission."
 
     return {
         "aadt": int(selected_aadt),
         "aadt_engine_version": AADT_ENGINE_VERSION,
-        "aadt_engine_mode": "coordinate-first-road-aware",
+        "aadt_engine_mode": "coordinate-first-road-aware-provenance-controlled",
         "source": f"Uploaded TII AADT Summary Excel · coordinate-first road-aware lookup · {group_note} · {counter_names or rec.get('site_name')} · {rec.get('latest_year')}",
         "confidence": confidence,
         "provider": "Uploaded TII AADT Excel joined to TII counter coordinates",
@@ -1932,14 +2005,15 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
         "counter_name": counter_names or rec.get("site_name"),
         "route": routes or rec.get("route") or "route not provided",
         "counter_distance_km": round(selected_distance, 2),
+        "coordinate_quality": quality_label,
         "aadt_year": rec.get("latest_year"),
         "sample_days": "published annual AADT value from uploaded Excel",
         "sample_mode": "coordinate-first road-aware TII Excel lookup",
         "aadt_selection_method": "same_corridor_weighted" if len(selected_group) > 1 else "single_counter_coordinate_first",
         "candidate_count": len(candidates),
-        "candidates": candidates[:4],
+        "candidates": candidates[:max(1, min(4, limit))],
         "nearby_counters": candidates[:40],
-        "reference": "AADT Summary Report Public sites 04-2025 2019 to 2026 (1).xlsx + bundled vetted TII counter coordinate overlay; live official TII GeoJSON preferred when reachable",
+        "reference": "AADT Summary Report Public sites 04-2025 2019 to 2026 (1).xlsx + official TII Traffic Counter Locations when reachable; reviewed bundled proxies only as fail-safe",
         "method_note": method_note,
         "location_enrichment": dict(TII_LOCATION_ENRICHMENT_CACHE),
     }
@@ -2309,59 +2383,85 @@ def _load_bundled_tii_counter_locations():
     return list(dedup.values())
 
 
-def _load_tii_counter_locations_from_geojson():
-    """Load TII counter locations with a production-safe bundled fallback.
+def _load_tii_counter_locations_from_geojson(force_refresh: bool = False):
+    """Load counter locations, preferring live official TII data.
 
-    The live official TII GeoJSON is preferred when reachable. In deployment
-    environments where data.tii.ie is blocked, the app uses a bundled vetted
-    counter-coordinate file so the AADT map overlay remains visible and does not
-    place counters at the screened site. Bundled coordinates are labelled as
-    vetted/non-official unless the source explicitly says official.
+    Results are cached because this function is called from both the resolver and
+    the map API. The previous release returned the bundled file before attempting
+    the official source, which contradicted its own production-readiness notes.
     """
-    errors = []
-    bundled_counters = []
-    try:
-        bundled_counters = _load_bundled_tii_counter_locations()
-        if bundled_counters:
-            return bundled_counters
-    except Exception as exc:
-        errors.append(f"bundled vetted locations: {exc}")
-    for url in TII_COUNTER_LOCATION_URLS:
-        try:
-            raw = http_bytes(url, timeout=4.0)
-            payloads = []
-            lower = url.lower()
-            if lower.endswith(".zip") or raw[:2] == b"PK":
-                with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-                    for name in zf.namelist():
-                        lname = name.lower()
-                        if lname.endswith((".geojson", ".json", ".dat", ".tsv", ".csv", ".kml")):
-                            payloads.append((lname, zf.read(name)))
-            else:
-                payloads.append((lower, raw))
-            counters = []
-            for name, body in payloads:
-                text = body.decode("utf-8-sig", errors="replace")
-                if name.endswith((".geojson", ".json")) or text.lstrip().startswith("{"):
-                    counters.extend(_parse_tii_location_geojson(json.loads(text), url))
-                elif name.endswith(".kml") or "<kml" in text[:500].lower():
-                    counters.extend(_parse_tii_location_kml(text, url))
-                else:
-                    counters.extend(_parse_tii_location_delimited(text, url))
-            # De-duplicate by cosit.
-            dedup = {}
-            for c in counters:
-                dedup.setdefault(c["cosit"], c)
-            counters = list(dedup.values())
-            if counters:
-                return counters
-            errors.append(f"{url}: loaded but no WGS84 point counters were parsed")
-        except Exception as exc:
-            errors.append(f"{url}: {exc}")
-    if bundled_counters:
-        return bundled_counters
-    raise RuntimeError("; ".join(errors) or "TII counter location files could not be loaded")
+    if TII_LOCATION_CACHE.get("loaded") and not force_refresh:
+        return TII_LOCATION_CACHE.get("counters") or []
 
+    with TII_LOCATION_CACHE_LOCK:
+        if TII_LOCATION_CACHE.get("loaded") and not force_refresh:
+            return TII_LOCATION_CACHE.get("counters") or []
+        errors = []
+        # Avoid repeated equivalent URLs and keep first-load latency bounded.
+        official_urls = []
+        for url in TII_COUNTER_LOCATION_URLS:
+            if url not in official_urls:
+                official_urls.append(url)
+        live_deadline = time.monotonic() + 5.0
+        for url in official_urls:
+            remaining = live_deadline - time.monotonic()
+            if remaining <= 0.15:
+                errors.append("official location lookup time budget exhausted")
+                break
+            try:
+                raw = http_bytes(url, timeout=min(2.0, max(0.25, remaining)))
+                payloads = []
+                lower = url.lower()
+                if lower.endswith(".zip") or raw[:2] == b"PK":
+                    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+                        for name in zf.namelist():
+                            lname = name.lower()
+                            if lname.endswith((".geojson", ".json", ".dat", ".tsv", ".csv", ".kml")):
+                                payloads.append((lname, zf.read(name)))
+                else:
+                    payloads.append((lower, raw))
+                counters = []
+                for name, body in payloads:
+                    text = body.decode("utf-8-sig", errors="replace")
+                    if name.endswith((".geojson", ".json")) or text.lstrip().startswith("{"):
+                        counters.extend(_parse_tii_location_geojson(json.loads(text), url))
+                    elif name.endswith(".kml") or "<kml" in text[:500].lower():
+                        counters.extend(_parse_tii_location_kml(text, url))
+                    else:
+                        counters.extend(_parse_tii_location_delimited(text, url))
+                dedup = {}
+                for c in counters:
+                    dedup.setdefault(c["cosit"], c)
+                counters = list(dedup.values())
+                if counters:
+                    TII_LOCATION_CACHE.update({
+                        "loaded": True, "counters": counters, "error": None,
+                        "source_mode": "live-official", "source": url,
+                    })
+                    return counters
+                errors.append(f"{url}: loaded but no WGS84 point counters were parsed")
+            except Exception as exc:
+                errors.append(f"{url}: {exc}")
+
+        try:
+            bundled_counters = _load_bundled_tii_counter_locations()
+            if bundled_counters:
+                TII_LOCATION_CACHE.update({
+                    "loaded": True, "counters": bundled_counters,
+                    "error": "; ".join(errors[-4:]) if errors else None,
+                    "source_mode": "bundled-fallback",
+                    "source": str(TII_BUNDLED_COUNTER_LOCATION_JSON.name),
+                })
+                return bundled_counters
+        except Exception as exc:
+            errors.append(f"bundled locations: {exc}")
+
+        message = "; ".join(errors) or "TII counter location files could not be loaded"
+        TII_LOCATION_CACHE.update({
+            "loaded": True, "counters": [], "error": message,
+            "source_mode": "unavailable", "source": None,
+        })
+        raise RuntimeError(message)
 
 def _counter_location_index():
     counters = _load_tii_counter_locations_from_geojson()
@@ -2461,8 +2561,13 @@ def _public_tii_counter_locations_payload():
     return {
         "ok": True,
         "aadt_engine_version": AADT_ENGINE_VERSION,
-        "source": "TII counter locations loaded by server.py; official live GeoJSON preferred, bundled vetted overlay used if live source is unavailable",
+        "source": "TII counter locations loaded by server.py; live official data is attempted first and cached, with a fail-safe bundled fallback",
+        "source_mode": TII_LOCATION_CACHE.get("source_mode"),
+        "source_detail": TII_LOCATION_CACHE.get("source"),
+        "source_error": TII_LOCATION_CACHE.get("error"),
         "count": len(locations),
+        "official_count": sum(1 for x in locations if x.get("official_location")),
+        "mappable_count": sum(1 for x in locations if x.get("mappable_location")),
         "locations": locations,
     }
 
@@ -2573,7 +2678,13 @@ def nearest_tii_counters(site, limit=8, max_km=35):
     counters = load_tii_counters()
     ranked = []
     for counter in counters:
-        d = haversine_km(site["lat"], site["lon"], counter["lat"], counter["lon"])
+        quality, _ = _coordinate_quality(counter)
+        if quality < 1 or not bool(counter.get("mappable_location") or counter.get("official_location")):
+            continue
+        try:
+            d = haversine_km(float(site["lat"]), float(site["lon"]), float(counter["lat"]), float(counter["lon"]))
+        except Exception:
+            continue
         if d <= max_km:
             ranked.append({**counter, "distance_km": d})
     ranked.sort(key=lambda x: x["distance_km"])
@@ -4062,6 +4173,10 @@ def _manual_site_from_params(address: str, params: dict) -> dict | None:
     try:
         lat = float(params.get("lat", [""])[0])
         lon = float(params.get("lon", [""])[0])
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            return None
+        if not (49.0 <= lat <= 56.5 and -11.5 <= lon <= -5.0):
+            return None
         return {"name": address or "Selected site", "lat": lat, "lon": lon, "source": "manual/geocoded site coordinates", "confidence": "provided coordinates", "match_type": "manual-or-client-geocode"}
     except Exception:
         return None
@@ -4237,11 +4352,13 @@ class Handler(BaseHTTPRequestHandler):
             params = urllib.parse.parse_qs(parsed.query)
             address = params.get("address", [""])[0]
             mode = params.get("mode", ["balanced"])[0]
+            if not address.strip() and not (params.get("lat") and params.get("lon")):
+                return self._send_json({"ok": False, "error": "Provide an address or valid Irish coordinates."}, status=400)
             try:
                 traffic = resolve_auto_tii_aadt(address, params=params, mode=mode)
                 return self._send_json({"ok": True, "traffic": traffic})
             except Exception as exc:
-                return self._send_json({"ok": False, "error": str(exc)})
+                return self._send_json({"ok": False, "error": str(exc)}, status=422)
 
         if parsed.path == "/api/import-live-calibration":
             try:
@@ -4313,11 +4430,13 @@ class Handler(BaseHTTPRequestHandler):
             params = urllib.parse.parse_qs(parsed.query)
             address = params.get("address", [""])[0]
             mode = params.get("mode", ["balanced"])[0]
+            if not address.strip() and not (params.get("lat") and params.get("lon")):
+                return self._send_json({"ok": False, "error": "Provide an address or valid Irish coordinates."}, status=400)
             try:
                 traffic = resolve_auto_tii_aadt(address, params=params, mode=mode)
                 return self._send_json({"ok": True, "traffic": traffic})
             except Exception as exc:
-                return self._send_json({"ok": False, "error": str(exc)})
+                return self._send_json({"ok": False, "error": str(exc)}, status=422)
 
         if parsed.path == "/api/search":
             params = urllib.parse.parse_qs(parsed.query)

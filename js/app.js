@@ -770,7 +770,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.34 AADT production-ready resolver + bundled vetted overlay";
+const APP_BUILD_VERSION = "V17.36 AADT audited production resolver + Bandon/Kinsale hardening";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -935,12 +935,12 @@ function aadtEngineMismatchWarning(ctx) {
   const source = String(t.source || "").toLowerCase();
   const mode = String(t.sample_mode || t.aadt_engine_mode || "").toLowerCase();
   const engineVersion = String(t.aadt_engine_version || "");
-  const hasCurrentServer = /V17\.(3[4-9]|[4-9]\d)/.test(engineVersion) || engineVersion.includes("V17.34");
+  const hasCurrentServer = engineVersion.includes("V17.36");
   const isOldCoordinateEngine = source.includes("ranked coordinate-enriched lookup") || mode.includes("ranked coordinate-enriched");
   const hasCandidates = Array.isArray(t.candidates) && t.candidates.length > 0;
   if (t.client_side_aadt_recalculated) return "";
   if (isOldCoordinateEngine && !hasCurrentServer) {
-    return "AADT API version mismatch: the browser is V17.34 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
+    return "AADT API version mismatch: the browser is V17.36 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
   }
   const plotted = (t.candidates || []).filter(c => c.official_location || c.mappable_location).length;
   if (hasCandidates && plotted === 0 && source.includes("tii")) {
@@ -952,28 +952,32 @@ function aadtEngineMismatchWarning(ctx) {
   return "";
 }
 
-const CLIENT_AADT_ENGINE_VERSION = "V17.34 browser coordinate-first resilient AADT engine";
+const CLIENT_AADT_ENGINE_VERSION = "V17.36 browser provenance-controlled AADT engine";
 let clientAadtRecordsPromise = null;
-const CLIENT_AADT_COORD_OVERRIDES = {
-  "000000001069": { lat: 53.2933, lon: -9.0159, location_source: "built-in browser traffic counter coordinate proxy: Bothar na dTreabh, Galway" },
-  "000000001011": { lat: 53.4253, lon: -6.2454, location_source: "built-in browser traffic counter coordinate proxy: Dublin Airport Link" },
-  "000000001271": { lat: 51.8479, lon: -8.4860, location_source: "built-in browser traffic counter coordinate proxy: Cork Airport N27" },
-  "000000020258": { lat: 51.9057, lon: -8.3663, location_source: "built-in browser traffic counter coordinate proxy: Little Island N25/N28 interchange" },
-  "000000001256": { lat: 51.8826, lon: -8.3905, location_source: "built-in browser traffic counter coordinate proxy: Mahon / N40" },
-  "000000001228": { lat: 51.8879, lon: -8.5920, location_source: "built-in browser traffic counter coordinate proxy: Ballincollig Bypass / N22" },
-  "000000001711": { lat: 51.7930, lon: -8.5840, location_source: "built-in browser traffic counter coordinate proxy: N71 Innishannon-Ballinhassig" },
-  "000000001712": { lat: 51.7720, lon: -8.6460, location_source: "built-in browser traffic counter coordinate proxy: N71 Halfway-Inishannon" },
-  "000000001713": { lat: 51.6400, lon: -8.8050, location_source: "built-in browser traffic counter coordinate proxy: N71 Clonakilty-Jones Bridge" },
-  "000000001715": { lat: 51.7000, lon: -9.5200, location_source: "built-in browser traffic counter coordinate proxy: N71 Bantry-Glengarriff" },
-  "000000001716": { lat: 51.8200, lon: -8.5200, location_source: "built-in browser traffic counter coordinate proxy: N71 Ballinhassig-N40" },
-  "000000001717": { lat: 51.5400, lon: -9.4200, location_source: "built-in browser traffic counter coordinate proxy: N71 Ballydehob-Aghadown" }
-};
-
+// Coordinate provenance is supplied by the server/bundled location dataset; no hidden browser-only coordinate overrides.
 function clientAadtCounterId(rec) {
   return String(rec?.site_id || rec?.counter_id || "").trim();
 }
 function clientAadtRoute(route) {
-  return String(route || "").trim().toUpperCase().replace(/\s+/g, "");
+  const raw = String(route || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const m = raw.match(/^([MNR])0*(\d{1,3})$/);
+  if (!m) return raw;
+  const n = Number(m[2]);
+  return `${m[1]}${n < 10 ? String(n).padStart(2, "0") : n}`;
+}
+function clientAadtAddressRoutes(address) {
+  const matches = String(address || "").toUpperCase().matchAll(/\b([MNR])\s*0*(\d{1,3})\b/g);
+  return new Set([...matches].map(m => clientAadtRoute(`${m[1]}${m[2]}`)).filter(Boolean));
+}
+function clientAadtCoordinateQuality(record) {
+  if (Boolean(record?.official_location)) return { level: 3, label: "official-tii" };
+  const src = String(record?.location_source || "").toLowerCase();
+  const conf = String(record?.location_confidence || "").toLowerCase();
+  const status = String(record?.map_coordinate_status || "").toLowerCase();
+  if (status.includes("official-tii") || src.includes("official tii") || src.includes("traffic counter location geojson")) return { level: 3, label: "official-tii" };
+  if (conf.includes("visual_qa") || src.includes("visual qa")) return { level: 2, label: "reviewed-bundled" };
+  if (conf.includes("route_segment") || src.includes("route proxy") || src.includes("route-segment") || src.includes("built-in browser traffic counter coordinate proxy")) return { level: 1, label: "route-segment-proxy" };
+  return { level: 0, label: "coarse-ranking-only" };
 }
 function clientAadtRouteClass(route) {
   const r = clientAadtRoute(route);
@@ -1003,9 +1007,9 @@ function clientAadtRatioOk(a, b, maxRatio = 3.0) {
   return Math.max(x, y) / Math.min(x, y) <= maxRatio;
 }
 
-const CLIENT_TII_COUNTER_LOCATION_API_URL = "./api/tii-counter-locations?v=17.34";
+const CLIENT_TII_COUNTER_LOCATION_API_URL = "./api/tii-counter-locations?v=19.2";
 const CLIENT_TII_COUNTER_LOCATION_GEOJSON_URL = "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.geojson";
-const CLIENT_TII_COUNTER_LOCATION_BUNDLED_URL = "./data/tii_counter_locations_bundled_vetted.json?v=17.34";
+const CLIENT_TII_COUNTER_LOCATION_BUNDLED_URL = "./data/tii_counter_locations_bundled_vetted.json?v=19.2";
 let clientOfficialAadtLocationPromise = null;
 
 function clientPickProp(props, names, fallback = "") {
@@ -1092,13 +1096,15 @@ async function loadClientOfficialAadtLocations() {
   if (!clientOfficialAadtLocationPromise) {
     clientOfficialAadtLocationPromise = (async () => {
       const errors = [];
+      let serverFallback = [];
       try {
         const r = await fetch(CLIENT_TII_COUNTER_LOCATION_API_URL, { cache: "no-store" });
         if (!r.ok) throw new Error(`server proxy returned ${r.status}`);
         const data = await r.json();
         const rows = clientOfficialCounterLocationsFromApi(data);
-        if (rows.length) return rows;
-        errors.push("server proxy returned no parseable official counter locations");
+        if (rows.some(row => row.official_location)) return rows;
+        serverFallback = rows.filter(row => row.mappable_location);
+        errors.push(`server proxy supplied ${serverFallback.length} reviewed fallback locations but no live official locations`);
       } catch (err) {
         errors.push(`server proxy unavailable: ${err.message || err}`);
       }
@@ -1112,19 +1118,22 @@ async function loadClientOfficialAadtLocations() {
       } catch (err) {
         errors.push(`direct GeoJSON unavailable: ${err.message || err}`);
       }
+      if (serverFallback.length) return serverFallback;
       try {
         const r = await fetch(CLIENT_TII_COUNTER_LOCATION_BUNDLED_URL, { cache: "no-store" });
         if (!r.ok) throw new Error(`bundled vetted locations returned ${r.status}`);
         const data = await r.json();
-        const rows = clientOfficialCounterLocationsFromApi(data);
-        if (rows.length) return rows.map(row => ({
-          ...row,
-          official_location: Boolean(row.official_location),
-          mappable_location: true,
-          map_coordinate_status: row.map_coordinate_status || "vetted-bundled-coordinate-not-official",
-          location_source: row.location_source || "Bundled vetted counter coordinate"
-        }));
-        errors.push("bundled vetted locations returned no parseable counter locations");
+        const rows = clientOfficialCounterLocationsFromApi(data)
+          .filter(row => row.mappable_location || row.official_location)
+          .map(row => ({
+            ...row,
+            official_location: Boolean(row.official_location),
+            mappable_location: Boolean(row.mappable_location || row.official_location),
+            map_coordinate_status: row.map_coordinate_status || "reviewed-proxy",
+            location_source: row.location_source || "Bundled reviewed counter coordinate"
+          }));
+        if (rows.length) return rows;
+        errors.push("bundled vetted locations returned no reviewed mappable counter locations");
       } catch (err) {
         errors.push(`bundled vetted locations unavailable: ${err.message || err}`);
       }
@@ -1174,23 +1183,19 @@ function mergeClientAadtRowsWithOfficialLocations(rows, officialLocations) {
 }
 async function loadClientAadtRecords() {
   if (!clientAadtRecordsPromise) {
-    clientAadtRecordsPromise = fetch("./data/tii_aadt_counters_2019_2026_geocoded.json?v=17.34", { cache: "no-store" })
+    clientAadtRecordsPromise = fetch("./data/tii_aadt_counters_2019_2026_geocoded.json?v=19.2", { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error(`Could not load local TII AADT database (${r.status})`); return r.json(); })
       .then(async data => {
         const rows = Array.isArray(data?.records) ? data.records : Array.isArray(data) ? data : [];
         const baseRows = rows.map(r => ({ ...r }));
         try {
           const officialLocations = await loadClientOfficialAadtLocations();
-          const officialMerged = mergeClientAadtRowsWithOfficialLocations(baseRows, officialLocations);
-          const mappableRows = officialMerged.filter(r => Boolean(r.official_location || r.mappable_location) && Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)) && Number(r.latest_aadt || r.aadt) > 0);
-          if (mappableRows.length) return mappableRows;
-          console.warn("TII counter-location join returned no usable mappable rows; falling back to bundled ranking coordinates for AADT calculation only");
+          const merged = mergeClientAadtRowsWithOfficialLocations(baseRows, officialLocations);
+          return merged.filter(r => Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)) && Number(r.latest_aadt || r.aadt) > 0);
         } catch (officialErr) {
-          console.warn("TII counter locations unavailable; falling back to bundled ranking coordinates for AADT calculation only. Map markers will only show mappable vetted/official coordinates.", officialErr);
+          console.warn("Official/reviewed TII counter locations unavailable; coarse bundled coordinates remain ranking hints only and will not be plotted.", officialErr);
+          return baseRows.filter(r => Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)) && Number(r.latest_aadt || r.aadt) > 0);
         }
-        return baseRows
-          .filter(r => Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)) && Number(r.latest_aadt || r.aadt) > 0)
-          .map(r => ({ ...r, official_location: false, map_coordinate_status: "ranking-only bundled coordinate; not plotted as official TII map marker" }));
       });
   }
   return clientAadtRecordsPromise;
@@ -1199,16 +1204,19 @@ function clientAadtScore(record, address, distanceKm) {
   const route = clientAadtRoute(record.route);
   const routeClass = clientAadtRouteClass(route);
   const flags = clientAadtSiteFlags(address);
+  const addressRoutes = clientAadtAddressRoutes(address);
   let score = 140 / (1 + Math.max(0.05, distanceKm));
+  if (addressRoutes.has(route)) score += 100;
   if (routeClass === "M" && !flags.motorway) score -= 28;
   if (routeClass === "M" && flags.motorway) score += 10;
   if (routeClass === "N") score += 3;
   if (routeClass === "R") score += 1;
   if (distanceKm > 15) score -= Math.min(30, (distanceKm - 15) * 1.8);
-  const loc = String(record.location_source || "").toLowerCase();
-  if (loc.includes("official") || loc.includes("tii traffic counter")) score += 4;
-  else if (loc.includes("built-in")) score += 1;
-  else if (loc.includes("offline description")) score -= 2;
+  const quality = clientAadtCoordinateQuality(record).level;
+  if (quality === 3) score += 8;
+  else if (quality === 2) score += 2;
+  else if (quality === 1) score -= 3;
+  else score -= 75;
   return score;
 }
 function clientWeightedAadt(group) {
@@ -1224,6 +1232,7 @@ function clientSelectedAadtGroup(candidates) {
   const usable = candidates.filter(c => Number(c.aadt) > 0);
   if (!usable.length) return [];
   const selected = usable[0];
+  if (Number(selected.coordinate_quality_level) === 0) return [selected];
   const route = clientAadtRoute(selected.route);
   const group = [selected];
   for (const c of usable.slice(1, 12)) {
@@ -1258,11 +1267,14 @@ async function clientCoordinateFirstTraffic(ctx, address) {
       lat: Number(r.lat),
       lon: Number(r.lon),
       location_source: r.location_source || "local TII coordinate database",
-      official_location: Boolean(r.official_location),
-      mappable_location: Boolean(r.mappable_location || r.official_location),
-      map_coordinate_status: r.map_coordinate_status || (r.official_location ? "official" : "vetted-bundled-coordinate-not-official"),
-      confidence: d <= 3 ? "High" : d <= 8 ? "Medium" : d <= 20 ? "Review" : "Low",
-      match_basis: "official TII map coordinate + road-aware ranking",
+      location_confidence: r.location_confidence,
+      coordinate_quality_level: clientAadtCoordinateQuality(r).level,
+      coordinate_quality: clientAadtCoordinateQuality(r).label,
+      official_location: clientAadtCoordinateQuality(r).level === 3,
+      mappable_location: Boolean(r.mappable_location || r.official_location) && clientAadtCoordinateQuality(r).level >= 1,
+      map_coordinate_status: r.map_coordinate_status || (r.official_location ? "official" : clientAadtCoordinateQuality(r).level === 0 ? "ranking-only-coarse-coordinate-not-for-map" : "reviewed-proxy"),
+      confidence: clientAadtCoordinateQuality(r).level === 0 ? "Review" : clientAadtCoordinateQuality(r).level === 1 ? (d <= 20 ? "Review" : "Low") : clientAadtCoordinateQuality(r).level === 2 ? (d <= 8 ? "Medium" : d <= 20 ? "Review" : "Low") : d <= 3 ? "High" : d <= 8 ? "Medium" : d <= 20 ? "Review" : "Low",
+      match_basis: "coordinate-first road-aware ranking with coordinate provenance control",
       source_record: r
     };
   }).filter(c => Number.isFinite(c.distance_km) && c.distance_km <= 80 && c.aadt > 0)
@@ -1284,10 +1296,15 @@ async function clientCoordinateFirstTraffic(ctx, address) {
   const nearbyCounters = ranked.slice(0, 40).map(mapCandidate);
   const selected = group[0] || ranked[0];
   const selectedDistance = Number(selected.distance_km);
-  const confidence = selectedDistance <= 3 ? "High / browser coordinate-first same-area TII counter" :
-    selectedDistance <= 8 ? "Medium-high / browser coordinate-first nearby TII counter" :
-    selectedDistance <= 15 ? "Medium / browser coordinate-first corridor proxy" :
-    "Review required / browser coordinate-first fallback — verify counter on TII map";
+  const selectedQuality = Number(selected.coordinate_quality_level);
+  const motorwayMismatch = selected.route_class === "M" && !clientAadtSiteFlags(address).motorway;
+  const confidence = selectedQuality === 0 ? "Review required / coarse ranking-only coordinate — verify the counter manually" :
+    selectedQuality === 1 ? "Review required / route-segment coordinate proxy — verify on the TII map" :
+    selectedQuality === 2 ? (selectedDistance <= 8 && !motorwayMismatch ? "Medium / reviewed bundled counter coordinate" : "Review required / reviewed bundled corridor proxy") :
+    selectedDistance <= 3 && !motorwayMismatch ? "High / official coordinate-first same-area TII counter" :
+    selectedDistance <= 8 && !motorwayMismatch ? "Medium-high / official coordinate-first nearby TII counter" :
+    selectedDistance <= 15 && !motorwayMismatch ? "Medium / official coordinate-first corridor proxy" :
+    "Review required / official coordinate-first fallback — verify counter on TII map";
   const groupNote = group.length > 1 ? `distance-weighted same-corridor blend of ${group.length} counters` : "single best counter";
   return {
     aadt: selectedAadt,
@@ -1297,7 +1314,7 @@ async function clientCoordinateFirstTraffic(ctx, address) {
     client_side_aadt_recalculated: true,
     source: `Browser local TII AADT database joined to mappable TII counter coordinates · coordinate-first road-aware lookup · ${groupNote} · ${group.map(c => c.counter_name).join("; ") || selected.counter_name} · ${selected.aadt_year || "latest"}`,
     confidence,
-    provider: "Browser local TII AADT database joined to official or bundled vetted TII counter coordinates",
+    provider: "Browser local TII AADT database with provenance-controlled counter coordinates",
     counter_id: group.map(c => c.counter_id).join(", ") || selected.counter_id,
     counter_name: group.map(c => c.counter_name).join("; ") || selected.counter_name,
     route: [...new Set(group.map(c => c.route).filter(Boolean))].join(", ") || selected.route,
@@ -1310,7 +1327,8 @@ async function clientCoordinateFirstTraffic(ctx, address) {
     candidates: top,
     nearby_counters: nearbyCounters,
     reference: "Server-proxied official TII Traffic Counter Locations or bundled vetted counter-coordinate overlay joined to data/tii_aadt_counters_2019_2026_geocoded.json",
-    method_note: "Browser-side safety correction: AADT was recalculated from the exact map coordinate. Official TII counter coordinates are preferred. If the live official layer is unavailable, bundled vetted coordinates are used for map UX and clearly labelled as non-official. The nearby-site radius does not control AADT selection.",
+    coordinate_quality: selected.coordinate_quality,
+    method_note: "Browser-side safety correction: AADT was recalculated from the screened map coordinate with explicit coordinate provenance controls. Official TII points are preferred; only reviewed or route-segment proxies may be plotted as non-official. Coarse description-derived coordinates are ranking hints only, are never plotted or blended, and always require manual review. The nearby-site radius does not control AADT selection.",
     previous_server_traffic: ctx?.traffic ? { aadt: ctx.traffic.aadt, source: ctx.traffic.source, confidence: ctx.traffic.confidence, counter_name: ctx.traffic.counter_name, counter_distance_km: ctx.traffic.counter_distance_km } : null
   };
 }
@@ -4447,7 +4465,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.34 AADT production-readiness RC</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.36 AADT audited production release</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }

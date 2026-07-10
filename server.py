@@ -41,6 +41,7 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
+AADT_ENGINE_VERSION = "V17.28 coordinate-first AADT server verified"
 
 
 LOCAL_DATASETS = {
@@ -1911,6 +1912,8 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
 
     return {
         "aadt": int(selected_aadt),
+        "aadt_engine_version": AADT_ENGINE_VERSION,
+        "aadt_engine_mode": "coordinate-first-road-aware",
         "source": f"Uploaded TII AADT Summary Excel · coordinate-first road-aware lookup · {group_note} · {counter_names or rec.get('site_name')} · {rec.get('latest_year')}",
         "confidence": confidence,
         "provider": "Uploaded TII AADT Excel joined to TII counter coordinates",
@@ -3252,12 +3255,15 @@ def search(address, radius_km):
                 "sample_days": traffic.get("sample_days"),
                 "tii_error": traffic.get("tii_error"),
                 "location_enrichment": traffic.get("location_enrichment") or dict(TII_LOCATION_ENRICHMENT_CACHE),
+                "aadt_engine_version": traffic.get("aadt_engine_version") or AADT_ENGINE_VERSION,
+                "aadt_engine_mode": traffic.get("aadt_engine_mode"),
             },
         },
         "debug": {
             "elapsed_seconds": round(time.time() - start, 3),
             "radius_km": radius_km,
             "server": "server.py",
+            "aadt_engine_version": AADT_ENGINE_VERSION,
             "address_provider_config": config_status(),
             "address_accuracy_note": "For all Irish addresses/Eircodes, configure Autoaddress, GeoDirectory/GeoAddress, Google, or Mapbox. Free open fallback cannot guarantee every Eircode.",
             "geocode_error": geocode_error,
@@ -4121,6 +4127,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_login("Incorrect password. Please try again.")
         if not self._is_authenticated():
             return self._redirect_to_login()
+        if parsed.path == "/api/version":
+            return self._send_json({"ok": True, "server": "server.py", "aadt_engine_version": AADT_ENGINE_VERSION})
+
         if parsed.path == "/api/auto-tii-aadt":
             params = urllib.parse.parse_qs(parsed.query)
             address = params.get("address", [""])[0]
@@ -4187,6 +4196,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._redirect_to_login()
         if parsed.path in ("/", "/index.html"):
             return self._send_file(ROOT / "index.html")
+
+        if parsed.path == "/api/version":
+            return self._send_json({"ok": True, "server": "server.py", "aadt_engine_version": AADT_ENGINE_VERSION})
 
         if parsed.path == "/api/auto-tii-aadt":
             params = urllib.parse.parse_qs(parsed.query)

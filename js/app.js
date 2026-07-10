@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.27 coordinate-first AADT engine";
+const APP_BUILD_VERSION = "V17.28 verified AADT API guard";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -917,6 +917,7 @@ function aadtSourceText(ctx) {
   const t = ctx?.traffic;
   if (!t) return "Base model default until site search runs";
   const parts = [t.source || t.provider || "Traffic source not provided"];
+  if (t.aadt_engine_version) parts.push(`Engine: ${t.aadt_engine_version}`);
   if (t.counter_name || t.counter_id) parts.push(`Counter: ${t.counter_name || t.counter_id}`);
   if (Number.isFinite(Number(t.counter_distance_km))) parts.push(`${number(Number(t.counter_distance_km), 2)} km from site`);
   const sourceYear = Number(state.inputs.trafficSourceYear);
@@ -926,6 +927,22 @@ function aadtSourceText(ctx) {
   }
   if (t.confidence) parts.push(`Confidence: ${t.confidence}`);
   return parts.join(" · ");
+}
+
+function aadtEngineMismatchWarning(ctx) {
+  const t = ctx?.traffic || {};
+  const source = String(t.source || "").toLowerCase();
+  const mode = String(t.sample_mode || t.aadt_engine_mode || "").toLowerCase();
+  const engineVersion = String(t.aadt_engine_version || "");
+  const isOldCoordinateEngine = source.includes("ranked coordinate-enriched lookup") || mode.includes("ranked coordinate-enriched");
+  const hasCandidates = Array.isArray(t.candidates) && t.candidates.length > 0;
+  if (isOldCoordinateEngine) {
+    return "AADT API version mismatch: the browser is V17.28 but the server returned the older V17.26 coordinate-enriched AADT method. This can select distant county/corridor counters such as N22 for Bandon. Redeploy/restart the full package including server.py; do not rely on this AADT result.";
+  }
+  if (hasCandidates && !engineVersion && source.includes("tii")) {
+    return "AADT API version is not reported by the server. The result may come from an older backend. Redeploy/restart the full package if the candidate list does not show coordinate-first road-aware output.";
+  }
+  return "";
 }
 
 
@@ -1001,6 +1018,7 @@ function renderSiteDashboard() {
     ${sectionTitle("Site Screening", "Find the site, confirm the AADT source, and review nearby charging competition.")}
     ${resetControl("site")}
     ${ctx?.warning ? `<div class="notice warn">${h(ctx.warning)}</div>` : ""}
+    ${aadtEngineMismatchWarning(ctx) ? `<div class="notice bad"><strong>AADT engine mismatch.</strong> ${h(aadtEngineMismatchWarning(ctx))}</div>` : ""}
     <div class="panel">
       <h3>Address / Eircode search</h3>
       <div class="site-search-grid">
@@ -4007,7 +4025,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.27 coordinate-first AADT engine</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.28 verified AADT API guard</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }

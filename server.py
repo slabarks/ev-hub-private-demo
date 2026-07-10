@@ -41,7 +41,7 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-AADT_ENGINE_VERSION = "V17.36 AADT audited resolver + official-first fail-safe coordinates + Bandon/Kinsale text hardening"
+AADT_ENGINE_VERSION = "V17.37 AADT audited resolver + maturity-adjusted portfolio financials"
 
 
 LOCAL_DATASETS = {
@@ -732,7 +732,7 @@ AADT_ADDRESS_ALIAS_RULES = [
     ({"douglas"}, ["douglas", "N40", "south", "ring"]),
     ({"ballincollig"}, ["ballincollig", "ovens", "N22"]),
     ({"galway"}, ["galway", "bothar", "treabh", "N06", "N84", "N83"]),
-    # V17.36: Bandon and Kinsale otherwise appear as incidental road names on the
+    # V17.37: Bandon and Kinsale otherwise appear as incidental road names on the
     # unrelated N40 Cork South Ring corridor. Anchor them to the N71 corridor.
     ({"bandon"}, ["N71", "innishannon", "ballinhassig", "halfway"]),
     ({"kinsale"}, ["N71", "ballinhassig"]),
@@ -3876,6 +3876,61 @@ def _header_index(headers: list[object], *candidates: str):
     return None
 
 
+def _month_start(value: dt.date) -> dt.date:
+    return dt.date(value.year, value.month, 1)
+
+
+def _next_month(value: dt.date) -> dt.date:
+    if value.month == 12:
+        return dt.date(value.year + 1, 1, 1)
+    return dt.date(value.year, value.month + 1, 1)
+
+
+def _build_monthly_live_history(daily: dict, first_active: dt.date | None, latest_date: dt.date) -> list[dict]:
+    """Return compact month-since-launch history for maturity-curve learning.
+
+    Calendar days, including days with no sessions, are retained inside each
+    commercial operating month. This prevents the maturity model from treating
+    outage or zero-demand days as missing observations.
+    """
+    if not first_active or latest_date < first_active:
+        return []
+    rows: list[dict] = []
+    cursor = _month_start(first_active)
+    month_index = 1
+    while cursor <= latest_date:
+        next_month = _next_month(cursor)
+        month_end = next_month - dt.timedelta(days=1)
+        scope_start = max(cursor, first_active)
+        scope_end = min(month_end, latest_date)
+        calendar_days = (scope_end - scope_start).days + 1
+        values = [(day, vals) for day, vals in daily.items() if scope_start <= day <= scope_end]
+        kwh = sum(float(vals.get("kwh", 0) or 0) for _, vals in values)
+        sessions = sum(float(vals.get("sessions", 0) or 0) for _, vals in values)
+        net = sum(float(vals.get("net", 0) or 0) for _, vals in values)
+        active_days = sum(1 for _, vals in values if float(vals.get("kwh", 0) or 0) >= 1.0 or float(vals.get("sessions", 0) or 0) >= 1.0)
+        source_days = len({day for day, _ in values})
+        full_calendar_days = (month_end - cursor).days + 1
+        rows.append({
+            "monthIndex": month_index,
+            "month": cursor.strftime("%Y-%m"),
+            "monthStart": cursor.isoformat(),
+            "calendarMonth": cursor.month,
+            "calendarDays": calendar_days,
+            "sourceDays": source_days,
+            "activeDays": active_days,
+            "isCompleteCalendarMonth": scope_start == cursor and scope_end == month_end and calendar_days == full_calendar_days,
+            "kwh": round(kwh, 3),
+            "sessions": round(sessions, 3),
+            "netRevenue": round(net, 2),
+            "kwhPerCalendarDay": round(kwh / calendar_days, 4) if calendar_days else 0,
+            "sessionsPerCalendarDay": round(sessions / calendar_days, 4) if calendar_days else 0,
+        })
+        cursor = next_month
+        month_index += 1
+    return rows
+
+
 def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
@@ -4008,6 +4063,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
             annualisation_method = "no_actual"
             annualisation_basis = "no usable live actuals"
 
+        monthly_history = _build_monthly_live_history(daily, first_active, latest_date)
         actual = {
             "siteName": site["siteName"],
             "siteKey": site["siteKey"],
@@ -4031,6 +4087,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "firstCommercialSessionDate": first_session.isoformat() if first_session else None,
                 "firstCommercialKwhDate": first_kwh.isoformat() if first_kwh else None,
                 "commercialDaysBasis": days_basis,
+                "monthlyHistory": monthly_history,
             },
             "maturity": {"dataDays": int(data_days), "tier": tier},
             "diagnostics": {
@@ -4043,6 +4100,8 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "chargerNames": sorted(site["chargerNames"]),
                 "cumulativeKwh": round(cumulative_kwh, 1),
                 "daysLive": data_days,
+                "monthlyHistoryMonths": len(monthly_history),
+                "completeCalendarMonths": sum(1 for row in monthly_history if row.get("isCompleteCalendarMonth")),
             }
         }
         actuals.append(actual)

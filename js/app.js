@@ -5,6 +5,7 @@ import { batteryOptionsFor } from "./data/batteryLibrary.js";
 import { calculateDemand } from "./engines/demandEngine.js";
 import { calculateYearByYear, summariseFinancials } from "./engines/financialEngine.js";
 import { compareExcelScenarios } from "./engines/optimizerEngine.js";
+import { buildMaturityModel, forecastSiteMaturity } from "./engines/maturityEngine.js";
 import { searchLocation, searchCoordinates, filterChargers, maxConnectorPower, totalConnectors, categoryForPower } from "./providers/addressProviders.js";
 import { MOCK_LOCATION } from "./providers/mockProviders.js";
 import { lineChart, stackedBarChart, financeComboChart } from "./ui/charts.js";
@@ -360,9 +361,12 @@ function portfolioMergeLiveActual(site, liveItem) {
       appliedPositiveCount += 1;
     }
   });
-  ["asOfDate", "sourceFile", "source", "siteName", "firstActiveDate"].forEach(key => {
+  ["asOfDate", "sourceFile", "source", "siteName", "firstActiveDate", "firstCommercialSessionDate", "firstCommercialKwhDate", "commercialDaysBasis", "annualisationBasis", "annualisationMethod"].forEach(key => {
     if (liveActual[key]) mergedActual[key] = liveActual[key];
   });
+  if (Array.isArray(liveActual.monthlyHistory) && liveActual.monthlyHistory.length) {
+    mergedActual.monthlyHistory = liveActual.monthlyHistory.map(row => ({ ...row }));
+  }
   const capex = Number(site.actualCapexExVat || actualCapexForSite(site) || actualCapexForSite(liveItem.siteName) || 0);
   const applied = appliedPositiveCount > 0;
   const retainedExisting = !applied && liveActualHasPositiveValue(site.actual || {});
@@ -770,7 +774,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.36 AADT audited production resolver + Bandon/Kinsale hardening";
+const APP_BUILD_VERSION = "V17.37 maturity-adjusted portfolio financials + audited AADT";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -935,12 +939,12 @@ function aadtEngineMismatchWarning(ctx) {
   const source = String(t.source || "").toLowerCase();
   const mode = String(t.sample_mode || t.aadt_engine_mode || "").toLowerCase();
   const engineVersion = String(t.aadt_engine_version || "");
-  const hasCurrentServer = engineVersion.includes("V17.36");
+  const hasCurrentServer = engineVersion.includes("V17.37");
   const isOldCoordinateEngine = source.includes("ranked coordinate-enriched lookup") || mode.includes("ranked coordinate-enriched");
   const hasCandidates = Array.isArray(t.candidates) && t.candidates.length > 0;
   if (t.client_side_aadt_recalculated) return "";
   if (isOldCoordinateEngine && !hasCurrentServer) {
-    return "AADT API version mismatch: the browser is V17.36 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
+    return "AADT API version mismatch: the browser is V17.37 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
   }
   const plotted = (t.candidates || []).filter(c => c.official_location || c.mappable_location).length;
   if (hasCandidates && plotted === 0 && source.includes("tii")) {
@@ -952,7 +956,7 @@ function aadtEngineMismatchWarning(ctx) {
   return "";
 }
 
-const CLIENT_AADT_ENGINE_VERSION = "V17.36 browser provenance-controlled AADT engine";
+const CLIENT_AADT_ENGINE_VERSION = "V17.37 browser provenance-controlled AADT engine";
 let clientAadtRecordsPromise = null;
 // Coordinate provenance is supplied by the server/bundled location dataset; no hidden browser-only coordinate overrides.
 function clientAadtCounterId(rec) {
@@ -2504,22 +2508,28 @@ function portfolioAnnualOperatingValues(site, metrics = portfolioOperatingMetric
   const explicitAnnualSessions = Number(actual.annualSessions || 0);
   const explicitAnnualRevenue = Number(actual.annualNetRevenue || 0);
   const hasExplicitAnnual = explicitAnnualKwh > 0;
+  const dataDays = portfolioActualDataDays(site);
+  const method = String(actual.annualisationMethod || "").toLowerCase();
+  const isTrailing365Actual = method === "trailing365" || method === "trailing_365" || (!method && dataDays >= 365 && Number(actual.trailing365Kwh || 0) > 0 && Math.abs(explicitAnnualKwh - Number(actual.trailing365Kwh || 0)) < Math.max(1, explicitAnnualKwh * 0.01));
   const annualKwh = hasExplicitAnnual ? explicitAnnualKwh : Number(metrics.annualisedKwh || 0);
   const annualSessions = explicitAnnualSessions > 0 ? explicitAnnualSessions : Number(metrics.annualisedSessions || 0);
   const annualRevenue = explicitAnnualRevenue > 0 ? explicitAnnualRevenue : annualKwh * Number(metrics.revenuePerKwh || DEFAULT_INPUTS.netSellingPriceExVat || 0);
-  const dataDays = portfolioActualDataDays(site);
   const dateInfo = portfolioActualDateInfo(site);
   const uploadedSuffix = site?.liveActuals?.source === "uploaded" ? ` · uploaded actuals${site.liveActuals.asOfDate ? ` as of ${site.liveActuals.asOfDate}` : ""}` : site?.liveActuals?.actualSourceStatus ? ` · ${site.liveActuals.actualSourceStatus}` : "";
   const periodEnd = dateInfo.latestDate;
-  const periodStart = hasExplicitAnnual && periodEnd
+  const periodStart = isTrailing365Actual && periodEnd
     ? portfolioDateAddDays(periodEnd, -364)
-    : periodEnd ? portfolioDateAddDays(periodEnd, -29) : null;
-  const periodDays = hasExplicitAnnual ? 365 : 30;
-  const periodLabel = periodStart && periodEnd ? `${portfolioDateLabel(periodStart)} → ${portfolioDateLabel(periodEnd)}` : (hasExplicitAnnual ? "trailing 365-day window" : "latest rolling 30-day window");
-  const basis = hasExplicitAnnual
-    ? `Trailing 365-day actual (${periodLabel})${uploadedSuffix}`
-    : `Rolling 30-day run-rate annualised (${periodLabel})${uploadedSuffix}`;
-  return { annualKwh, annualSessions, annualRevenue, hasExplicitAnnual, dataDays, basis, periodDays, periodStart, periodEnd, periodLabel, firstActiveDate: dateInfo.firstActiveDate };
+    : hasExplicitAnnual
+      ? (dateInfo.firstSessionDate || dateInfo.firstKwhDate || dateInfo.firstActiveDate || (periodEnd ? portfolioDateAddDays(periodEnd, -Math.max(0, dataDays - 1)) : null))
+      : (periodEnd ? portfolioDateAddDays(periodEnd, -Math.max(0, Math.min(30, dataDays || 30) - 1)) : null);
+  const periodDays = isTrailing365Actual ? 365 : (hasExplicitAnnual ? (dataDays > 0 ? dataDays : 30) : Math.min(30, dataDays || 30));
+  const periodLabel = periodStart && periodEnd ? `${portfolioDateLabel(periodStart)} → ${portfolioDateLabel(periodEnd)}` : (isTrailing365Actual ? "trailing 365-day window" : `${number(periodDays,0)}-day operating history`);
+  let basis;
+  if (isTrailing365Actual) basis = `Trailing 365-day actual (${periodLabel})${uploadedSuffix}`;
+  else if (hasExplicitAnnual && ["daily_cumulative", "partial_cumulative"].includes(method)) basis = `Cumulative actual annualised (${periodLabel})${uploadedSuffix}`;
+  else if (hasExplicitAnnual) basis = `Annualised actual basis (${periodLabel})${uploadedSuffix}`;
+  else basis = `Rolling 30-day run-rate annualised (${periodLabel})${uploadedSuffix}`;
+  return { annualKwh, annualSessions, annualRevenue, hasExplicitAnnual, isTrailing365Actual, annualisationMethod: method, dataDays, basis, periodDays, periodStart, periodEnd, periodLabel, firstActiveDate: dateInfo.firstActiveDate };
 }
 function portfolioFallbackComparisonYearIndex(site, annualActual) {
   const explicit = Number(site?.maturity?.comparisonYearIndex || 0);
@@ -2550,7 +2560,7 @@ function portfolioModelPeriodWeights(site, annualActual) {
       const label = weighted.length === 1
         ? `Model Year ${weighted[0].yearIndex}`
         : `Weighted ${weighted.map(w => `Y${w.yearIndex} ${Math.round(w.weight * 100)}%`).join(" / ")}`;
-      return { weights: weighted, label, method: "Matched trailing 365-day operating window", comparisonYearIndex: weighted[Math.floor(weighted.length / 2)]?.yearIndex || fallbackYear };
+      return { weights: weighted, label, method: annualActual?.isTrailing365Actual ? "Matched trailing 365-day operating window" : "Matched cumulative annualised operating window", comparisonYearIndex: weighted[Math.floor(weighted.length / 2)]?.yearIndex || fallbackYear };
     }
   }
   // For rolling 30-day data where firstActiveDate is known: determine which model year
@@ -3538,14 +3548,24 @@ function portfolioActualRevenueInfo(site, annualActual, metrics) {
     // Only trust an explicit annual revenue when the actual source is really a full-year
     // / trailing annual basis. Otherwise a partial-period revenue can be mistaken for a
     // full year and make EBITDA/payback look artificially poor.
-    if (Number(annualActual?.hasExplicitAnnual || false) || dataDays >= 365) {
+    if (annualActual?.isTrailing365Actual) {
       const implied = annualKwh > 0 ? explicitAnnualRevenue / annualKwh : null;
       if (!Number.isFinite(implied) || (implied >= minRevenuePerKwh && implied <= maxRevenuePerKwh)) {
         return { annualRevenue: explicitAnnualRevenue, annualSessions, source: "Actual trailing revenue", estimated: false, available: true };
       }
       return estimatedFromTariff(`Estimated from kWh × net price; explicit revenue ignored (${number(implied,2)} €/kWh out of range)`);
     }
-    return estimatedFromTariff("Estimated from kWh × net price; partial revenue not treated as annual");
+    const implied = annualKwh > 0 ? explicitAnnualRevenue / annualKwh : null;
+    if (!Number.isFinite(implied) || (implied >= minRevenuePerKwh && implied <= maxRevenuePerKwh)) {
+      return {
+        annualRevenue: explicitAnnualRevenue,
+        annualSessions,
+        source: "Cumulative actual revenue annualised",
+        estimated: false,
+        available: true
+      };
+    }
+    return estimatedFromTariff(`Estimated from kWh × net price; partial-period revenue ignored (${number(implied,2)} €/kWh out of range)`);
   }
   if (rollingRevenue > 0 && actualKwh > 0) {
     const revenuePerKwh = rollingRevenue / Math.max(1, actualKwh);
@@ -3697,6 +3717,102 @@ function portfolioFinancialOpexFromActuals(result, annualKwh, annualSessions, an
   const operatingCashflow = grossProfit - opexExElectricity;
   return { fixedOpex, variableOpex, opexExElectricity, electricityCost, grossProfit, operatingCashflow, transactionProcessingFee, flatTransactionFee, landlordGpShare, landlordGrossSalesShare, groundRent, modelGroundRentExcluded: modelGroundRent, landlordNote: landlord.note, landlordBasis: landlord.basis, landlordApplied: landlord.applied, landlordConflict: landlord.conflict };
 }
+let portfolioMaturityModelCache = { key: "", model: null };
+function portfolioFinancialMaturityModel(sites = portfolioSites({ includeAdditional: false })) {
+  const historySignature = sites.map(site => {
+    const history = Array.isArray(site?.actual?.monthlyHistory) ? site.actual.monthlyHistory : [];
+    const totalKwh = history.reduce((acc, row) => acc + (Number(row?.kwh) || 0), 0);
+    const latest = history.length ? history[history.length - 1] : null;
+    return `${site.id || site.name}:${Number(site?.maturity?.dataDays || 0)}:${history.length}:${Math.round(totalKwh)}:${latest?.month || latest?.monthStart || ""}:${Math.round(Number(latest?.kwh || 0))}`;
+  }).join("|");
+  const key = [portfolioLiveActualsSnapshot?.latestDate || "stored", historySignature, state.inputs.rampUpYear1, state.inputs.rampUpYear2].join("::");
+  if (portfolioMaturityModelCache.key === key && portfolioMaturityModelCache.model) return portfolioMaturityModelCache.model;
+  const model = buildMaturityModel(sites, {
+    rampYear1: Number(state.inputs.rampUpYear1 ?? DEFAULT_INPUTS.rampUpYear1 ?? 0.60),
+    rampYear2: Number(state.inputs.rampUpYear2 ?? DEFAULT_INPUTS.rampUpYear2 ?? 0.80),
+    maxMonths: 24
+  });
+  portfolioMaturityModelCache = { key, model };
+  return model;
+}
+function portfolioFinancialMatureModelAnnualKwh(result) {
+  const annual = Number(result?.modelledAnnualKwh || result?.baseAnnualKwh || 0);
+  const ramp = Number(result?.modelRampFactor || 1);
+  const growth = Number(result?.modelGrowthFactor || 1);
+  const denominator = ramp > 0 && growth > 0 ? ramp * growth : 1;
+  return annual > 0 ? annual / denominator : 0;
+}
+function portfolioFinancialRecentDaily(site, key, fallback = 0) {
+  const actual = site?.actual || {};
+  const dataDays = Math.max(1, Number(site?.maturity?.dataDays || 30));
+  const divisor = Math.min(30, dataDays);
+  const rollingKey = key === "sessions" ? "rolling30Sessions" : "rolling30Kwh";
+  const rolling = Number(actual[rollingKey] || 0);
+  if (rolling > 0) return rolling / divisor;
+  const direct = Number(key === "sessions" ? actual.dailySessions : actual.dailyKwh);
+  return direct > 0 ? direct : Number(fallback || 0);
+}
+function portfolioFinancialMaturityForecast(site, result, annualActual, revenueInfo, operationalDays, model) {
+  const latestDate = annualActual?.periodEnd ? portfolioDateLabel(annualActual.periodEnd) : (site?.actual?.asOfDate || site?.liveActuals?.asOfDate || "");
+  const forecast = forecastSiteMaturity({
+    site,
+    model,
+    dataDays: Number(operationalDays || annualActual?.dataDays || site?.maturity?.dataDays || 0),
+    latestDate,
+    currentAnnualKwh: Number(annualActual?.annualKwh || 0),
+    currentAnnualRevenue: Number(revenueInfo?.annualRevenue || 0),
+    currentAnnualSessions: Number(revenueInfo?.annualSessions || annualActual?.annualSessions || 0),
+    recentDailyKwh: portfolioFinancialRecentDaily(site, "kwh", result?.metrics?.dailyKwh),
+    recentDailySessions: portfolioFinancialRecentDaily(site, "sessions", result?.metrics?.dailySessions),
+    modelMatureAnnualKwh: portfolioFinancialMatureModelAnnualKwh(result),
+    trafficGrowth: Number(state.inputs.annualTrafficGrowthRate ?? DEFAULT_INPUTS.annualTrafficGrowthRate ?? 0.01),
+    tariffGrowth: Number(state.inputs.annualTariffEscalation ?? DEFAULT_INPUTS.annualTariffEscalation ?? 0),
+    fallbackPrice: Number(result?.inputs?.netSellingPriceExVat ?? state.inputs.netSellingPriceExVat ?? DEFAULT_INPUTS.netSellingPriceExVat ?? 0),
+    averageSessionKwh: Number(result?.inputs?.averageSessionEnergy ?? DEFAULT_INPUTS.averageSessionEnergy ?? 30.4),
+    horizonMonths: 240
+  });
+  const electricityEscalation = Math.max(-0.20, Math.min(0.25, Number(state.inputs.annualElectricityCostEscalation ?? DEFAULT_INPUTS.annualElectricityCostEscalation ?? 0)));
+  const monthly = forecast.monthly.map(month => {
+    const annualised = portfolioFinancialOpexFromActuals(result, month.kwh * 12, month.sessions * 12, month.revenue * 12, site);
+    const baseElectricityCost = annualised.electricityCost / 12;
+    const electricityCost = baseElectricityCost * Math.pow(1 + electricityEscalation, Number(month.month || 0) / 12);
+    const opexExElectricity = annualised.opexExElectricity / 12;
+    return {
+      ...month,
+      opexExElectricity,
+      electricityCost,
+      operatingCashflow: Number(month.revenue || 0) - opexExElectricity - electricityCost
+    };
+  });
+  const next12 = monthly.slice(0, 12);
+  const sum = (rows, key) => rows.reduce((acc, row) => acc + (Number(row[key]) || 0), 0);
+  return {
+    ...forecast,
+    monthly,
+    next12mOpexExElectricity: sum(next12, "opexExElectricity"),
+    next12mElectricityCost: sum(next12, "electricityCost"),
+    next12mOperatingCashflow: sum(next12, "operatingCashflow")
+  };
+}
+function portfolioFinancialForecastPayback(actualCapex, forecast) {
+  const capex = Number(actualCapex || 0);
+  if (!(capex > 0) || !Array.isArray(forecast?.monthly)) return null;
+  let cumulative = 0;
+  for (const month of forecast.monthly) {
+    cumulative += Number(month.operatingCashflow || 0);
+    if (cumulative >= capex) return Number(month.month || 0) / 12;
+  }
+  return null;
+}
+function portfolioCapexDeltaBand(delta) {
+  const value = Number(delta);
+  if (!Number.isFinite(value)) return { key: "missing", cls: "neutral", label: "Not available" };
+  const absolute = Math.abs(value);
+  if (absolute <= 30000) return { key: "green", cls: "capex-delta-green", label: "Within €30k" };
+  if (absolute <= 50000) return { key: "amber", cls: "capex-delta-amber", label: "€30k–€50k" };
+  return { key: "red", cls: "capex-delta-red", label: "Over €50k" };
+}
+
 function portfolioFinancialCompletenessLabel(fin) {
   if (!fin.hasActualKwh) return "Not enough data · no actual kWh";
   if (!fin.hasOperationalDays) return "Not enough data · operational days not confirmed";
@@ -3706,12 +3822,13 @@ function portfolioFinancialCompletenessLabel(fin) {
   return "High";
 }
 function portfolioFinancialPaybackState(fin) {
-  if (!fin.hasActualKwh) return { label: "No actual kWh", cls: "neutral", sortValue: null, reason: "No actual kWh is available for the site." };
-  if (!fin.hasOperationalDays) return { label: "Days missing", cls: "neutral", sortValue: null, reason: "Operational days are not confirmed, so the annualised run-rate is not reliable enough for payback." };
-  if (Number(fin.operationalDays || 0) < 30) return { label: "Low history", cls: "warn", sortValue: null, reason: "Less than 30 operational days. Show run-rate metrics, but do not calculate investment payback." };
-  if (!fin.hasActualCapex) return { label: "CAPEX missing", cls: "neutral", sortValue: null, reason: "Actual CAPEX is missing, so payback cannot be calculated." };
-  if (!(Number(fin.operatingCashflow) > 0)) return { label: "No payback", cls: "bad", sortValue: null, reason: "Current run-rate EBITDA proxy is not positive." };
-  return { label: "Payback available", cls: "good", sortValue: Number(fin.paybackYears), reason: fin.landlordApplied ? "Actual CAPEX divided by current annual EBITDA proxy." : "Actual CAPEX divided by current pre-landlord EBITDA proxy." };
+  if (!fin.hasActualKwh) return { label: "No actual kWh", cls: "neutral", sortValue: null, state: "notCalculated", reason: "No actual kWh is available for the site." };
+  if (!fin.hasOperationalDays) return { label: "Days missing", cls: "neutral", sortValue: null, state: "notCalculated", reason: "Operational days are not confirmed, so the maturity-adjusted forecast is not reliable enough for payback." };
+  if (Number(fin.operationalDays || 0) < 30) return { label: "Low history", cls: "warn", sortValue: null, state: "lowHistory", reason: "Less than 30 operational days. Forecast metrics are shown with low confidence, but investment payback is withheld." };
+  if (!fin.hasActualCapex) return { label: "CAPEX missing", cls: "neutral", sortValue: null, state: "capexMissing", reason: "Actual CAPEX is missing, so payback cannot be calculated." };
+  if (Number.isFinite(Number(fin.forecastPaybackYears)) && Number(fin.forecastPaybackYears) > 0) return { label: "Payback available", cls: "good", sortValue: Number(fin.forecastPaybackYears), state: "positive", reason: "Maturity-adjusted monthly cumulative cash flow reaches actual CAPEX." };
+  if (!(Number(fin.maturityForecast?.next12mOperatingCashflow) > 0)) return { label: "No payback", cls: "bad", sortValue: null, state: "negativeCashflow", reason: "Maturity-adjusted next-12-month EBITDA proxy is not positive." };
+  return { label: "No payback ≤20yr", cls: "bad", sortValue: null, state: "negativeCashflow", reason: "Maturity-adjusted cumulative cash flow does not recover actual CAPEX within the 20-year forecast." };
 }
 function portfolioFinancialStatus(fin, r) {
   if (!fin.hasActualKwh || !fin.hasOperationalDays) return { label: "Not enough data", cls: "neutral", note: portfolioFinancialCompletenessLabel(fin) };
@@ -3719,10 +3836,10 @@ function portfolioFinancialStatus(fin, r) {
   if (!Number.isFinite(Number(r?.annualKwhVariance))) return { label: "Review", cls: "warn", note: "Model variance unavailable." };
   if (r.annualKwhVariance > PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) return { label: "Underperforming", cls: "bad", note: "Actual kWh is below the matched model benchmark." };
   if (r.annualKwhVariance < -PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) return { label: "Above benchmark", cls: "good", note: "Actual kWh is above the matched model benchmark." };
-  if (fin.hasActualCapex && fin.operatingCashflow <= 0) return { label: "Cashflow pressure", cls: "bad", note: "kWh is in benchmark, but current operating cashflow is not positive." };
+  if (fin.hasActualCapex && fin.forecastOperatingCashflow <= 0) return { label: "Cashflow pressure", cls: "bad", note: "kWh is in benchmark, but maturity-adjusted next-12-month operating cashflow is not positive." };
   return { label: "In benchmark", cls: "good", note: "Actual kWh is within ±15% of the matched model benchmark." };
 }
-function portfolioFinancialRow(site, benchmarks) {
+function portfolioFinancialRow(site, benchmarks, maturityModel) {
   const result = portfolioSiteResults(site, benchmarks);
   const capex = portfolioCapexInfo(site, result.financialSummary?.initialInvestment || 0);
   const annualActual = portfolioAnnualOperatingValues(site, result.metrics);
@@ -3730,21 +3847,33 @@ function portfolioFinancialRow(site, benchmarks) {
   const operationalDays = operationalDaysInfo.days;
   const revenueInfo = portfolioActualRevenueInfo(site, annualActual, result.metrics);
   const opex = portfolioFinancialOpexFromActuals(result, annualActual.annualKwh, revenueInfo.annualSessions, revenueInfo.annualRevenue, site);
+  const maturityForecast = portfolioFinancialMaturityForecast(site, result, annualActual, revenueInfo, operationalDays, maturityModel);
   const hasActualKwh = Number(annualActual.annualKwh || 0) > 0;
   const hasActualCapex = Number(capex.actual || 0) > 0;
   const hasOperationalDays = Number.isFinite(Number(operationalDays)) && Number(operationalDays) > 0;
   const operatingCashflow = hasActualKwh ? opex.operatingCashflow : 0;
-  const paybackYears = hasActualCapex && hasActualKwh && hasOperationalDays && Number(operationalDays || 0) >= 30 && operatingCashflow > 0 ? capex.actual / operatingCashflow : null;
+  const forecastPaybackYears = hasActualCapex && hasActualKwh && hasOperationalDays && Number(operationalDays || 0) >= 30
+    ? portfolioFinancialForecastPayback(capex.actual, maturityForecast)
+    : null;
+  const paybackYears = forecastPaybackYears;
   const fin = {
     result,
     site,
     actualCapex: capex.actual,
     modelCapex: capex.model,
     capexDelta: Number.isFinite(capex.variance) ? capex.variance : null,
+    capexDeltaBand: portfolioCapexDeltaBand(capex.variance),
     capexNote: capex.note,
     annualKwh: annualActual.annualKwh,
     annualSessions: revenueInfo.annualSessions,
     annualRevenue: revenueInfo.annualRevenue,
+    next12mRevenue: maturityForecast.next12mRevenue,
+    next12mRevenueLow: maturityForecast.next12mRevenueLow,
+    next12mRevenueHigh: maturityForecast.next12mRevenueHigh,
+    matureAnnualRevenue: maturityForecast.matureAnnualRevenue,
+    next12mKwh: maturityForecast.next12mKwh,
+    matureAnnualKwh: maturityForecast.matureAnnualKwh,
+    maturityForecast,
     revenueSource: revenueInfo.source,
     revenueEstimated: revenueInfo.estimated,
     operationalDays,
@@ -3756,9 +3885,13 @@ function portfolioFinancialRow(site, benchmarks) {
     hasActualCapex,
     hasOperationalDays,
     opexExElectricity: opex.opexExElectricity,
+    forecastOpexExElectricity: maturityForecast.next12mOpexExElectricity,
     electricityCost: opex.electricityCost,
+    forecastElectricityCost: maturityForecast.next12mElectricityCost,
     grossProfit: opex.grossProfit,
     operatingCashflow,
+    forecastOperatingCashflow: maturityForecast.next12mOperatingCashflow,
+    forecastPaybackYears,
     paybackYears,
     landlordNote: opex.landlordNote,
     landlordBasis: opex.landlordBasis,
@@ -3770,21 +3903,22 @@ function portfolioFinancialRow(site, benchmarks) {
   };
   fin.dataQuality = portfolioFinancialCompletenessLabel(fin);
   fin.status = portfolioFinancialStatus(fin, result);
-  fin.enoughForPayback = hasActualKwh && hasActualCapex && hasOperationalDays && Number(operationalDays || 0) >= 30 && operatingCashflow > 0;
+  fin.enoughForPayback = hasActualKwh && hasActualCapex && hasOperationalDays && Number(operationalDays || 0) >= 30 && Number.isFinite(Number(forecastPaybackYears)) && forecastPaybackYears > 0;
   fin.paybackState = portfolioFinancialPaybackState(fin);
   fin.muted = !hasActualKwh || !hasOperationalDays || Number(operationalDays || 0) < 30;
-  fin.partial = !fin.muted && (!hasActualCapex || fin.revenueEstimated || operatingCashflow <= 0);
+  fin.partial = !fin.muted && (!hasActualCapex || fin.revenueEstimated || maturityForecast.next12mOperatingCashflow <= 0);
   return fin;
 }
 function portfolioFinancialRows() {
   const sites = portfolioSites({ includeAdditional: false });
   const benchmarks = portfolioBenchmarksByCategory(sites);
-  return sites.map(site => portfolioFinancialRow(site, benchmarks));
+  const maturityModel = portfolioFinancialMaturityModel(sites);
+  return sites.map(site => portfolioFinancialRow(site, benchmarks, maturityModel));
 }
 
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "quality", "history", "daysBasis", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_24";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v17_37";
 function portfolioFinancialHorizon() {
   const raw = Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5);
   return PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(raw) ? raw : 5;
@@ -3997,36 +4131,65 @@ function portfolioFinancialStatusPill(label, value, note = "") {
   return `<div class="portfolio-financial-status-pill"><span>${h(label)}</span><strong>${value}</strong>${note ? `<small>${h(note)}</small>` : ""}</div>`;
 }
 function portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon) {
-  const selectedText = `${number(filteredRows.length,0)} of ${number(rows.length,0)} active sites`;
+  const selectedText = filteredRows.length === rows.length ? "all active sites" : `${number(filteredRows.length,0)} of ${number(rows.length,0)} active sites`;
   const capexDeltaPct = summary.modelCapexForCapexRows > 0 ? summary.capexDelta / summary.modelCapexForCapexRows : null;
   const capexDeltaNote = summary.capexDelta < 0 ? "overspend vs model" : summary.capexDelta > 0 ? "underspend vs model" : "in line with model";
   const investment = portfolioFinancialDashboardWindow("Investment position", "Actual investment against modelled CAPEX for the selected sites.", [
     portfolioFinancialDashboardMetric("Selected sites", number(filteredRows.length,0), selectedText),
     portfolioFinancialDashboardMetric("Actual CAPEX tracked", currency(summary.actualCapex,0), `${number(summary.rowsWithCapex,0)} of ${number(summary.totalSites,0)} selected sites`),
     portfolioFinancialDashboardMetric("Model CAPEX", currency(summary.modelCapexForCapexRows,0), "same sites with actual CAPEX"),
-    portfolioFinancialDashboardMetric("CAPEX Δ", currency(summary.capexDelta,0), `model minus actual · ${capexDeltaNote}`, summary.capexDelta < 0 ? "bad" : "good"),
-    portfolioFinancialDashboardMetric("CAPEX Δ %", capexDeltaPct === null ? "—" : pct(capexDeltaPct,1), "model minus actual / model"),
-    portfolioFinancialDashboardMetric("CAPEX missing", number(summary.capexMissing,0), "payback blocked only")
-  ], "investment");
-  const operating = portfolioFinancialDashboardWindow("Current operating performance", "Annualised run-rate from available actual operating data.", [
-    portfolioFinancialDashboardMetric("This-year revenue", currency(projection.thisYearRevenue,0), "current annual run-rate"),
-    portfolioFinancialDashboardMetric("Next-year revenue", currency(projection.nextYearRevenue,0), "projected next year"),
+    portfolioFinancialDashboardMetric("CAPEX Δ", currency(summary.capexDelta,0), `model minus actual · ${capexDeltaNote}`),
+    portfolioFinancialDashboardMetric("Within €30k", number(summary.capexWithin30k,0), "green model-accuracy band", "good"),
+    portfolioFinancialDashboardMetric("€30k–€50k", number(summary.capex30to50k,0), "amber model-accuracy band"),
+    portfolioFinancialDashboardMetric("Over €50k", number(summary.capexOver50k,0), "red model-accuracy band", summary.capexOver50k > 0 ? "bad" : "good"),
+    portfolioFinancialDashboardMetric("CAPEX Δ %", capexDeltaPct === null ? "—" : pct(capexDeltaPct,1), "model minus actual / model")
+  ]);
+  const operating = portfolioFinancialDashboardWindow("Current & next-12-month performance", "Current annual basis beside the maturity-adjusted monthly forecast.", [
+    portfolioFinancialDashboardMetric("Current annual revenue", currency(projection.thisYearRevenue,0), "actual T12M or current annualised basis"),
+    portfolioFinancialDashboardMetric("Next 12m revenue", currency(projection.nextYearRevenue,0), "maturity + seasonality + market growth"),
     portfolioFinancialDashboardMetric("Annualised kWh", kwh(summary.annualKwh,0), `${number(summary.rowsWithActuals,0)} selected sites with usable actuals`),
-    portfolioFinancialDashboardMetric("OPEX / yr", currency(summary.annualOpex,0), "excludes electricity + landlord"),
-    portfolioFinancialDashboardMetric("EBITDA proxy / yr", currency(summary.operatingCashflow,0), "pre-landlord unless actual terms provided"),
-    portfolioFinancialDashboardMetric("Portfolio payback", portfolioPaybackLabel(summary.paybackYears), `${number(summary.paybackEligible,0)} positive-cashflow sites`)
+    portfolioFinancialDashboardMetric("Current OPEX / yr", currency(summary.annualOpex,0), "excludes electricity; landlord only if provided"),
+    portfolioFinancialDashboardMetric("Next 12m EBITDA", currency(projection.nextYearEbitda,0), "maturity-adjusted monthly cashflow"),
+    portfolioFinancialDashboardMetric("Portfolio payback", portfolioPaybackLabel(summary.paybackYears), `${number(summary.paybackEligible,0)} sites forecast to repay within 20 years`)
   ], "operating");
-  const projectionWindow = portfolioFinancialDashboardWindow("Projection & profitability", `Selected ${number(horizon,0)}-year projection.`, [
+  const projectionWindow = portfolioFinancialDashboardWindow("Projection & profitability", `Selected ${number(horizon,0)}-year monthly projection.`, [
     `<div class="portfolio-financial-dashboard-metric horizon-control"><span>Projection horizon</span>${portfolioFinancialHorizonSelector(horizon)}</div>`,
-    portfolioFinancialDashboardMetric(`${number(horizon,0)}yr revenue`, currency(projection.horizonRevenue,0), "cumulative projection"),
-    portfolioFinancialDashboardMetric(`${number(horizon,0)}yr EBITDA`, currency(projection.horizonEbitda,0), "cumulative pre-landlord"),
-    portfolioFinancialDashboardMetric(`${number(horizon,0)}yr net after CAPEX`, currency(projection.netAfterCapex,0), "EBITDA minus tracked CAPEX", projection.netAfterCapex < 0 ? "bad" : "good"),
+    portfolioFinancialDashboardMetric(`${number(horizon,0)}yr revenue`, currency(projection.horizonRevenue,0), "monthly maturity/seasonality projection"),
+    portfolioFinancialDashboardMetric(`${number(horizon,0)}yr EBITDA`, currency(projection.horizonEbitda,0), "monthly forecast; landlord only if provided"),
+    portfolioFinancialDashboardMetric(`${number(horizon,0)}yr net after CAPEX`, currency(projection.netAfterCapex,0), "forecast EBITDA minus tracked CAPEX", projection.netAfterCapex < 0 ? "bad" : "good"),
     portfolioFinancialDashboardMetric("Profitability margin", projection.profitabilityMargin === null ? "—" : pct(projection.profitabilityMargin,1), `${number(horizon,0)}yr EBITDA / revenue`)
   ], "projection");
   return `<div class="portfolio-financial-dashboard-grid">${investment}${operating}${projectionWindow}</div>`;
 }
+function portfolioFinancialMaturityPanel(model, rows) {
+  const selectedMonths = new Set([1, 3, 6, 9, 12, 15, 18, 24]);
+  const curveRows = (model?.curve || []).filter(point => selectedMonths.has(point.month)).map(point => ({
+    month: `M${point.month}`,
+    downside: point.p25 * 100,
+    base: point.p50 * 100,
+    upside: point.p75 * 100
+  }));
+  const bt6 = model?.backtest?.[6];
+  const bt9 = model?.backtest?.[9];
+  const statusClass = model?.source === "empirical" ? "good" : "warn";
+  const statusLabel = model?.source === "empirical" ? "Empirical curve active" : "Conservative prior active";
+  const confidenceCounts = rows.reduce((acc, row) => {
+    const key = row.maturityForecast?.confidence?.label || "Low";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const backtestText = bt6?.sampleCount
+    ? `Leave-one-site-out plateau error: ${pct(bt6.medianAbsoluteError,1)} median from month 6${bt9?.sampleCount ? ` · ${pct(bt9.medianAbsoluteError,1)} from month 9` : ""}.`
+    : "Back-testing activates automatically when at least three mature sites have usable monthly histories.";
+  const chart = curveRows.length ? lineChart("portfolioMaturityCurve", curveRows, "month", [
+    { key: "downside", label: "Downside (P25)" },
+    { key: "base", label: "Base (P50)" },
+    { key: "upside", label: "Upside (P75)" }
+  ], { title: "Portfolio maturity curve", xLabel: "Month since first commercial session", yLabel: "% of mature daily demand", ySuffix: "%", yDigits: 0, height: 250 }) : "";
+  return `<section class="panel portfolio-maturity-panel"><div class="panel-title-row"><div><span class="eyebrow">Revenue forecast engine</span><h3>Maturity curve & forecast confidence</h3><p class="muted small">${h(model?.methodology || "Maturity forecast unavailable.")}</p></div><span class="badge ${statusClass}">${h(statusLabel)}</span></div><div class="portfolio-summary-grid">${kpi("Curve training sites", number(model?.trainingSiteCount || 0,0), `${number(model?.eligibleTrainingSiteCount ?? model?.trainingSiteCount ?? 0,0)} eligible with 365+ days`)}${kpi("Stable mature sites", number(model?.stableSiteCount || 0,0), "late-stage slope within ±15%")}${kpi("Empirical months", number(model?.empiricalMonths || 0,0), "months with ≥2 mature-site observations")}${kpi("Forecast confidence", `${number(confidenceCounts.High || 0,0)} high · ${number((confidenceCounts.Medium || 0) + (confidenceCounts["Medium-low"] || 0),0)} medium`, `${number(confidenceCounts.Low || 0,0)} low`)}</div><p class="muted small">${h(backtestText)}</p>${chart}</section>`;
+}
 function portfolioFinancialPerformanceCards(summary) {
-  return `<div class="portfolio-summary-grid portfolio-financial-performance-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "actual kWh within ±15%")}${kpi("Underperforming", number(summary.underperforming,0), "actual kWh below model")}${kpi("Above benchmark", number(summary.outperforming,0), "actual kWh above model")}${kpi("Low / missing history", number(summary.notEnoughData,0), "greyed out in table")}${kpi("CAPEX missing", number(summary.capexMissing,0), "payback blocked only")}${kpi("No payback", number(summary.noPayback,0), "negative run-rate cashflow")}</div>`;
+  return `<div class="portfolio-summary-grid portfolio-financial-performance-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "actual kWh within ±15%")}${kpi("Underperforming", number(summary.underperforming,0), "actual kWh below model")}${kpi("Above benchmark", number(summary.outperforming,0), "actual kWh above model")}${kpi("Low / missing history", number(summary.notEnoughData,0), "greyed out in table")}${kpi("CAPEX missing", number(summary.capexMissing,0), "payback blocked only")}${kpi("No payback", number(summary.noPayback,0), "not recovered within 20 years")}</div>`;
 }
 function portfolioFinancialProjectionGrowthRate() {
   const trafficGrowth = Number(state.inputs.annualTrafficGrowthRate ?? DEFAULT_INPUTS.annualTrafficGrowthRate ?? 0.01);
@@ -4051,16 +4214,44 @@ function portfolioFinancialProjectionSummary(rows, horizon) {
   const ebitdaBase = sum("operatingCashflow");
   const capexBase = rows.filter(r => r.hasActualCapex).reduce((acc, r) => acc + (Number(r.actualCapex) || 0), 0);
   const hYears = PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.includes(Number(horizon)) ? Number(horizon) : 5;
+  const horizonMonths = hYears * 12;
   const thisYearRevenue = revenueBase;
-  const nextYearRevenue = revenueBase * (1 + growth);
-  const horizonRevenue = portfolioFinancialCompoundTotal(revenueBase, growth, hYears);
-  const horizonEbitda = portfolioFinancialCompoundTotal(ebitdaBase, growth, hYears);
+  const nextYearRevenue = usable.reduce((acc, row) => acc + (Number(row.maturityForecast?.next12mRevenue) || Number(row.annualRevenue || 0) * (1 + growth)), 0);
+  const nextYearEbitda = usable.reduce((acc, row) => acc + (Number(row.maturityForecast?.next12mOperatingCashflow) || Number(row.operatingCashflow || 0) * (1 + growth)), 0);
+  let horizonRevenue = 0;
+  let horizonEbitda = 0;
+  usable.forEach(row => {
+    const monthly = row.maturityForecast?.monthly;
+    if (Array.isArray(monthly) && monthly.length >= horizonMonths) {
+      horizonRevenue += monthly.slice(0, horizonMonths).reduce((acc, month) => acc + (Number(month.revenue) || 0), 0);
+      horizonEbitda += monthly.slice(0, horizonMonths).reduce((acc, month) => acc + (Number(month.operatingCashflow) || 0), 0);
+    } else {
+      horizonRevenue += portfolioFinancialCompoundTotal(Number(row.annualRevenue || 0), growth, hYears);
+      horizonEbitda += portfolioFinancialCompoundTotal(Number(row.operatingCashflow || 0), growth, hYears);
+    }
+  });
   const netAfterCapex = horizonEbitda - capexBase;
   const profitabilityMargin = horizonRevenue > 0 ? horizonEbitda / horizonRevenue : null;
-  return { usableSites: usable.length, growth, thisYearRevenue, nextYearRevenue, horizonRevenue, horizonEbitda, netAfterCapex, profitabilityMargin, capexBase, horizon: hYears };
+  const empiricalSites = usable.filter(row => row.maturityForecast?.source === "empirical").length;
+  const forecastConfidence = usable.length
+    ? usable.reduce((acc, row) => acc + ({ high: 3, medium: 2, "medium-low": 1.5, low: 1 }[row.maturityForecast?.confidence?.key] || 1), 0) / usable.length
+    : 0;
+  return { usableSites: usable.length, growth, thisYearRevenue, nextYearRevenue, nextYearEbitda, horizonRevenue, horizonEbitda, netAfterCapex, profitabilityMargin, capexBase, horizon: hYears, empiricalSites, forecastConfidence };
 }
 function portfolioFinancialHorizonSelector(horizon) {
   return `<div class="portfolio-financial-horizon" role="group" aria-label="Projection horizon"><span>Projection horizon</span>${PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS.map(y => `<button type="button" data-portfolio-financial-horizon="${y}" class="${Number(horizon) === y ? "active" : ""}">${y} yrs</button>`).join("")}</div>`;
+}
+function portfolioFinancialPortfolioPayback(rows) {
+  const eligible = rows.filter(row => row.hasActualCapex && row.hasActualKwh && row.hasOperationalDays && Number(row.operationalDays || 0) >= 30 && Array.isArray(row.maturityForecast?.monthly));
+  const capex = eligible.reduce((acc, row) => acc + (Number(row.actualCapex) || 0), 0);
+  if (!(capex > 0) || !eligible.length) return null;
+  const maxMonths = Math.min(...eligible.map(row => row.maturityForecast.monthly.length));
+  let cumulative = 0;
+  for (let idx = 0; idx < maxMonths; idx += 1) {
+    cumulative += eligible.reduce((acc, row) => acc + (Number(row.maturityForecast.monthly[idx]?.operatingCashflow) || 0), 0);
+    if (cumulative >= capex) return (idx + 1) / 12;
+  }
+  return null;
 }
 function portfolioFinancialSummary(rows) {
   const rowsWithCapex = rows.filter(r => r.hasActualCapex);
@@ -4075,10 +4266,13 @@ function portfolioFinancialSummary(rows) {
   const electricityCost = sumField(rowsWithActuals, "electricityCost");
   const operatingCashflow = sumField(rowsWithActuals, "operatingCashflow");
   const eligibleCapex = sumField(paybackEligible, "actualCapex");
-  const eligibleCashflow = sumField(paybackEligible, "operatingCashflow");
-  const paybackYears = eligibleCapex > 0 && eligibleCashflow > 0 ? eligibleCapex / eligibleCashflow : null;
+  const eligibleCashflow = sumField(paybackEligible, "forecastOperatingCashflow");
+  const paybackYears = portfolioFinancialPortfolioPayback(rows);
   const benchmarkRows = rows.filter(r => r.hasActualKwh && r.hasOperationalDays && Number(r.operationalDays || 0) >= 30 && Number.isFinite(Number(r.result?.annualKwhVariance)));
-  const noPayback = rows.filter(r => r.hasActualKwh && r.hasOperationalDays && r.hasActualCapex && Number(r.operationalDays || 0) >= 30 && r.operatingCashflow <= 0).length;
+  const noPayback = rows.filter(r => r.hasActualKwh && r.hasOperationalDays && r.hasActualCapex && Number(r.operationalDays || 0) >= 30 && !Number.isFinite(Number(r.forecastPaybackYears))).length;
+  const capexWithin30k = rowsWithCapex.filter(r => r.capexDeltaBand?.key === "green").length;
+  const capex30to50k = rowsWithCapex.filter(r => r.capexDeltaBand?.key === "amber").length;
+  const capexOver50k = rowsWithCapex.filter(r => r.capexDeltaBand?.key === "red").length;
   return {
     totalSites: rows.length,
     rowsWithCapex: rowsWithCapex.length,
@@ -4088,6 +4282,9 @@ function portfolioFinancialSummary(rows) {
     lowHistory: rows.filter(r => r.hasActualKwh && (!r.hasOperationalDays || Number(r.operationalDays || 0) < 30)).length,
     notEnoughData: rows.filter(r => r.status?.label === "Not enough data" || r.status?.label === "Low history").length,
     noPayback,
+    capexWithin30k,
+    capex30to50k,
+    capexOver50k,
     actualCapex,
     modelCapexForCapexRows,
     capexDelta: modelCapexForCapexRows - actualCapex,
@@ -4096,6 +4293,7 @@ function portfolioFinancialSummary(rows) {
     annualOpex,
     electricityCost,
     operatingCashflow,
+    forecastOperatingCashflow: eligibleCashflow,
     paybackYears,
     underperforming: benchmarkRows.filter(r => r.result.annualKwhVariance > PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE).length,
     outperforming: benchmarkRows.filter(r => r.result.annualKwhVariance < -PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE).length,
@@ -4133,7 +4331,7 @@ function portfolioFinancialExportDisplayRow(fin) {
   const capexDelta = Number(fin.capexDelta || 0);
   const paybackLabel = portfolioPaybackLabel(fin.paybackYears, fin.paybackState);
   const paybackNote = fin.paybackState?.state === "positive"
-    ? (fin.landlordApplied ? "actual CAPEX / EBITDA" : "actual CAPEX / pre-landlord EBITDA")
+    ? "actual CAPEX recovered by cumulative maturity-adjusted monthly cash flow"
     : (fin.paybackState?.reason || portfolioPaybackSubtext(fin.paybackYears, fin.paybackState));
   return {
     site: fin.site?.name || "",
@@ -4145,15 +4343,22 @@ function portfolioFinancialExportDisplayRow(fin) {
     daysLabel: Number.isFinite(Number(fin.operationalDays)) ? `${number(fin.operationalDays,0)} days` : "Not confirmed",
     daysBasis: fin.daysBasisLabel || "",
     actualCapex: Number.isFinite(actualCapex) ? actualCapex : null,
-    capexNote: fin.hasActualCapex ? `${modelCapex > 0 ? `model ${currency(modelCapex, 0)} · ` : ""}Δ ${currency(capexDelta, 0)}` : "CAPEX missing · payback blocked",
+    capexBand: fin.capexDeltaBand?.label || "",
+    capexNote: fin.hasActualCapex ? `${modelCapex > 0 ? `model ${currency(modelCapex, 0)} · ` : ""}${currency(Math.abs(capexDelta),0)} ${capexDelta > 0 ? "underspend" : capexDelta < 0 ? "overspend" : "in line"}` : "CAPEX missing · payback blocked",
     annualKwh: Number(fin.annualKwh || 0),
+    next12mKwh: Number(fin.next12mKwh || 0),
     kwhNote: modelKwh > 0 ? `model ${kwh(modelKwh, 0)} · ${portfolioFinancialVarianceLabel(r.annualKwhVariance)}` : "",
     annualRevenue: Number(fin.annualRevenue || 0),
-    revenueBasis: portfolioFinancialExportRevenueSub(fin),
-    opexExElectricity: Number(fin.opexExElectricity || 0),
-    opexNote: fin.landlordApplied ? "excl. electricity" : "excl. electricity & landlord",
-    ebitda: Number(fin.operatingCashflow || 0),
-    ebitdaNote: fin.landlordApplied ? "run-rate" : "pre-landlord",
+    next12mRevenue: Number(fin.next12mRevenue || 0),
+    matureAnnualRevenue: Number(fin.matureAnnualRevenue || 0),
+    revenueBasis: `${fin.maturityForecast?.label || "Maturity forecast"} · ${fin.maturityForecast?.confidence?.label || "Low"} confidence`,
+    maturityPct: Number(fin.maturityForecast?.currentMaturityFactor || 0),
+    monthsToMaturity: Number(fin.maturityForecast?.monthsToMaturity || 0),
+    maturityConfidence: fin.maturityForecast?.confidence?.label || "Low",
+    opexExElectricity: Number(fin.forecastOpexExElectricity || 0),
+    opexNote: `next 12m · current ${currency(fin.opexExElectricity || 0,0)}${fin.landlordApplied ? " · landlord included" : " · landlord excluded"}`,
+    ebitda: Number(fin.forecastOperatingCashflow || 0),
+    ebitdaNote: `next 12m · current ${currency(fin.operatingCashflow || 0,0)}${fin.landlordApplied ? "" : " · pre-landlord"}`,
     paybackYears: Number.isFinite(Number(fin.paybackYears)) ? Number(fin.paybackYears) : null,
     paybackLabel,
     paybackNote
@@ -4164,19 +4369,21 @@ function portfolioFinancialExportMatrixRows(rows) {
   return [[
     "Site", "Site detail", "Commercial terms",
     "Days", "Days basis",
-    "CAPEX EUR", "CAPEX note",
-    "kWh / yr", "kWh note",
-    "Revenue / yr EUR", "Revenue basis",
-    "OPEX / yr EUR", "OPEX basis",
-    "EBITDA / yr EUR", "EBITDA basis",
+    "CAPEX EUR", "CAPEX accuracy band", "CAPEX note",
+    "Current kWh / yr", "Next 12m kWh", "kWh note",
+    "Current revenue EUR", "Next 12m revenue EUR", "Mature annual revenue EUR", "Revenue forecast basis",
+    "Current maturity", "Months to 95% maturity", "Forecast confidence",
+    "Next 12m OPEX EUR", "OPEX basis",
+    "Next 12m EBITDA EUR", "EBITDA basis",
     "Payback", "Payback note",
     "Status", "Quality"
   ], ...display.map(r => [
     r.site, r.configuration, r.commercialTerms,
     portfolioFinancialExportNumber(r.days), r.daysBasis,
-    portfolioFinancialExportNumber(r.actualCapex), r.capexNote,
-    portfolioFinancialExportNumber(r.annualKwh), r.kwhNote,
-    portfolioFinancialExportNumber(r.annualRevenue), r.revenueBasis,
+    portfolioFinancialExportNumber(r.actualCapex), r.capexBand, r.capexNote,
+    portfolioFinancialExportNumber(r.annualKwh), portfolioFinancialExportNumber(r.next12mKwh), r.kwhNote,
+    portfolioFinancialExportNumber(r.annualRevenue), portfolioFinancialExportNumber(r.next12mRevenue), portfolioFinancialExportNumber(r.matureAnnualRevenue), r.revenueBasis,
+    portfolioFinancialExportNumber(r.maturityPct), portfolioFinancialExportNumber(r.monthsToMaturity), r.maturityConfidence,
     portfolioFinancialExportNumber(r.opexExElectricity), r.opexNote,
     portfolioFinancialExportNumber(r.ebitda), r.ebitdaNote,
     r.paybackLabel, r.paybackNote,
@@ -4220,6 +4427,9 @@ function portfolioFinancialExportPayload() {
     capexMissing: summary.capexMissing,
     noPayback: summary.noPayback,
     notEnoughData: summary.notEnoughData,
+    capexWithin30k: summary.capexWithin30k,
+    capex30to50k: summary.capex30to50k,
+    capexOver50k: summary.capexOver50k,
     inBenchmark: summary.inBenchmark,
     underperforming: summary.underperforming,
     outperforming: summary.outperforming,
@@ -4230,6 +4440,7 @@ function portfolioFinancialExportPayload() {
     annualKwh: summary.annualKwh,
     thisYearRevenue: projection.thisYearRevenue,
     nextYearRevenue: projection.nextYearRevenue,
+    nextYearEbitda: projection.nextYearEbitda,
     annualOpex: summary.annualOpex,
     annualElectricity: summary.electricityCost,
     annualEbitda: summary.operatingCashflow,
@@ -4249,11 +4460,12 @@ function portfolioFinancialExportPayload() {
     ["CAPEX delta %", summaryObject.capexDeltaPct ?? "", "Model minus actual / model"],
     ["Annualised kWh", summaryObject.annualKwh, "Current run-rate based on Portfolio Financials commercial-days basis"],
     ["This-year revenue EUR", summaryObject.thisYearRevenue, "Current annual run-rate"],
-    ["Next-year revenue EUR", summaryObject.nextYearRevenue, "Run-rate grown by model growth/tariff assumption"],
+    ["Next 12m revenue EUR", summaryObject.nextYearRevenue, "Monthly maturity, seasonality, traffic growth and tariff forecast"],
     ["OPEX per year EUR", summaryObject.annualOpex, "Excludes electricity; landlord terms only when manually/actually provided"],
     ["Electricity per year EUR", summaryObject.annualElectricity, "Annualised kWh × electricity cost"],
-    ["EBITDA proxy EUR", summaryObject.annualEbitda, "Revenue minus electricity minus OPEX"],
-    ["Portfolio payback years", summaryObject.paybackYears ?? "", "Run-rate proxy; only positive-cashflow/payback-eligible sites"],
+    ["Current EBITDA proxy EUR", summaryObject.annualEbitda, "Current annual basis: revenue minus electricity minus OPEX"],
+    ["Next 12m EBITDA proxy EUR", summaryObject.nextYearEbitda, "Maturity-adjusted monthly cash flow"],
+    ["Portfolio payback years", summaryObject.paybackYears ?? "", "Cumulative maturity-adjusted monthly cash flow / tracked CAPEX"],
     [`${horizon} year revenue EUR`, summaryObject.horizonRevenue, "Cumulative projection"],
     [`${horizon} year EBITDA EUR`, summaryObject.horizonEbitda, "Cumulative EBITDA proxy"],
     [`${horizon} year net after CAPEX EUR`, summaryObject.netAfterCapex, "EBITDA minus tracked CAPEX"],
@@ -4261,12 +4473,13 @@ function portfolioFinancialExportPayload() {
   ];
   const dictionaryRows = [["Column", "Meaning"],
     ["Operational days", "Commercial operational days; first session / first kWh / energy-delivered inference / reported or stored fallback."],
-    ["Revenue per year", "Projected annual run-rate unless a trusted trailing-12-month revenue field exists."],
-    ["OPEX per year", "Charger support, managed service, DUoS, warranties, transaction fees, and landlord terms only if provided. Excludes electricity."],
+    ["Next 12m revenue", "Monthly maturity-adjusted projection using mature-site cohort evidence where available, plus seasonality, traffic growth and tariff escalation."],
+    ["Next 12m OPEX", "Monthly forecast of charger support, managed service, DUoS, warranties, transaction fees and landlord terms only if provided. Excludes electricity."],
     ["EBITDA proxy", "Revenue minus electricity cost minus OPEX."],
-    ["Payback years", "Actual CAPEX divided by current annual EBITDA proxy where payback is allowed."],
+    ["Payback years", "Month when cumulative maturity-adjusted cash flow recovers actual CAPEX, capped at a 20-year forecast horizon."],
     ["Commercial terms", "Manual landlord rent/share terms saved in the Portfolio Financials modal; defaults to no landlord terms."],
-    ["CAPEX delta", "Model CAPEX minus actual CAPEX. Positive means actual spend is below model; negative means overspend."],
+    ["CAPEX delta", "Model CAPEX minus actual CAPEX. Absolute delta ≤€30k is green, >€30k to €50k amber, and >€50k red; sign still shows underspend or overspend."],
+    ["Maturity", "Current seasonality-adjusted performance as a percentage of blended mature potential; confidence and months to 95% maturity are shown separately."],
     ["kWh variance", "Matched model variance. Positive means under model; negative means above benchmark in the app's status logic."]
   ];
   return { summary: summaryObject, horizon, filtersText: portfolioFinancialActiveFilterText(), filterGroups, matrixRows: portfolioFinancialExportMatrixRows(filteredRows), displayRows: filteredRows.map(portfolioFinancialExportDisplayRow) };
@@ -4336,9 +4549,10 @@ function portfolioFinancialSortValue(fin, key) {
     case "days": return { type: "number", value: Number(fin.operationalDays), missing: !fin.hasOperationalDays };
     case "capex": return { type: "number", value: Number(fin.actualCapex), missing: !fin.hasActualCapex };
     case "kwh": return { type: "number", value: Number(fin.annualKwh), missing: !fin.hasActualKwh };
-    case "revenue": return { type: "number", value: Number(fin.annualRevenue), missing: !(Number(fin.annualRevenue) > 0) };
-    case "opex": return { type: "number", value: Number(fin.opexExElectricity), missing: !fin.hasActualKwh };
-    case "ebitda": return { type: "number", value: Number(fin.operatingCashflow), missing: !fin.hasActualKwh };
+    case "revenue": return { type: "number", value: Number(fin.next12mRevenue), missing: !(Number(fin.next12mRevenue) > 0) };
+    case "maturity": return { type: "number", value: Number(fin.maturityForecast?.currentMaturityFactor), missing: !Number.isFinite(Number(fin.maturityForecast?.currentMaturityFactor)) };
+    case "opex": return { type: "number", value: Number(fin.forecastOpexExElectricity), missing: !fin.hasActualKwh };
+    case "ebitda": return { type: "number", value: Number(fin.forecastOperatingCashflow), missing: !fin.hasActualKwh };
     case "payback": return { type: "number", value: Number.isFinite(Number(fin.paybackYears)) ? Number(fin.paybackYears) : Number.POSITIVE_INFINITY, missing: false };
     case "status": return { type: "number", value: statusRank[fin.status?.label] || 8, missing: false };
     case "quality": return { type: "number", value: qualityRank[portfolioFinancialDataQualityShort(fin.dataQuality)] || 5, missing: false };
@@ -4381,16 +4595,23 @@ function portfolioFinancialTableRow(fin) {
       ? "Estimated trailing-12-month revenue from annual kWh because actual T12M revenue is not available."
       : `${fin.revenueEstimated ? "Estimated" : "Projected"} annual run-rate based on ${Number(fin.operationalDays || 0).toFixed(0)} operational days / latest actual performance. Not a full-year actual T12M revenue figure.`;
   const modelKwh = Number(r.modelledAnnualKwh || 0);
-  const capexDeltaLabel = Number.isFinite(Number(fin.capexDelta)) ? `Δ ${currency(fin.capexDelta, 0)}` : "Δ n/a";
+  const capexDirection = Number(fin.capexDelta) > 0 ? "underspend" : Number(fin.capexDelta) < 0 ? "overspend" : "in line";
+  const capexDeltaLabel = Number.isFinite(Number(fin.capexDelta)) ? `${currency(Math.abs(fin.capexDelta), 0)} ${capexDirection}` : "Δ n/a";
+  const capexTitle = Number.isFinite(Number(fin.capexDelta)) ? `${fin.capexDeltaBand?.label || "CAPEX variance"}. Model CAPEX minus actual CAPEX is ${currency(fin.capexDelta,0)}.` : "CAPEX delta unavailable.";
   const actualCapexCell = fin.hasActualCapex
-    ? portfolioFinancialMetric(currency(fin.actualCapex, 0), `${Number(fin.modelCapex) > 0 ? `model ${currency(fin.modelCapex, 0)} · ` : ""}${capexDeltaLabel}`)
+    ? portfolioFinancialMetric(currency(fin.actualCapex, 0), `${Number(fin.modelCapex) > 0 ? `model ${currency(fin.modelCapex, 0)} · ` : ""}${capexDeltaLabel}`, fin.capexDeltaBand?.cls || "", capexTitle)
     : `<span class="badge neutral">CAPEX missing</span><small class="portfolio-financial-cell-note">payback blocked</small>`;
   const kwhCell = fin.hasActualKwh
     ? portfolioFinancialMetric(kwh(fin.annualKwh, 0), `${modelKwh > 0 ? `model ${kwh(modelKwh, 0)} · ` : ""}${portfolioFinancialVarianceLabel(r.annualKwhVariance)}`)
     : "—";
+  const maturity = fin.maturityForecast || {};
+  const maturityPct = Number.isFinite(Number(maturity.currentMaturityFactor)) ? pct(Math.min(1, Number(maturity.currentMaturityFactor)), 0) : "—";
+  const maturitySub = Number(maturity.monthsToMaturity || 0) > 0 ? `${number(maturity.monthsToMaturity,0)} mo to 95% · ${maturity.confidence?.label || "Low"}` : `mature · ${maturity.confidence?.label || "Low"}`;
+  const maturityTitle = `${maturity.label || "Maturity forecast"}. Next 12m ${currency(maturity.next12mRevenue || 0,0)} (${currency(maturity.next12mRevenueLow || 0,0)}–${currency(maturity.next12mRevenueHigh || 0,0)}); mature annual revenue ${currency(maturity.matureAnnualRevenue || 0,0)}.`;
+  const maturityCell = portfolioFinancialMetric(maturityPct, maturitySub, `maturity-confidence-${maturity.confidence?.key || "low"}`, maturityTitle);
   const paybackReason = fin.paybackState?.reason || portfolioPaybackSubtext(fin.paybackYears, fin.paybackState);
   const paybackShort = fin.paybackState?.state === "positive"
-    ? "simple"
+    ? "monthly forecast"
     : fin.paybackState?.state === "capexMissing"
       ? "CAPEX req."
       : fin.paybackState?.state === "lowHistory"
@@ -4402,8 +4623,8 @@ function portfolioFinancialTableRow(fin) {
   const statusCell = `<span class="badge ${h(status.cls)}">${h(status.label)}</span><small class="portfolio-financial-cell-note" title="${h(status.note || fin.dataQuality)}">${h(portfolioFinancialDataQualityShort(fin.dataQuality))}</small>`;
   const rowClass = fin.muted ? "portfolio-financial-muted" : fin.partial ? "portfolio-financial-partial" : "";
   const opexTitle = fin.landlordApplied
-    ? `OPEX excludes electricity. Electricity used in EBITDA: ${currency(fin.electricityCost,0)}. ${fin.landlordNote || "Actual landlord terms applied."}`
-    : `OPEX excludes electricity and excludes landlord terms. Electricity used in EBITDA: ${currency(fin.electricityCost,0)}. ${fin.landlordNote || "No actual landlord terms provided."}`;
+    ? `OPEX excludes electricity. Forecast electricity used in EBITDA: ${currency(fin.forecastElectricityCost,0)}. ${fin.landlordNote || "Actual landlord terms applied."}`
+    : `OPEX excludes electricity and excludes landlord terms. Forecast electricity used in EBITDA: ${currency(fin.forecastElectricityCost,0)}. ${fin.landlordNote || "No actual landlord terms provided."}`;
   const opexSub = fin.landlordApplied ? `excl. elec` : `excl. elec & landlord`;
   const ebitdaTitle = fin.landlordApplied
     ? "EBITDA proxy after electricity and OPEX, including actual landlord terms where provided."
@@ -4418,9 +4639,10 @@ function portfolioFinancialTableRow(fin) {
       portfolioOperationalDaysLabel(fin.operationalDays, fin.operationalDaysInfo),
       actualCapexCell,
       kwhCell,
-      fin.annualRevenue > 0 ? portfolioFinancialMetric(currency(fin.annualRevenue, 0), revenueSub, "", revenueTitle) : "—",
-      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.opexExElectricity, 0), opexSub, "", opexTitle) : "—",
-      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.operatingCashflow, 0), fin.landlordApplied ? "run-rate" : "pre-landlord", "", ebitdaTitle) : "—",
+      fin.next12mRevenue > 0 ? portfolioFinancialMetric(currency(fin.next12mRevenue, 0), `current ${currency(fin.annualRevenue,0)} · mature ${currency(fin.matureAnnualRevenue,0)}`, "", `${revenueTitle} Next 12-month maturity-adjusted range: ${currency(fin.next12mRevenueLow,0)} to ${currency(fin.next12mRevenueHigh,0)}.`) : "—",
+      maturityCell,
+      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOpexExElectricity, 0), `current ${currency(fin.opexExElectricity,0)} · ${opexSub}`, "", `${opexTitle} Main value is the maturity-adjusted next 12 months.`) : "—",
+      fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOperatingCashflow, 0), `current ${currency(fin.operatingCashflow,0)} · ${fin.landlordApplied ? "landlord included" : "pre-landlord"}`, "", `${ebitdaTitle} Main value is the maturity-adjusted next 12 months.`) : "—",
       paybackCell,
       statusCell
     ]
@@ -4437,9 +4659,10 @@ function renderPortfolioFinancialPerformance() {
     portfolioFinancialSortHeader("days", "Days"),
     portfolioFinancialSortHeader("capex", "CAPEX"),
     portfolioFinancialSortHeader("kwh", "kWh / yr"),
-    portfolioFinancialSortHeader("revenue", "Revenue / yr"),
-    portfolioFinancialSortHeader("opex", "OPEX / yr"),
-    portfolioFinancialSortHeader("ebitda", "EBITDA / yr"),
+    portfolioFinancialSortHeader("revenue", "Next 12m revenue"),
+    portfolioFinancialSortHeader("maturity", "Maturity"),
+    portfolioFinancialSortHeader("opex", "Next 12m OPEX"),
+    portfolioFinancialSortHeader("ebitda", "Next 12m EBITDA"),
     portfolioFinancialSortHeader("payback", "Payback"),
     portfolioFinancialSortHeader("status", "Status / quality")
   ];
@@ -4449,23 +4672,26 @@ function renderPortfolioFinancialPerformance() {
     days: "commercial operational days",
     capex: "actual CAPEX",
     kwh: "actual annual kWh",
-    revenue: "annual revenue",
-    opex: "annual OPEX",
-    ebitda: "annual EBITDA proxy",
+    revenue: "next 12-month revenue",
+    maturity: "current maturity factor",
+    opex: "next 12-month OPEX",
+    ebitda: "next 12-month EBITDA proxy",
     payback: "payback",
     status: "status / data quality",
     quality: "data quality"
   };
   const sortKey = portfolioFinancialSortKey();
   const sortDir = portfolioFinancialSortDir() === "desc" ? "high to low / Z-A" : "low to high / A-Z";
-  const projectionNote = `Projection uses current annual run-rate and ${(projection.growth * 100).toFixed(1)}% annual growth/tariff escalation from model assumptions. Profitability is EBITDA proxy before landlord unless actual terms are loaded.`;
+  const maturityModel = portfolioFinancialMaturityModel(rows.map(row => row.site));
+  const projectionNote = `Projection is calculated month by month using the ${maturityModel.source === "empirical" ? "mature-site learned" : "conservative prior"} maturity curve, calendar seasonality, ${(Number(state.inputs.annualTrafficGrowthRate || 0) * 100).toFixed(1)}% traffic growth, ${(Number(state.inputs.annualTariffEscalation || 0) * 100).toFixed(1)}% tariff escalation and ${(Number(state.inputs.annualElectricityCostEscalation || 0) * 100).toFixed(1)}% electricity-cost escalation. Profitability is before landlord unless actual terms are loaded.`;
   return `
     ${sectionTitle("Portfolio Financial Performance", "Financial view of all active Portfolio Calibration sites: CAPEX control, current run-rate, long-term projection and site-level performance quality.")}
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
+    ${portfolioFinancialMaturityPanel(maturityModel, filteredRows)}
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.36 AADT audited production release</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.37 maturity-adjusted financial forecast</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows the maturity-adjusted next 12 months, with current and mature annual values underneath. The forecast is trained on 365+ day monthly histories when available and falls back conservatively when they are not. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback uses cumulative maturity-adjusted monthly cash flow over a maximum 20-year horizon. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }

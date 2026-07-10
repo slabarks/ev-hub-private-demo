@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import vm from "node:vm";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -15,22 +16,49 @@ function run(command, args) {
   assert.equal(result.status, 0, `${command} ${args.join(" ")} failed`);
 }
 
-console.log("\n[1/4] Syntax and static production guards");
+console.log("\n[1/6] Syntax and static production guards");
 run(python, ["-m", "py_compile", "server.py"]);
-run("node", ["--check", "js/app.js"]);
+for (const file of ["js/app.js", "js/engines/maturityEngine.js", "js/engines/exportEngine.js"]) run("node", ["--check", file]);
 const app = fs.readFileSync(path.join(root, "js", "app.js"), "utf8");
 const server = fs.readFileSync(path.join(root, "server.py"), "utf8");
+const css = fs.readFileSync(path.join(root, "assets", "styles.css"), "utf8");
 const bundle = JSON.parse(fs.readFileSync(path.join(root, "data", "tii_counter_locations_bundled_vetted.json"), "utf8"));
-assert.match(app, /V17\.36 browser provenance-controlled AADT engine/);
-assert.match(server, /V17\.36 AADT audited resolver/);
+assert.match(app, /V17\.37 browser provenance-controlled AADT engine/);
+assert.match(server, /V17\.37 AADT audited resolver/);
+assert.match(app, /if \(absolute <= 30000\).*capex-delta-green/);
+assert.match(app, /if \(absolute <= 50000\).*capex-delta-amber/);
+assert.match(app, /return \{ key: "red", cls: "capex-delta-red"/);
+const capexFunctionSource = app.match(/function portfolioCapexDeltaBand\(delta\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(capexFunctionSource, "CAPEX band function must exist");
+const capexContext = {};
+vm.runInNewContext(`${capexFunctionSource}; this.portfolioCapexDeltaBand = portfolioCapexDeltaBand;`, capexContext);
+assert.equal(capexContext.portfolioCapexDeltaBand(30000).key, "green");
+assert.equal(capexContext.portfolioCapexDeltaBand(-30000).key, "green");
+assert.equal(capexContext.portfolioCapexDeltaBand(30000.01).key, "amber");
+assert.equal(capexContext.portfolioCapexDeltaBand(50000).key, "amber");
+assert.equal(capexContext.portfolioCapexDeltaBand(-50000.01).key, "red");
+assert.match(css, /\.portfolio-financial-metric\.capex-delta-green/);
+assert.match(css, /\.portfolio-financial-metric\.capex-delta-amber/);
+assert.match(css, /\.portfolio-financial-metric\.capex-delta-red/);
+assert.match(app, /buildMaturityModel/);
+assert.match(app, /forecastSiteMaturity/);
+assert.match(app, /annualElectricityCostEscalation/);
+assert.match(server, /"monthlyHistory": monthly_history/);
+assert.match(app, /Cumulative actual revenue annualised/);
 assert.ok(app.indexOf("serverFallback") < app.indexOf("CLIENT_TII_COUNTER_LOCATION_BUNDLED_URL", app.indexOf("async function loadClientOfficialAadtLocations")), "client should retain server fallback while attempting official data");
 assert.match(app, /coarse-ranking-only/);
 assert.match(server, /coarse ranking-only coordinate/);
 assert.equal(bundle.locations.filter(x => x.mappable_location).length, 11);
 assert.equal(bundle.locations.filter(x => x.map_coordinate_status === "ranking-only-coarse-coordinate-not-for-map").length, 295);
 
-console.log("\n[2/4] Python AADT regression suite");
+console.log("\n[2/6] AADT regression suite");
 run(python, ["tests/aadt_regression_test.py"]);
+
+console.log("\n[3/6] Monthly live-data parser regression suite");
+run(python, ["tests/live_financial_maturity_test.py"]);
+
+console.log("\n[4/6] Revenue maturity engine regression suite");
+run("node", ["tests/maturity_regression_test.js"]);
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -56,7 +84,7 @@ async function waitFor(url, timeoutMs = 15000) {
   throw last || new Error(`Timed out waiting for ${url}`);
 }
 
-console.log("\n[3/4] Live local API smoke test");
+console.log("\n[5/6] Live local API and static-delivery smoke test");
 const port = await freePort();
 const child = spawn(python, ["server.py"], {
   cwd: root,
@@ -70,7 +98,7 @@ try {
   const versionResp = await waitFor(`http://127.0.0.1:${port}/api/version`);
   const version = await versionResp.json();
   assert.equal(version.ok, true);
-  assert.match(version.aadt_engine_version, /V17\.36/);
+  assert.match(version.aadt_engine_version, /V17\.37/);
 
   const empty = await fetch(`http://127.0.0.1:${port}/api/auto-tii-aadt`);
   assert.equal(empty.status, 400);
@@ -94,7 +122,12 @@ try {
 
   const indexResp = await fetch(`http://127.0.0.1:${port}/`);
   assert.equal(indexResp.status, 200);
-  assert.match(await indexResp.text(), /EV Charging Hub Investment Tool/i);
+  const indexText = await indexResp.text();
+  assert.match(indexText, /EV Charging Hub Investment Tool V17\.37/i);
+
+  const maturityResp = await fetch(`http://127.0.0.1:${port}/js/engines/maturityEngine.js`);
+  assert.equal(maturityResp.status, 200);
+  assert.match(await maturityResp.text(), /buildMaturityModel/);
 } finally {
   child.kill("SIGTERM");
   await new Promise(resolve => {
@@ -103,6 +136,6 @@ try {
   });
 }
 
-console.log("\n[4/4] Result");
-console.log("PASS — AADT unit, regression, provenance, API and static smoke tests completed successfully.");
+console.log("\n[6/6] Result");
+console.log("PASS — V17.37 AADT, CAPEX bands, monthly history, maturity forecasting, exports, API and static smoke tests completed successfully.");
 if (logs.trim()) console.log("Server smoke log:\n" + logs.trim());

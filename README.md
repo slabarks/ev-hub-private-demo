@@ -1,6 +1,6 @@
-# EV Hub Investment Tool — V17.30 Map-led AADT Counter Selection
+# EV Hub Investment Tool — V17.31 Official TII AADT Overlay
 
-Current review build: **V17.30 map-led AADT counter selection**. This release makes the AADT workflow visual and selectable from the map: top 4 recommendations, official TII counter-location overlay where available, and direct map-popup selection.
+Current review build: **V17.31 official TII AADT overlay + hover popups**. This release hardens the map-led AADT workflow so counter markers are drawn only from official TII counter coordinates, never from approximate bundled coordinates or the screened site coordinate.
 
 ## What changed
 
@@ -12,6 +12,9 @@ Current review build: **V17.30 map-led AADT counter selection**. This release ma
 - Nearby-site radius is explicitly separated from AADT: radius affects nearby chargers/sites only.
 - Multiple counters are blended only when they are same-route/same-corridor and then distance-weighted.
 - AADT responses include audit fields: raw/effective AADT, confidence label, waterfall layer, geocode source, and counter candidate details when available.
+- The browser now calls `/api/tii-counter-locations` to load official TII counter coordinates through the app server, with direct official GeoJSON as a fallback.
+- AADT map popups now open on hover/focus/click and close automatically when the pointer leaves the marker/popup.
+- Bundled approximate/offline coordinates are intentionally not used for AADT map markers.
 - The Portfolio Calibration table remains focused on maturity, actuals, matched model kWh and variance. The old visible Status column remains removed.
 - Active curator profiles remain transparent and auditable in the variance popover.
 
@@ -27,7 +30,7 @@ Current review build: **V17.30 map-led AADT counter selection**. This release ma
 
 ## Known data limitation
 
-The offline coordinate-enriched TII file currently has coordinates for most, but not all, TII counters. The app supports full offline coordinate ranking once the remaining counter coordinates are completed in `data/tii_aadt_counters_2019_2026_geocoded.json`.
+AADT map markers require official TII counter coordinates. If the official TII counter-location service is blocked or unavailable, the app will not plot approximate/bundled counter markers on the map. This avoids showing a counter at the wrong location.
 
 ## Testing
 

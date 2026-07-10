@@ -770,7 +770,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.30 map-led AADT counter selection";
+const APP_BUILD_VERSION = "V17.31 official TII AADT overlay + hover popups";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -941,7 +941,7 @@ function aadtEngineMismatchWarning(ctx) {
     return "";
   }
   if (isOldCoordinateEngine) {
-    return "AADT API version mismatch: the browser is V17.30 but the server returned the older V17.26 coordinate-enriched AADT method. This can select distant county/corridor counters such as N22 for Bandon. The browser will try to recalculate from the local TII counter database, but redeploy/restart the full package including server.py before investor use.";
+    return "AADT API version mismatch: the browser is V17.31 but the server returned the older V17.26 coordinate-enriched AADT method. This can select distant county/corridor counters such as N22 for Bandon. The browser will try to recalculate from the local TII counter database, but redeploy/restart the full package including server.py before investor use.";
   }
   if (hasCandidates && !engineVersion && source.includes("tii")) {
     return "AADT API version is not reported by the server. The result may come from an older backend. Redeploy/restart the full package if the candidate list does not show coordinate-first road-aware output.";
@@ -949,7 +949,7 @@ function aadtEngineMismatchWarning(ctx) {
   return "";
 }
 
-const CLIENT_AADT_ENGINE_VERSION = "V17.30 browser coordinate-first official-location AADT engine";
+const CLIENT_AADT_ENGINE_VERSION = "V17.31 browser coordinate-first official-coordinate-only AADT engine";
 let clientAadtRecordsPromise = null;
 const CLIENT_AADT_COORD_OVERRIDES = {
   "000000001069": { lat: 53.2933, lon: -9.0159, location_source: "built-in browser traffic counter coordinate proxy: Bothar na dTreabh, Galway" },
@@ -1000,6 +1000,7 @@ function clientAadtRatioOk(a, b, maxRatio = 3.0) {
   return Math.max(x, y) / Math.min(x, y) <= maxRatio;
 }
 
+const CLIENT_TII_COUNTER_LOCATION_API_URL = "./api/tii-counter-locations?v=17.31";
 const CLIENT_TII_COUNTER_LOCATION_GEOJSON_URL = "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.geojson";
 let clientOfficialAadtLocationPromise = null;
 
@@ -1056,11 +1057,58 @@ function clientOfficialCounterLocationsFromGeoJson(data) {
     };
   }).filter(Boolean);
 }
+
+function clientOfficialCounterLocationsFromApi(data) {
+  const rows = Array.isArray(data?.locations) ? data.locations : Array.isArray(data) ? data : [];
+  return rows.map(row => {
+    const lat = Number(row.lat ?? row.latitude);
+    const lon = Number(row.lon ?? row.lng ?? row.longitude);
+    if (!(lat >= 49 && lat <= 56.5 && lon >= -11.5 && lon <= -5)) return null;
+    const rawId = row.counter_id || row.cosit || row.site_id || row.id || row.site || row.tmu_id || "";
+    const name = String(row.counter_name || row.name || row.description || rawId || "TII counter");
+    const route = clientAadtRoute(row.route || clientRouteFromText(`${name} ${rawId}`));
+    const id = clientAadtCounterId({ site_id: rawId }) || clientCounterIdFromText(`${rawId} ${name}`);
+    if (!id) return null;
+    return {
+      counter_id: id,
+      counter_name: name,
+      route,
+      lat,
+      lon,
+      location_source: row.location_source || "Server-proxied official TII Traffic Counter Locations",
+      official_location: true,
+      properties: row.properties || row.location_properties || {}
+    };
+  }).filter(Boolean);
+}
 async function loadClientOfficialAadtLocations() {
   if (!clientOfficialAadtLocationPromise) {
-    clientOfficialAadtLocationPromise = fetch(CLIENT_TII_COUNTER_LOCATION_GEOJSON_URL, { cache: "no-store", mode: "cors" })
-      .then(r => { if (!r.ok) throw new Error(`Could not load official TII counter location GeoJSON (${r.status})`); return r.json(); })
-      .then(clientOfficialCounterLocationsFromGeoJson);
+    clientOfficialAadtLocationPromise = (async () => {
+      const errors = [];
+      try {
+        const r = await fetch(CLIENT_TII_COUNTER_LOCATION_API_URL, { cache: "no-store" });
+        if (!r.ok) throw new Error(`server proxy returned ${r.status}`);
+        const data = await r.json();
+        const rows = clientOfficialCounterLocationsFromApi(data);
+        if (rows.length) return rows;
+        errors.push("server proxy returned no parseable official counter locations");
+      } catch (err) {
+        errors.push(`server proxy unavailable: ${err.message || err}`);
+      }
+      try {
+        const r = await fetch(CLIENT_TII_COUNTER_LOCATION_GEOJSON_URL, { cache: "no-store", mode: "cors" });
+        if (!r.ok) throw new Error(`direct GeoJSON returned ${r.status}`);
+        const data = await r.json();
+        const rows = clientOfficialCounterLocationsFromGeoJson(data);
+        if (rows.length) return rows;
+        errors.push("direct GeoJSON returned no parseable official counter locations");
+      } catch (err) {
+        errors.push(`direct GeoJSON unavailable: ${err.message || err}`);
+      }
+      const message = `Official TII counter locations unavailable: ${errors.join("; ")}`;
+      console.warn(message);
+      throw new Error(message);
+    })();
   }
   return clientOfficialAadtLocationPromise;
 }
@@ -1101,21 +1149,18 @@ function mergeClientAadtRowsWithOfficialLocations(rows, officialLocations) {
 }
 async function loadClientAadtRecords() {
   if (!clientAadtRecordsPromise) {
-    clientAadtRecordsPromise = fetch("./data/tii_aadt_counters_2019_2026_geocoded.json?v=17.30", { cache: "no-store" })
+    clientAadtRecordsPromise = fetch("./data/tii_aadt_counters_2019_2026_geocoded.json?v=17.31", { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error(`Could not load local TII AADT database (${r.status})`); return r.json(); })
       .then(async data => {
         const rows = Array.isArray(data?.records) ? data.records : Array.isArray(data) ? data : [];
-        const baseRows = rows.map(r => {
-          const override = CLIENT_AADT_COORD_OVERRIDES[clientAadtCounterId(r)] || {};
-          return { ...r, ...override };
-        });
+        const baseRows = rows.map(r => ({ ...r }));
         try {
           const officialLocations = await loadClientOfficialAadtLocations();
           const officialMerged = mergeClientAadtRowsWithOfficialLocations(baseRows, officialLocations);
-          return officialMerged.filter(r => Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)) && Number(r.latest_aadt || r.aadt) > 0);
+          return officialMerged.filter(r => Boolean(r.official_location) && Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)) && Number(r.latest_aadt || r.aadt) > 0);
         } catch (officialErr) {
-          console.warn("Official TII counter location GeoJSON unavailable; using bundled local counter coordinates", officialErr);
-          return baseRows.filter(r => Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)) && Number(r.latest_aadt || r.aadt) > 0);
+          console.warn("Official TII counter locations unavailable; bundled approximate coordinates are intentionally not used for AADT map markers", officialErr);
+          return [];
         }
       });
   }
@@ -1165,7 +1210,8 @@ async function clientCoordinateFirstTraffic(ctx, address) {
   const site = ctx?.site || {};
   const siteLat = Number(site.lat), siteLon = Number(site.lon);
   if (!Number.isFinite(siteLat) || !Number.isFinite(siteLon)) return null;
-  const records = await loadClientAadtRecords();
+  const records = (await loadClientAadtRecords()).filter(r => Boolean(r.official_location));
+  if (!records.length) return null;
   const ranked = records.map(r => {
     const d = clientAadtDistanceKm(siteLat, siteLon, Number(r.lat), Number(r.lon));
     const aadt = Number(r.latest_aadt || r.aadt || 0);
@@ -1185,7 +1231,7 @@ async function clientCoordinateFirstTraffic(ctx, address) {
       location_source: r.location_source || "local TII coordinate database",
       official_location: Boolean(r.official_location),
       confidence: d <= 3 ? "High" : d <= 8 ? "Medium" : d <= 20 ? "Review" : "Low",
-      match_basis: r.official_location ? "official TII map coordinate + road-aware ranking" : "browser coordinate-first road-aware TII counter ranking",
+      match_basis: "official TII map coordinate + road-aware ranking",
       source_record: r
     };
   }).filter(c => Number.isFinite(c.distance_km) && c.distance_km <= 80 && c.aadt > 0)
@@ -1218,9 +1264,9 @@ async function clientCoordinateFirstTraffic(ctx, address) {
     aadt_engine_version: CLIENT_AADT_ENGINE_VERSION,
     aadt_engine_mode: "browser-coordinate-first-road-aware",
     client_side_aadt_recalculated: true,
-    source: `Browser local TII AADT database · coordinate-first road-aware lookup · ${groupNote} · ${group.map(c => c.counter_name).join("; ") || selected.counter_name} · ${selected.aadt_year || "latest"}`,
+    source: `Browser local TII AADT database joined to official TII counter coordinates · coordinate-first road-aware lookup · ${groupNote} · ${group.map(c => c.counter_name).join("; ") || selected.counter_name} · ${selected.aadt_year || "latest"}`,
     confidence,
-    provider: "Browser local TII AADT database joined to counter coordinates",
+    provider: "Browser local TII AADT database joined to official TII counter coordinates",
     counter_id: group.map(c => c.counter_id).join(", ") || selected.counter_id,
     counter_name: group.map(c => c.counter_name).join("; ") || selected.counter_name,
     route: [...new Set(group.map(c => c.route).filter(Boolean))].join(", ") || selected.route,
@@ -1232,8 +1278,8 @@ async function clientCoordinateFirstTraffic(ctx, address) {
     candidate_count: top.length,
     candidates: top,
     nearby_counters: nearbyCounters,
-    reference: "Browser-loaded official TII Traffic Counter Locations GeoJSON when available, joined to data/tii_aadt_counters_2019_2026_geocoded.json",
-    method_note: "Browser-side safety correction: AADT was recalculated from the exact map coordinate using official TII counter locations where available, then ranked by road-aware scoring. The nearby-site radius does not control AADT selection.",
+    reference: "Server-proxied or browser-loaded official TII Traffic Counter Locations joined to data/tii_aadt_counters_2019_2026_geocoded.json",
+    method_note: "Browser-side safety correction: AADT was recalculated from the exact map coordinate using official TII counter locations only, then ranked by road-aware scoring. The nearby-site radius does not control AADT selection.",
     previous_server_traffic: ctx?.traffic ? { aadt: ctx.traffic.aadt, source: ctx.traffic.source, confidence: ctx.traffic.confidence, counter_name: ctx.traffic.counter_name, counter_distance_km: ctx.traffic.counter_distance_km } : null
   };
 }
@@ -1271,7 +1317,7 @@ function tiiCandidateCards(ctx) {
     const selectionScore = Number.isFinite(Number(c.selection_score)) ? ` · score ${number(Number(c.selection_score), 1)}` : "";
     const routeScore = Number.isFinite(Number(c.route_score)) ? ` · route ${number(Number(c.route_score), 1)}` : "";
     const terms = Array.isArray(c.matched_terms) && c.matched_terms.length ? ` · matched ${h(c.matched_terms.slice(0, 4).join(", "))}` : "";
-    const official = c.official_location ? " · official TII map coordinate" : "";
+    const official = c.official_location ? " · official TII map coordinate" : " · not mapped unless official TII coordinate is available";
     const aadt = Number(c.aadt);
     const usable = Number.isFinite(aadt) && aadt > 0;
     const rank = Number(c.display_rank || idx + 1);
@@ -5357,6 +5403,23 @@ function updateRadiusLayer(lat, lon) {
   }
 }
 
+function aadtCounterMapCoordinateIsTrusted(candidate, siteLat, siteLon) {
+  const lat = Number(candidate?.lat);
+  const lon = Number(candidate?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  const src = String(candidate?.location_source || candidate?.provider || candidate?.reference || "").toLowerCase();
+  const isOfficial = Boolean(candidate?.official_location) || src.includes("official tii") || src.includes("traffic counter location geojson") || src.includes("server-proxied official");
+  if (!isOfficial) return false;
+  const dSite = clientAadtDistanceKm(siteLat, siteLon, lat, lon);
+  if (Number.isFinite(dSite) && dSite < 0.03 && !String(candidate?.counter_name || "").toLowerCase().includes(String(state.siteContext?.site?.name || "").toLowerCase())) return false;
+  return true;
+}
+function aadtCounterMapCoordinateWarning(candidate) {
+  const src = String(candidate?.location_source || "");
+  if (candidate?.official_location || src.toLowerCase().includes("official")) return "Official TII map coordinate";
+  return "Counter has no official TII map coordinate available; not plotted";
+}
+
 function aadtPopupHtml(candidate, idx) {
   const isSelected = Boolean(candidate.selected);
   const name = h(candidate.counter_name || candidate.counter_id || "TII counter");
@@ -5375,11 +5438,11 @@ function updateAadtCounterOverlay(siteLat, siteLon) {
   const recommended = (state.siteContext?.traffic?.candidates || [])
     .slice(0, 4)
     .map((c, idx) => ({ ...c, __idx: idx, __rank: idx + 1, lat: Number(c.lat), lon: Number(c.lon), recommended: true }))
-    .filter(c => Number.isFinite(c.lat) && Number.isFinite(c.lon));
+    .filter(c => aadtCounterMapCoordinateIsTrusted(c, siteLat, siteLon));
   const recommendedIds = new Set(recommended.map(aadtCounterStableId));
   const diagnostic = state.filters.showAllAadtCounters ? (state.siteContext?.traffic?.nearby_counters || [])
     .map((c, idx) => ({ ...c, __idx: idx, __rank: idx + 1, lat: Number(c.lat), lon: Number(c.lon), diagnostic: true }))
-    .filter(c => Number.isFinite(c.lat) && Number.isFinite(c.lon) && !recommendedIds.has(aadtCounterStableId(c)))
+    .filter(c => aadtCounterMapCoordinateIsTrusted(c, siteLat, siteLon) && !recommendedIds.has(aadtCounterStableId(c)))
     .slice(0, 28) : [];
   const candidates = [...recommended, ...diagnostic];
   const lineFeatures = recommended.map(c => ({
@@ -5404,19 +5467,46 @@ function updateAadtCounterOverlay(siteLat, siteLon) {
   } else {
     map.getSource("aadt-lines").setData(lineData);
   }
+  const closeOtherAadtPopups = current => {
+    aadtMarkers.forEach(m => {
+      if (m !== current) { try { m.getPopup()?.remove(); } catch (_) {} }
+    });
+  };
   candidates.forEach(c => {
     const rankLabel = c.selected ? "✓" : c.recommended ? String(c.__rank) : "·";
     const cls = `aadt-marker-el ${c.selected ? "selected" : c.recommended ? "candidate" : "diagnostic"}`;
     const element = makeMarker(cls, rankLabel);
-    const popup = new maplibregl.Popup({ offset: 18, closeButton: true, closeOnClick: false }).setHTML(aadtPopupHtml(c, c.__idx));
+    element.setAttribute("title", `${c.counter_name || c.counter_id || "TII counter"} · ${c.route || "route"} · ${Number.isFinite(Number(c.aadt)) ? number(Number(c.aadt),0) + " AADT" : "AADT n/a"}`);
+    const popup = new maplibregl.Popup({ offset: 18, closeButton: false, closeOnClick: false, focusAfterOpen: false }).setHTML(aadtPopupHtml(c, c.__idx));
     const marker = new maplibregl.Marker({ element })
       .setLngLat([c.lon, c.lat])
       .setPopup(popup)
       .addTo(map);
-    const openMarkerPopup = () => { try { if (!marker.getPopup().isOpen()) marker.togglePopup(); } catch (_) {} };
+    let closeTimer = null;
+    const scheduleClose = () => {
+      if (closeTimer) clearTimeout(closeTimer);
+      closeTimer = setTimeout(() => { try { popup.remove(); } catch (_) {} }, 180);
+    };
+    const cancelClose = () => { if (closeTimer) clearTimeout(closeTimer); closeTimer = null; };
+    const wirePopupHover = () => {
+      const node = popup.getElement();
+      if (!node || node.dataset.aadtHoverWired === "true") return;
+      node.dataset.aadtHoverWired = "true";
+      node.addEventListener("mouseenter", cancelClose);
+      node.addEventListener("mouseleave", scheduleClose);
+    };
+    const openMarkerPopup = e => {
+      if (e && typeof e.preventDefault === "function") e.preventDefault();
+      cancelClose();
+      closeOtherAadtPopups(marker);
+      try { if (!popup.isOpen()) marker.togglePopup(); } catch (_) {}
+      setTimeout(wirePopupHover, 0);
+    };
     element.addEventListener("mouseenter", openMarkerPopup);
     element.addEventListener("focus", openMarkerPopup);
     element.addEventListener("click", openMarkerPopup);
+    element.addEventListener("mouseleave", scheduleClose);
+    element.addEventListener("blur", scheduleClose);
     aadtMarkers.push(marker);
   });
   return recommended;

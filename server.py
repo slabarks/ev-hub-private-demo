@@ -41,7 +41,7 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-AADT_ENGINE_VERSION = "V17.30 coordinate-first AADT server + map-led counter selection"
+AADT_ENGINE_VERSION = "V17.31 official TII AADT overlay + hover popups"
 
 
 LOCAL_DATASETS = {
@@ -664,18 +664,11 @@ out center tags;
 # counter counts. This avoids screen-scraping the interactive map.
 
 TII_COUNTER_LOCATION_URLS = [
-    # Official TII counter locations. GeoJSON is preferred. DAT/ZIP/KML are added as fallbacks
-    # because some local networks block one format but allow another.
+    # Official TII counter locations. Keep this list intentionally short so the
+    # map overlay never stalls for long if a network blocks TII open data.
     "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.geojson",
-    "http://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.geojson",
-    "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.dat",
-    "http://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.dat",
-    "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.kml",
-    "http://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.kml",
-    "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.zip",
-    "http://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.zip",
-    # Fallback via the resource URL advertised by data.gov.ie.
     "https://data.gov.ie/dataset/traffic-counter-locations/resource/69d0c65c-a7da-468a-8eed-790e9ccf7001/download/tmu-traffic-counters.geojson",
+    "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.kml",
 ]
 # TII public website report resources. These are exposed from the same TII
 # ecosystem as https://trafficdata.tii.ie/publicmultinodemap.asp and are more
@@ -2271,7 +2264,7 @@ def _load_tii_counter_locations_from_geojson():
     errors = []
     for url in TII_COUNTER_LOCATION_URLS:
         try:
-            raw = http_bytes(url, timeout=12.0)
+            raw = http_bytes(url, timeout=4.0)
             payloads = []
             lower = url.lower()
             if lower.endswith(".zip") or raw[:2] == b"PK":
@@ -2376,6 +2369,33 @@ def _attach_location_to_summary_row(row: dict, location_counters: list[dict], by
     out["location_source"] = "TII traffic counter location GeoJSON"
     out["location_properties"] = loc.get("properties", {})
     return out
+
+
+
+
+def _public_tii_counter_locations_payload():
+    counters = _load_tii_counter_locations_from_geojson()
+    locations = []
+    for c in counters:
+        locations.append({
+            "counter_id": c.get("cosit"),
+            "cosit": c.get("cosit"),
+            "counter_name": c.get("name") or c.get("cosit"),
+            "name": c.get("name") or c.get("cosit"),
+            "route": c.get("route") or "",
+            "lat": c.get("lat"),
+            "lon": c.get("lon"),
+            "location_source": c.get("location_source") or "TII official traffic counter location file",
+            "official_location": True,
+            "properties": c.get("properties") or {},
+        })
+    return {
+        "ok": True,
+        "aadt_engine_version": AADT_ENGINE_VERSION,
+        "source": "Official TII Traffic Counter Locations loaded by server.py",
+        "count": len(locations),
+        "locations": locations,
+    }
 
 
 def load_tii_public_aadt_summary_counters():
@@ -4130,6 +4150,12 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/version":
             return self._send_json({"ok": True, "server": "server.py", "aadt_engine_version": AADT_ENGINE_VERSION})
 
+        if parsed.path == "/api/tii-counter-locations":
+            try:
+                return self._send_json(_public_tii_counter_locations_payload())
+            except Exception as exc:
+                return self._send_json({"ok": False, "error": str(exc), "aadt_engine_version": AADT_ENGINE_VERSION}, status=503)
+
         if parsed.path == "/api/auto-tii-aadt":
             params = urllib.parse.parse_qs(parsed.query)
             address = params.get("address", [""])[0]
@@ -4199,6 +4225,12 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/version":
             return self._send_json({"ok": True, "server": "server.py", "aadt_engine_version": AADT_ENGINE_VERSION})
+
+        if parsed.path == "/api/tii-counter-locations":
+            try:
+                return self._send_json(_public_tii_counter_locations_payload())
+            except Exception as exc:
+                return self._send_json({"ok": False, "error": str(exc), "aadt_engine_version": AADT_ENGINE_VERSION}, status=503)
 
         if parsed.path == "/api/auto-tii-aadt":
             params = urllib.parse.parse_qs(parsed.query)

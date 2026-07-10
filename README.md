@@ -1,6 +1,6 @@
-# EV Hub Investment Tool — V17.31 Official TII AADT Overlay
+# EV Hub Investment Tool — V17.32 Official TII AADT Overlay
 
-Current review build: **V17.31 official TII AADT overlay + hover popups**. This release hardens the map-led AADT workflow so counter markers are drawn only from official TII counter coordinates, never from approximate bundled coordinates or the screened site coordinate.
+Current review build: **V17.32 AADT search API alignment + official overlay guard**. This release hardens the map-led AADT workflow so counter markers are drawn only from official TII counter coordinates, never from approximate bundled coordinates or the screened site coordinate.
 
 ## What changed
 

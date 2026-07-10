@@ -41,7 +41,7 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-AADT_ENGINE_VERSION = "V17.31 official TII AADT overlay + hover popups"
+AADT_ENGINE_VERSION = "V17.32 AADT search API alignment + official overlay guard"
 
 
 LOCAL_DATASETS = {
@@ -666,9 +666,14 @@ out center tags;
 TII_COUNTER_LOCATION_URLS = [
     # Official TII counter locations. Keep this list intentionally short so the
     # map overlay never stalls for long if a network blocks TII open data.
+    # Include both HTTPS and HTTP because data.gov.ie currently publishes the
+    # resource download URL as HTTP and some hosts redirect differently.
     "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.geojson",
+    "http://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.geojson",
     "https://data.gov.ie/dataset/traffic-counter-locations/resource/69d0c65c-a7da-468a-8eed-790e9ccf7001/download/tmu-traffic-counters.geojson",
     "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.kml",
+    "http://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.kml",
+    "http://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.dat",
 ]
 # TII public website report resources. These are exposed from the same TII
 # ecosystem as https://trafficdata.tii.ie/publicmultinodemap.asp and are more
@@ -1076,18 +1081,21 @@ def load_local_tii_aadt_records() -> list[dict]:
             sid = normalise_cosit(rec.get("site_id")) or str(rec.get("site_id", ""))
             if sid in AADT_COUNTER_COORD_OVERRIDES:
                 rec.update(AADT_COUNTER_COORD_OVERRIDES[sid])
-        # Coordinate-enriched packages are designed to work offline. Avoid a
-        # blocking online enrichment attempt when the local geocoded DB is present;
-        # only try the TII online location file if we had to fall back to the
-        # non-geocoded JSON.
-        if src_path != TII_LOCAL_AADT_GEOCODED_JSON:
-            try:
-                _try_enrich_local_aadt_records_with_tii_locations(records)
-            except Exception as enrich_exc:
-                TII_LOCATION_ENRICHMENT_CACHE.update({"attempted": True, "error": str(enrich_exc), "matched": 0, "source": None})
-        else:
+        # V17.32: always try to replace bundled/approximate coordinates with the
+        # official TII Traffic Counter Locations resource. The geocoded JSON remains
+        # a safe ranking fallback, but map markers and "official" badges must never
+        # rely on approximate description-derived coordinates.
+        try:
+            _try_enrich_local_aadt_records_with_tii_locations(records)
+        except Exception as enrich_exc:
             with_coords = sum(1 for r in records if r.get("lat") and r.get("lon"))
-            TII_LOCATION_ENRICHMENT_CACHE.update({"attempted": False, "error": None, "matched": with_coords, "source": str(TII_LOCAL_AADT_GEOCODED_JSON.name)})
+            TII_LOCATION_ENRICHMENT_CACHE.update({
+                "attempted": True,
+                "error": str(enrich_exc),
+                "matched": 0,
+                "source": str(TII_LOCAL_AADT_GEOCODED_JSON.name),
+                "fallback_coordinate_count": with_coords,
+            })
         TII_LOCAL_AADT_CACHE.update({"loaded": True, "records": records, "error": None})
         return records
     except Exception as exc:
@@ -1853,6 +1861,8 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
         candidate_conf = "High" if d <= 3 else "Medium" if d <= 8 else "Review" if d <= 20 else "Low"
         if _route_class(r.get("route")) == "M" and not _site_context_flags(address)["motorway"]:
             candidate_conf = "Review"
+        locsrc = str(r.get("location_source") or "")
+        official_location = ("official" in locsrc.lower()) or ("tii traffic counter location" in locsrc.lower()) or ("geojson" in locsrc.lower())
         candidates.append({
             "selected": r.get("site_id") in selected_ids,
             "counter_id": r.get("site_id"),
@@ -1872,6 +1882,8 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
             "lat": r.get("lat"),
             "lon": r.get("lon"),
             "location_source": r.get("location_source"),
+            "official_location": official_location,
+            "map_coordinate_status": "official" if official_location else "ranking-only approximate; not plotted unless official TII coordinate is available",
             "match_basis": "coordinate-first road-aware TII counter ranking",
             "why": "selected" if r.get("site_id") in selected_ids else "candidate ranked by distance, road class and route relevance",
         })
@@ -3084,7 +3096,7 @@ def search_coordinates(lat, lon, radius_km, address="Manual map point"):
     }
     try:
         traffic = tii_aadt_from_local_excel_nearest_coordinate(site, address or "manual map point")
-        traffic["method_note"] = f"Manual map point selected at {lat:.6f}, {lon:.6f}. AADT is selected from the nearest coordinate-enriched TII counter and should be validated for investment-grade diligence."
+        traffic["method_note"] = f"Manual map point selected at {lat:.6f}, {lon:.6f}. AADT is selected from coordinate-first TII counter ranking; mapped markers use official TII coordinates only."
     except Exception as exc:
         try:
             traffic = tii_aadt_from_local_excel_name_lookup(address or "manual map point")
@@ -3171,11 +3183,17 @@ def search(address, radius_km):
             site = known_place_fallback(address)
             geocode_attempts = [{"provider": "known Irish place fallback" if site else "all geocoders", "status": "matched_after_provider_failure" if site else "failed", "error": geocode_error}]
 
-    # Estimate traffic independently of map/geocoding where possible.
+    # Estimate traffic from the same strict AADT resolver used by /api/auto-tii-aadt.
+    # V17.32 fixes the previous split where /api/search could still return the old
+    # coordinate-enriched source text while the browser was running the newer AADT UI.
     traffic = None
     traffic_warning = None
     if site:
-        traffic = estimate_traffic(site, address, dataset)
+        try:
+            traffic = resolve_auto_tii_aadt(address, params={"lat": [str(site.get("lat"))], "lon": [str(site.get("lon"))]}, mode="balanced")
+        except Exception as exc:
+            traffic_warning = f"Coordinate-first AADT resolver failed, using legacy fallback: {exc}"
+            traffic = estimate_traffic(site, address, dataset)
     else:
         # TII/local text lookup path when we have no coordinates.
         try:

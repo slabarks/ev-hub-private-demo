@@ -770,7 +770,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.31 official TII AADT overlay + hover popups";
+const APP_BUILD_VERSION = "V17.32 AADT search API alignment + official overlay guard";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -935,13 +935,16 @@ function aadtEngineMismatchWarning(ctx) {
   const source = String(t.source || "").toLowerCase();
   const mode = String(t.sample_mode || t.aadt_engine_mode || "").toLowerCase();
   const engineVersion = String(t.aadt_engine_version || "");
+  const hasCurrentServer = /V17\.(3[2-9]|[4-9]\d)/.test(engineVersion) || engineVersion.includes("V17.32");
   const isOldCoordinateEngine = source.includes("ranked coordinate-enriched lookup") || mode.includes("ranked coordinate-enriched");
   const hasCandidates = Array.isArray(t.candidates) && t.candidates.length > 0;
-  if (t.client_side_aadt_recalculated) {
-    return "";
+  if (t.client_side_aadt_recalculated) return "";
+  if (isOldCoordinateEngine && !hasCurrentServer) {
+    return "AADT API version mismatch: the browser is V17.32 but the server returned the older coordinate-enriched AADT method. This can select distant county/corridor counters. Redeploy/restart the full package including server.py before investor use.";
   }
-  if (isOldCoordinateEngine) {
-    return "AADT API version mismatch: the browser is V17.31 but the server returned the older V17.26 coordinate-enriched AADT method. This can select distant county/corridor counters such as N22 for Bandon. The browser will try to recalculate from the local TII counter database, but redeploy/restart the full package including server.py before investor use.";
+  const plotted = (t.candidates || []).filter(c => c.official_location).length;
+  if (hasCandidates && plotted === 0 && source.includes("tii")) {
+    return "AADT ranking is available, but no official TII counter coordinates were loaded for the map overlay. The AADT should be reviewed on the TII map or by manual counter selection before investor use.";
   }
   if (hasCandidates && !engineVersion && source.includes("tii")) {
     return "AADT API version is not reported by the server. The result may come from an older backend. Redeploy/restart the full package if the candidate list does not show coordinate-first road-aware output.";
@@ -949,7 +952,7 @@ function aadtEngineMismatchWarning(ctx) {
   return "";
 }
 
-const CLIENT_AADT_ENGINE_VERSION = "V17.31 browser coordinate-first official-coordinate-only AADT engine";
+const CLIENT_AADT_ENGINE_VERSION = "V17.32 browser coordinate-first official-coordinate-only AADT engine";
 let clientAadtRecordsPromise = null;
 const CLIENT_AADT_COORD_OVERRIDES = {
   "000000001069": { lat: 53.2933, lon: -9.0159, location_source: "built-in browser traffic counter coordinate proxy: Bothar na dTreabh, Galway" },
@@ -1000,7 +1003,7 @@ function clientAadtRatioOk(a, b, maxRatio = 3.0) {
   return Math.max(x, y) / Math.min(x, y) <= maxRatio;
 }
 
-const CLIENT_TII_COUNTER_LOCATION_API_URL = "./api/tii-counter-locations?v=17.31";
+const CLIENT_TII_COUNTER_LOCATION_API_URL = "./api/tii-counter-locations?v=17.32";
 const CLIENT_TII_COUNTER_LOCATION_GEOJSON_URL = "https://data.tii.ie/Datasets/TrafficCounters/tmu-traffic-counters.geojson";
 let clientOfficialAadtLocationPromise = null;
 
@@ -1149,7 +1152,7 @@ function mergeClientAadtRowsWithOfficialLocations(rows, officialLocations) {
 }
 async function loadClientAadtRecords() {
   if (!clientAadtRecordsPromise) {
-    clientAadtRecordsPromise = fetch("./data/tii_aadt_counters_2019_2026_geocoded.json?v=17.31", { cache: "no-store" })
+    clientAadtRecordsPromise = fetch("./data/tii_aadt_counters_2019_2026_geocoded.json?v=17.32", { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error(`Could not load local TII AADT database (${r.status})`); return r.json(); })
       .then(async data => {
         const rows = Array.isArray(data?.records) ? data.records : Array.isArray(data) ? data : [];
@@ -5416,7 +5419,7 @@ function aadtCounterMapCoordinateIsTrusted(candidate, siteLat, siteLon) {
 }
 function aadtCounterMapCoordinateWarning(candidate) {
   const src = String(candidate?.location_source || "");
-  if (candidate?.official_location || src.toLowerCase().includes("official")) return "Official TII map coordinate";
+  if (candidate?.official_location || src.toLowerCase().includes("official")) return "Official TII counter coordinate";
   return "Counter has no official TII map coordinate available; not plotted";
 }
 
@@ -5428,7 +5431,7 @@ function aadtPopupHtml(candidate, idx) {
   const id = encodeURIComponent(aadtCounterStableId(candidate) || String(idx));
   const confidence = candidate.confidence || (candidate.diagnostic ? "Diagnostic / manual review" : "confidence not provided");
   const basis = candidate.match_basis || candidate.location_source || "TII counter candidate";
-  const official = candidate.official_location ? "Official TII map coordinate" : "Bundled/local counter coordinate";
+  const official = candidate.official_location ? "Official TII counter coordinate" : "Ranking-only coordinate; not official map position";
   return `<div class="aadt-popup"><strong>${name}</strong><span>${h(candidate.route || "route not provided")} · ${distance}</span><span>${Number.isFinite(aadt) ? number(aadt,0) + " AADT" : "AADT not available"}</span><span>${h(confidence)}</span><span>${h(official)}</span><small>${h(basis)}</small><button type="button" onclick="window.__evHubSelectAadtCounterById && window.__evHubSelectAadtCounterById('${id}')">${isSelected ? "Using this counter" : "Use this counter"}</button></div>`;
 }
 function updateAadtCounterOverlay(siteLat, siteLon) {

@@ -428,11 +428,18 @@ summary { cursor: pointer; font-weight: 800; color: #10231d; }
 .tii-candidate-list { margin-top: 10px; }
 .tii-candidate-list > strong { display:block; margin-bottom: 8px; color: #10231d; }
 .tii-candidates { display:grid; gap: 8px; }
-.tii-candidate { border: 1px solid var(--line); background: rgba(255,255,255,.72); border-radius: 14px; padding: 10px; }
+.tii-candidate { border: 1px solid var(--line); background: rgba(255,255,255,.72); border-radius: 14px; padding: 10px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+.tii-candidate:hover, .tii-candidate:focus-within { border-color: rgba(15,143,79,.55); box-shadow: 0 8px 18px rgba(15, 86, 54, .08); }
 .tii-candidate.selected { border-color: #0f8f4f; background: #e6f6ec; }
+.tii-candidate-main { min-width:0; }
 .tii-candidate span { display:inline-block; font-size: 10px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
 .tii-candidate strong { display:block; font-size: 13px; }
 .tii-candidate small { display:block; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+.tii-select-btn { border:1px solid rgba(15,143,79,.35); background:#fff; color:var(--accent); border-radius:999px; padding:8px 12px; font-weight:850; white-space:nowrap; cursor:pointer; }
+.tii-select-btn:hover { background:rgba(15,143,79,.08); }
+.tii-select-btn.selected { background:var(--accent); color:#fff; }
+.tii-select-btn:disabled { opacity:.45; cursor:not-allowed; }
+@media (max-width: 760px) { .tii-candidate { align-items:flex-start; flex-direction:column; } .tii-select-btn { width:100%; } }
 
 /* v29 workflow stepper and reorder controls */
 .workflow-stepper {
@@ -3200,7 +3207,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
   body.portfolio-financial-print-mode .print-report .portfolio-financial-pdf-table tr { break-inside: avoid; }
 }
 
-/* V17.25 Portfolio Financials PDF dashboard export */
+/* V17.26 Selectable AADT recommended counter list */
 @media print {
   body.portfolio-financial-print-mode .print-report .portfolio-financial-summary-page {
     padding: 5mm !important;

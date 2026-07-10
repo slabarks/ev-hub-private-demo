@@ -1,14 +1,16 @@
-# EV Hub Investment Tool — v35.57 AADT Waterfall Hardening
+# EV Hub Investment Tool — V17.27 Coordinate-first AADT Engine
 
-Current review build: **v35.57**. This release focuses on AADT correctness, because AADT counter selection is the foundation of the demand model.
+Current review build: **V17.27 coordinate-first AADT engine**. This release focuses on AADT correctness, because AADT counter selection is the foundation of the demand model.
 
 ## What changed
 
 - Exact curated site / Eircode AADT mappings now run **before** any text fallback.
-- Address-only AADT lookup now attempts geocoding and coordinate-ranked TII counter matching before text matching.
+- Address-only AADT lookup now attempts geocoding and coordinate-first, road-aware TII counter matching before text matching.
 - Text matching is now a low-confidence fallback only; generic place-token results are labelled **Review required**.
 - Curated multi-word matching now requires the actual phrase, preventing broad matches such as `Dublin Road` from catching unrelated Dublin addresses.
 - Coordinate-enriched TII AADT records are loaded offline without blocking on the online TII coordinate enrichment call.
+- Nearby-site radius is explicitly separated from AADT: radius affects nearby chargers/sites only.
+- Multiple counters are blended only when they are same-route/same-corridor and then distance-weighted.
 - AADT responses include audit fields: raw/effective AADT, confidence label, waterfall layer, geocode source, and counter candidate details when available.
 - The Portfolio Calibration table remains focused on maturity, actuals, matched model kWh and variance. The old visible Status column remains removed.
 - Active curator profiles remain transparent and auditable in the variance popover.

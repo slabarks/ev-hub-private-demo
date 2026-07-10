@@ -1432,6 +1432,189 @@ def _aadt_ratio_ok(a, b, max_ratio=2.75) -> bool:
         return False
 
 
+# V17.27 coordinate-first AADT helpers. The nearby-site radius is deliberately
+# not used here; the site lat/lon drives the counter ranking.
+AADT_COUNTER_COORD_OVERRIDES.update({
+    # West Cork / Bandon N71 corridor counters missing from the offline TII
+    # coordinate-enriched package. Approximate WGS84 positions are route-segment
+    # proxies used only to rank candidates; the source note clearly says built-in
+    # proxy so the investor can review on the TII map if needed.
+    "000000001711": {"lat": 51.7930, "lon": -8.5840, "location_source": "built-in traffic counter coordinate proxy: N71 Innishannon-Ballinhassig"},
+    "000000001712": {"lat": 51.7720, "lon": -8.6460, "location_source": "built-in traffic counter coordinate proxy: N71 Halfway-Inishannon"},
+    "000000001713": {"lat": 51.6400, "lon": -8.8050, "location_source": "built-in traffic counter coordinate proxy: N71 Clonakilty-Jones Bridge"},
+    "000000001715": {"lat": 51.7000, "lon": -9.5200, "location_source": "built-in traffic counter coordinate proxy: N71 Bantry-Glengarriff"},
+    "000000001716": {"lat": 51.8200, "lon": -8.5200, "location_source": "built-in traffic counter coordinate proxy: N71 Ballinhassig-N40"},
+    "000000001717": {"lat": 51.5400, "lon": -9.4200, "location_source": "built-in traffic counter coordinate proxy: N71 Ballydehob-Aghadown"},
+})
+
+AADT_MAJOR_REGION_TERMS = set(AADT_REGION_TOKENS) | {
+    "cork", "dublin", "galway", "limerick", "waterford", "kerry", "mayo",
+    "clare", "meath", "louth", "donegal", "sligo", "cavan", "wexford",
+    "kilkenny", "tipperary", "offaly", "laois", "kildare", "wicklow",
+    "roscommon", "westmeath", "longford", "monaghan", "leitrim", "carlow"
+}
+
+def _route_class(route: str) -> str:
+    route = str(route or "").strip().upper()
+    if re.match(r"^M\d", route):
+        return "M"
+    if re.match(r"^N\d", route):
+        return "N"
+    if re.match(r"^R\d", route):
+        return "R"
+    return "U"
+
+def _strong_address_tokens(address: str) -> set[str]:
+    toks = set(_aadt_tokens(address))
+    return {t for t in toks if t not in AADT_MAJOR_REGION_TERMS and len(t) >= 5}
+
+def _site_context_flags(address: str) -> dict:
+    lower = str(address or "").lower()
+    motorway = bool(re.search(r"\b(motorway|services?|service area|plaza|junction|\bj\s*\d+|m\s*\d+)\b", lower))
+    retail_destination = any(k in lower for k in [
+        "tesco", "aldi", "lidl", "supervalu", "dunnes", "retail", "shopping",
+        "hotel", "park", "business", "golf", "afc", "football", "community"
+    ])
+    forecourt = any(k in lower for k in [
+        "service station", "forecourt", "filling station", "petrol", "circle k",
+        "corrib oil", "texaco", "applegreen", "centra", "spar", "maxol", "topaz"
+    ])
+    return {"motorway": motorway, "retail_destination": retail_destination, "forecourt": forecourt}
+
+def _coordinate_text_score(rec: dict, address: str) -> tuple[float, list[str], bool]:
+    """Strict text aid for coordinate ranking.
+
+    County/city-only tokens such as Cork/Dublin must not pull a distant counter
+    above closer counters. Only explicit route codes, strong phrases and
+    distinctive non-region tokens are allowed to improve the coordinate score.
+    """
+    expanded = _aadt_expand_address_for_matching(address)
+    tokens = _aadt_tokens(expanded)
+    phrases = _aadt_phrases(tokens)
+    routes = _aadt_route_codes(expanded)
+    text_tokens = rec.get("_tokens") or set()
+    compact = rec.get("_compact", "")
+    rec_route = (rec.get("route") or "").upper().replace(" ", "")
+    score = 0.0
+    matched = []
+    strong = False
+    for route in routes:
+        if route and (route == rec_route or route in compact):
+            score += 18.0
+            matched.append(route)
+            strong = True
+    for phrase in phrases:
+        # Do not let phrases made only of region words count as strong evidence.
+        phrase_tokens = re.findall(r"[a-z0-9]+", phrase.lower())
+        if phrase in compact and not all(t in AADT_MAJOR_REGION_TERMS for t in phrase_tokens):
+            score += 8.0
+            matched.append(phrase)
+            strong = True
+    strong_hits = 0
+    for tok in tokens:
+        if tok in AADT_MAJOR_REGION_TERMS:
+            continue
+        if tok in text_tokens:
+            score += 3.5
+            matched.append(tok)
+            strong_hits += 1
+        elif len(tok) >= 8 and tok in compact:
+            score += 2.0
+            matched.append(tok)
+            strong_hits += 1
+    if strong_hits >= 2:
+        score += 3.0
+        strong = True
+    elif strong_hits == 1:
+        strong = True
+    return score, matched, strong
+
+def _road_class_penalty(route: str, address: str, distance_km: float) -> float:
+    cls = _route_class(route)
+    flags = _site_context_flags(address)
+    penalty = 0.0
+    # Motorway through-traffic is often wrong for a supermarket/hotel/local site
+    # unless the address clearly indicates a motorway/junction/plaza/service area.
+    if cls == "M" and not flags["motorway"]:
+        penalty -= 28.0
+    elif cls == "M" and flags["motorway"]:
+        penalty += 10.0
+    # N-roads are usually the best public proxy for Irish corridor AADT, but avoid
+    # rewarding a far N-road if a closer relevant candidate exists.
+    if cls == "N":
+        penalty += 3.0
+    if cls == "R":
+        penalty += 1.0
+    if distance_km > 15:
+        penalty -= min(30.0, (distance_km - 15) * 1.8)
+    return penalty
+
+def _coordinate_selection_score(rec: dict, address: str, distance_km: float) -> tuple[float, float, float, list[str], bool]:
+    text_score, matched_terms, strong_text = _coordinate_text_score(rec, address)
+    route_score = route_hint_score(address, {"route": rec.get("route"), "name": rec.get("site_name")})
+    # Distance is the primary signal. Broad text/county matching no longer helps;
+    # only strict route/phrase evidence can lift a candidate.
+    distance_score = 140.0 / (1.0 + max(0.05, float(distance_km)))
+    score = distance_score + (route_score * 6.0) + (text_score * 2.5) + _road_class_penalty(rec.get("route"), address, distance_km)
+    # Prefer records with official / curated coordinates over generic offline
+    # description geometry, but still allow explicit built-in proxies where official
+    # coords were absent.
+    locsrc = str(rec.get("location_source") or "").lower()
+    if "official" in locsrc or "tii traffic counter location" in locsrc:
+        score += 4.0
+    elif "built-in traffic counter coordinate proxy" in locsrc:
+        score += 1.0
+    elif "offline description-geometry" in locsrc:
+        score -= 2.0
+    return score, text_score, route_score, matched_terms, strong_text
+
+def _weighted_aadt_for_group(group: list[dict], aadt_key="aadt", distance_key="distance_km") -> int:
+    weighted = []
+    for c in group:
+        v = c.get(aadt_key) or c.get("latest_aadt") or c.get("precomputed_aadt")
+        if not _valid_aadt_number(v):
+            continue
+        try:
+            d = max(0.35, float(c.get(distance_key, 0) or 0))
+        except Exception:
+            d = 1.0
+        # Inverse-distance weighting, capped so one almost-zero duplicate does not
+        # dominate all same-corridor counters.
+        w = 1.0 / (d ** 1.35)
+        weighted.append((float(v), w))
+    if not weighted:
+        return 0
+    return int(round(sum(v*w for v, w in weighted) / sum(w for _, w in weighted)))
+
+def _selected_coordinate_corridor_group(sorted_candidates: list[dict], *, score_key="selection_score", distance_key="distance_km", aadt_key="aadt") -> list[dict]:
+    usable = [c for c in sorted_candidates if _valid_aadt_number(c.get(aadt_key) or c.get("latest_aadt") or c.get("precomputed_aadt"))]
+    if not usable:
+        return []
+    selected = usable[0]
+    selected_route = _route_norm_for_group(selected.get("route"))
+    selected_score = float(selected.get(score_key, 0) or 0)
+    selected_dist = float(selected.get(distance_key, 0) or 0)
+    selected_aadt = selected.get(aadt_key) or selected.get("latest_aadt") or selected.get("precomputed_aadt")
+    group = [selected]
+    for c in usable[1:12]:
+        route = _route_norm_for_group(c.get("route"))
+        if not selected_route or route != selected_route:
+            continue
+        score = float(c.get(score_key, 0) or 0)
+        dist = float(c.get(distance_key, 0) or 0)
+        aadt = c.get(aadt_key) or c.get("latest_aadt") or c.get("precomputed_aadt")
+        if score < selected_score - 18:
+            continue
+        # Same route and geographically close enough to be part of the same access
+        # corridor. Farther same-route segments are kept as alternatives only.
+        if abs(dist - selected_dist) > 8.0:
+            continue
+        if not _aadt_ratio_ok(selected_aadt, aadt, max_ratio=3.0):
+            continue
+        group.append(c)
+    return group
+
+
 def _selected_same_corridor_group(sorted_candidates: list[dict], *, score_key="selection_score", distance_key="distance_km", aadt_key="aadt") -> list[dict]:
     """Return a selected group only when counters are same-corridor.
 
@@ -1609,13 +1792,29 @@ def tii_aadt_from_local_excel_name_lookup(address: str, limit: int = 12) -> dict
     }
 
 
-def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit: int = 8, max_km: float = 80.0) -> dict:
+def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit: int = 12, max_km: float = 80.0) -> dict:
+    """Coordinate-first, road-aware TII AADT selection.
+
+    V17.27 rules:
+      * The exact map coordinate is the source of truth.
+      * The nearby-site screening radius is not used for AADT.
+      * Broad county/city text matches cannot outrank closer counters.
+      * Multiple counters are blended only when they are same-route/same-corridor.
+      * Weak/distant matches are flagged as review required rather than presented as
+        high-confidence AADT.
+    """
     records = load_local_tii_aadt_records()
     if not records:
         raise RuntimeError(TII_LOCAL_AADT_CACHE.get("error") or "Local TII AADT Excel lookup database did not load")
     if not any(_record_has_coord(r) for r in records):
         enrich_error = TII_LOCATION_ENRICHMENT_CACHE.get("error")
         raise RuntimeError(f"Uploaded TII AADT Excel has not been coordinate-enriched yet{': ' + enrich_error if enrich_error else ''}")
+    try:
+        site_lat = float(site["lat"])
+        site_lon = float(site["lon"])
+    except Exception:
+        raise RuntimeError("Site coordinate missing; cannot run coordinate-first AADT lookup")
+
     ranked = []
     for rec in records:
         if not _record_has_coord(rec):
@@ -1623,53 +1822,50 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
         aadt = rec.get("latest_aadt")
         if not isinstance(aadt, (int, float)) or aadt <= 0:
             continue
-        d = haversine_km(float(site["lat"]), float(site["lon"]), float(rec["lat"]), float(rec["lon"]))
+        d = haversine_km(site_lat, site_lon, float(rec["lat"]), float(rec["lon"]))
         if d > max_km:
             continue
-        text_score, matched_terms, has_strong = _score_local_aadt_record(rec, address)
-        route_score = route_hint_score(address, {"route": rec.get("route"), "name": rec.get("site_name")})
-        # Prefer a close counter, but allow route/address text to help when two corridors are nearby.
-        # Road-class preference for retail/destination site types.
-        # Motorways carry through-traffic and systematically overstate demand
-        # for sites that are accessed from a local N-class or R-class road.
-        # Apply an -8 penalty to M-class counters for retail/hotel contexts.
-        _rec_route_upper = (rec.get("route") or "").strip().upper()
-        _is_motorway = bool(re.match(r'^M\d', _rec_route_upper))
-        _addr_lower = (address or "").lower()
-        _is_retail_context = not any(kw in _addr_lower for kw in [
-            "service station", "forecourt", "motorway", "applegreen",
-            "circle k", "topaz", "texaco", "centra", "corrib oil",
-        ])
-        _road_class_penalty = -8 if (_is_motorway and _is_retail_context) else 0
-        selection_score = (route_score * 1.5) + (text_score * 2.0) - min(60, d * 2.0) + _road_class_penalty
-        ranked.append((selection_score, d, text_score, route_score, rec, matched_terms))
+        score, text_score, route_score, matched_terms, strong_text = _coordinate_selection_score(rec, address, d)
+        ranked.append((score, d, text_score, route_score, rec, matched_terms, strong_text))
     if not ranked:
         raise RuntimeError("No coordinate-enriched TII AADT Excel counters were close enough to the searched site")
+
+    # Primary ordering is coordinate score, which is dominated by distance and road
+    # relevance. This removes the previous county-text behaviour (e.g. 'matched Cork').
     ranked.sort(key=lambda x: (-x[0], x[1]))
+
     candidate_objs = []
-    for score, d, text_score, route_score, r, terms in ranked[:limit]:
+    for score, d, text_score, route_score, r, terms, strong_text in ranked[:limit]:
         candidate_objs.append({
-            "score_tuple": (score, d, text_score, route_score, r, terms),
+            "score_tuple": (score, d, text_score, route_score, r, terms, strong_text),
             "selection_score": score,
             "distance_km": d,
             "route": r.get("route"),
             "aadt": r.get("latest_aadt"),
         })
-    selected_group = _selected_same_corridor_group(candidate_objs, score_key="selection_score", distance_key="distance_km", aadt_key="aadt")
+    selected_group = _selected_coordinate_corridor_group(candidate_objs, score_key="selection_score", distance_key="distance_km", aadt_key="aadt")
     if not selected_group:
         selected_group = [candidate_objs[0]]
+
     selected = selected_group[0]["score_tuple"]
     rec = selected[4]
     selected_ids = {g["score_tuple"][4].get("site_id") for g in selected_group}
-    selected_aadt = _average_aadt_for_group(selected_group, aadt_key="aadt")
+    selected_aadt = _weighted_aadt_for_group(selected_group, aadt_key="aadt", distance_key="distance_km")
+    if selected_aadt <= 0:
+        selected_aadt = _average_aadt_for_group(selected_group, aadt_key="aadt")
+
     candidates = []
-    for i, (score, d, text_score, route_score, r, terms) in enumerate(ranked[:limit]):
+    for i, (score, d, text_score, route_score, r, terms, strong_text) in enumerate(ranked[:limit]):
+        candidate_conf = "High" if d <= 3 else "Medium" if d <= 8 else "Review" if d <= 20 else "Low"
+        if _route_class(r.get("route")) == "M" and not _site_context_flags(address)["motorway"]:
+            candidate_conf = "Review"
         candidates.append({
             "selected": r.get("site_id") in selected_ids,
             "counter_id": r.get("site_id"),
             "counter_name": r.get("site_name"),
             "description": r.get("description"),
             "route": r.get("route") or "route not provided",
+            "route_class": _route_class(r.get("route")),
             "aadt": r.get("latest_aadt"),
             "aadt_year": r.get("latest_year"),
             "valid_days": f"TII Excel {r.get('latest_year')}",
@@ -1678,34 +1874,58 @@ def tii_aadt_from_local_excel_nearest_coordinate(site: dict, address: str, limit
             "route_score": round(route_score, 2),
             "selection_score": round(score, 2),
             "matched_terms": terms,
+            "confidence": candidate_conf,
             "lat": r.get("lat"),
             "lon": r.get("lon"),
             "location_source": r.get("location_source"),
-            "match_basis": "ranked coordinate-enriched TII counter with same-corridor averaging guard",
+            "match_basis": "coordinate-first road-aware TII counter ranking",
+            "why": "selected" if r.get("site_id") in selected_ids else "candidate ranked by distance, road class and route relevance",
         })
-    # V15.2 standard confidence labels
-    if selected[1] <= 5:
-        confidence = "Direct counter / coordinate-ranked within 5km"
-    elif selected[1] <= 25:
-        confidence = "Corridor proxy / coordinate-ranked 5-25km"
+
+    selected_distance = float(selected[1])
+    selected_route_class = _route_class(rec.get("route"))
+    motorway_mismatch = selected_route_class == "M" and not _site_context_flags(address)["motorway"]
+    selected_location_source = str(rec.get("location_source") or "")
+    if selected_distance <= 3 and not motorway_mismatch:
+        confidence = "High / coordinate-first same-area TII counter"
+    elif selected_distance <= 8 and not motorway_mismatch:
+        confidence = "Medium-high / coordinate-first nearby TII counter"
+    elif selected_distance <= 15 and not motorway_mismatch:
+        confidence = "Medium / coordinate-first corridor proxy"
     else:
-        confidence = "Review required / nearest counter is distant (>25km)"
-    group_note = "single best counter" if len(selected_group) == 1 else f"same-corridor average of {len(selected_group)} counters"
+        confidence = "Review required / coordinate-first fallback — verify counter on TII map"
+    if "built-in traffic counter coordinate proxy" in selected_location_source.lower() and "High" in confidence:
+        confidence = confidence.replace("High", "Medium-high")
+    group_note = "single best counter" if len(selected_group) == 1 else f"distance-weighted same-corridor blend of {len(selected_group)} counters"
+    counter_ids = ", ".join(str(g["score_tuple"][4].get("site_id")) for g in selected_group)
+    counter_names = "; ".join(str(g["score_tuple"][4].get("site_name")) for g in selected_group)
+    routes = ", ".join(sorted({str(g["score_tuple"][4].get("route") or "route not provided") for g in selected_group}))
+    method_note = (
+        "AADT is selected from the exact screened map coordinate, not from the nearby-site radius. "
+        "The engine ranks official/coordinate-enriched TII counters by distance, explicit route evidence, road class and site-type motorway relevance. "
+        "When several counters are genuinely on the same road corridor, it uses a distance-weighted same-corridor blend; unrelated roads remain alternatives only. "
+        "Broad county/place text such as Cork or Dublin cannot select a distant counter by itself."
+    )
+    if "Review required" in confidence:
+        method_note += " The selected counter is a proxy and should be manually reviewed before investor submission."
+
     return {
         "aadt": int(selected_aadt),
-        "source": f"Uploaded TII AADT Summary Excel · ranked coordinate-enriched lookup · {group_note} · {rec.get('site_name')} · {rec.get('latest_year')}",
+        "source": f"Uploaded TII AADT Summary Excel · coordinate-first road-aware lookup · {group_note} · {counter_names or rec.get('site_name')} · {rec.get('latest_year')}",
         "confidence": confidence,
-        "provider": "Uploaded TII AADT Excel joined to TII counter locations",
-        "counter_id": rec.get("site_id"),
-        "counter_name": rec.get("site_name"),
-        "route": rec.get("route") or "route not provided",
-        "counter_distance_km": round(selected[1], 2),
+        "provider": "Uploaded TII AADT Excel joined to TII counter coordinates",
+        "counter_id": counter_ids or rec.get("site_id"),
+        "counter_name": counter_names or rec.get("site_name"),
+        "route": routes or rec.get("route") or "route not provided",
+        "counter_distance_km": round(selected_distance, 2),
         "aadt_year": rec.get("latest_year"),
         "sample_days": "published annual AADT value from uploaded Excel",
-        "sample_mode": "TII Excel ranked coordinate-enriched lookup",
+        "sample_mode": "coordinate-first road-aware TII Excel lookup",
+        "aadt_selection_method": "same_corridor_weighted" if len(selected_group) > 1 else "single_counter_coordinate_first",
+        "candidate_count": len(candidates),
         "candidates": candidates,
-        "reference": "AADT Summary Report Public sites 04-2025 2019 to 2026 (1).xlsx + TII traffic counter location file",
-        "method_note": "The uploaded TII AADT Excel provides the annual AADT values. The app attaches official TII counter coordinates where available, ranks nearby counters by distance, route/address relevance and data quality, then averages only same-corridor counters. Treat as a corridor AADT proxy where the charging site is not directly on the countered road.",
+        "reference": "AADT Summary Report Public sites 04-2025 2019 to 2026 (1).xlsx + TII counter coordinates",
+        "method_note": method_note,
         "location_enrichment": dict(TII_LOCATION_ENRICHMENT_CACHE),
     }
 
@@ -2754,14 +2974,17 @@ def estimate_traffic(site, address="", matched_dataset=None):
         return _finalise_traffic_result(tii_aadt_from_curated_portfolio_mapping(address, site))
     except Exception as exc:
         tii_errors.append(f"Curated portfolio AADT mapping: {exc}")
+    # V17.27: coordinate-first AADT. Once the searched address has a map point,
+    # the selected screening radius must not influence AADT. Rank all TII counters
+    # from the exact site coordinate before any broad place/county text fallback.
+    try:
+        return _finalise_traffic_result(tii_aadt_from_local_excel_nearest_coordinate(site, address))
+    except Exception as exc:
+        tii_errors.append(f"Uploaded TII AADT Excel coordinate-first lookup: {exc}")
     try:
         return _finalise_traffic_result(tii_aadt_priority_counter_lookup(address, site))
     except Exception as exc:
         tii_errors.append(f"Uploaded TII AADT Excel priority place/city lookup: {exc}")
-    try:
-        return _finalise_traffic_result(tii_aadt_from_local_excel_nearest_coordinate(site, address))
-    except Exception as exc:
-        tii_errors.append(f"Uploaded TII AADT Excel nearest-coordinate lookup: {exc}")
     try:
         return _finalise_traffic_result(tii_aadt_from_local_excel_name_lookup(address))
     except Exception as exc:

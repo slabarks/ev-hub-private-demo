@@ -769,7 +769,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.25 PDF dashboard export";
+const APP_BUILD_VERSION = "V17.27 coordinate-first AADT engine";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -932,12 +932,56 @@ function aadtSourceText(ctx) {
 function tiiCandidateCards(ctx) {
   const candidates = ctx?.traffic?.candidates || [];
   if (!candidates.length) return "";
-  return `<div class="tii-candidate-list"><strong>Automatic TII AADT matches</strong><div class="tii-candidates">${candidates.map(c => {
-    const distance = Number.isFinite(Number(c.distance_km)) ? `${number(Number(c.distance_km), 2)} km` : h(c.match_basis || "text match");
-    const score = Number.isFinite(Number(c.match_score)) ? ` · score ${number(Number(c.match_score), 1)}` : "";
+  return `<div class="tii-candidate-list"><strong>Recommended TII AADT counters</strong><div class="tii-candidates">${candidates.map((c, idx) => {
+    const distance = Number.isFinite(Number(c.distance_km)) ? `${number(Number(c.distance_km), 2)} km from map pin` : h(c.match_basis || "coordinate/text match");
+    const selectionScore = Number.isFinite(Number(c.selection_score)) ? ` · selection ${number(Number(c.selection_score), 1)}` : "";
+    const routeScore = Number.isFinite(Number(c.route_score)) ? ` · route ${number(Number(c.route_score), 1)}` : "";
     const terms = Array.isArray(c.matched_terms) && c.matched_terms.length ? ` · matched ${h(c.matched_terms.slice(0, 4).join(", "))}` : "";
-    return `<div class="tii-candidate ${c.selected ? "selected" : ""}"><span>${c.selected ? "Selected" : "Candidate"}</span><strong>${h(c.counter_name || c.counter_id || "TII counter")}</strong><small>${h(c.route || "route not provided")} · ${distance} · ${c.aadt ? number(Number(c.aadt),0) + " AADT" : "no usable data"} · ${h(c.valid_days || "published AADT")}${score}${terms}</small></div>`;
-  }).join("")}</div></div>`;
+    const aadt = Number(c.aadt);
+    const usable = Number.isFinite(aadt) && aadt > 0;
+    const label = c.selected ? "Selected" : "Alternative";
+    const confidence = c.confidence ? ` · ${h(c.confidence)} confidence` : "";
+    const basis = c.match_basis ? ` · ${h(c.match_basis)}` : "";
+    return `<div class="tii-candidate ${c.selected ? "selected" : ""}" data-select-tii-candidate="${idx}" role="button" tabindex="0" aria-label="Use ${h(c.counter_name || c.counter_id || "TII counter")} as AADT source"><div class="tii-candidate-main"><span>${label}</span><strong>${h(c.counter_name || c.counter_id || "TII counter")}</strong><small>${h(c.route || "route not provided")} · ${distance} · ${usable ? number(aadt,0) + " AADT" : "no usable data"} · ${h(c.valid_days || "published AADT")}${confidence}${selectionScore}${routeScore}${terms}</small><small>${basis}</small></div><button type="button" class="tii-select-btn ${c.selected ? "selected" : ""}" data-select-tii-candidate="${idx}" ${usable ? "" : "disabled"}>${c.selected ? "Using this counter" : "Use this counter"}</button></div>`;
+  }).join("")}</div><p class="muted small">AADT candidates are ranked from the exact map coordinate using road-aware scoring. The nearby-site radius is only used for local charger/site screening and does not control AADT.</p></div>`;
+}
+
+function applyTiiCandidateSelection(candidateIndex) {
+  const traffic = state.siteContext?.traffic || {};
+  const candidates = Array.isArray(traffic.candidates) ? traffic.candidates : [];
+  const idx = Number(candidateIndex);
+  const candidate = candidates[idx];
+  if (!candidate) return;
+  const aadt = Number(candidate.aadt);
+  if (!Number.isFinite(aadt) || aadt <= 0) {
+    alert("This TII candidate has no usable AADT value.");
+    return;
+  }
+  const selectedCandidates = candidates.map((c, i) => ({ ...c, selected: i === idx, manually_selected: i === idx }));
+  const sourceLabel = candidate.source || candidate.valid_days || traffic.source || "TII AADT counter";
+  const counterLabel = candidate.counter_name || candidate.counter_id || "TII counter";
+  const selectedTraffic = {
+    ...traffic,
+    ...candidate,
+    aadt,
+    source: `Manual selection from recommended TII AADT counters · ${sourceLabel}`,
+    provider: "TII AADT recommended counter list",
+    counter_name: counterLabel,
+    counter_id: candidate.counter_id || candidate.counter_name || traffic.counter_id || counterLabel,
+    counter_distance_km: Number.isFinite(Number(candidate.distance_km)) ? Number(candidate.distance_km) : traffic.counter_distance_km,
+    confidence: candidate.confidence || "manual selected / review",
+    method_note: "User selected this AADT counter from the recommended list. The nearby-site radius is only used for local charger/site screening and does not control AADT selection.",
+    candidates: selectedCandidates
+  };
+  state.siteContext = {
+    ...(state.siteContext || {}),
+    traffic: selectedTraffic
+  };
+  state.inputs.rawCorridorTrafficAadt = aadt;
+  state.filters.manualAadtOverride = false;
+  const sourceYear = latestYearFromText(candidate.aadt_year || candidate.valid_days || candidate.source || selectedTraffic.source || "");
+  if (sourceYear) state.inputs.trafficSourceYear = sourceYear;
+  preserveScrollRender();
 }
 
 
@@ -980,7 +1024,7 @@ function renderSiteDashboard() {
       <div class="tii-workflow-card">
         <div>
           <strong>AADT source engine</strong>
-          <p>Pressing Search automatically runs the TII AADT lookup. AADT means Annual Average Daily Traffic: the estimated average vehicles passing a location per day over a year. The app matches the searched address against the uploaded TII AADT Summary database and falls back to curated/manual sources only if no reliable match is found.</p>
+          <p>Pressing Search automatically runs the coordinate-first TII AADT lookup. AADT means Annual Average Daily Traffic: the estimated average vehicles passing a location per day over a year. The app uses the exact map pin to rank nearby TII counters by distance, road/route relevance and confidence. The radius selector is only for nearby chargers/sites, not AADT calculation.</p>
           ${tiiCandidateCards(ctx)}
         </div>
         <div class="tii-actions">
@@ -3963,7 +4007,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Dashboard values follow the active filters. Revenue is projected unless a trusted trailing-12-month revenue field exists. Missing CAPEX blocks only payback, not demand status. Landlord costs are not assumed without actual landlord terms.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Performance position</h3><p class="muted small">Demand and data-quality status for the currently selected sites.</p></div></div>${portfolioFinancialPerformanceCards(summary)}<p class="muted small">OPEX uses the model's current charger, DUoS, support and transaction-cost assumptions applied to actual annualised kWh/sessions. Landlord rent/share is excluded unless actual site-level landlord terms are provided. Negative-cashflow sites show “No payback”.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.25 PDF dashboard export</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row"><div><h3>Site financial performance table <span class="portfolio-finance-footnote">V17.27 coordinate-first AADT engine</span></h3><p class="muted small">Use the green header buttons to sort any column. Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Active filters: ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Revenue shows actual T12M only when a trusted trailing-12-month revenue field exists; rolling/partial actuals are labelled projected annual run-rate. Days now use commercial operational basis: first session, first kWh, then energy-delivered days inferred from cumulative kWh and actual run-rate, then reported/stored fallbacks; generic telemetry first-active dates are not used. Payback is a current run-rate proxy. Click a site or commercial-term chip to edit landlord terms.</p></div></div>${filteredRows.length ? table(headers, sorted.map(portfolioFinancialTableRow), "portfolio-table portfolio-financial-table") : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioCommercialTermsModal(rows)}
   `;
 }
@@ -4690,6 +4734,22 @@ function wirePage(r) {
   if (manual) manual.addEventListener("change", e => { state.inputs.rawCorridorTrafficAadt = Number(e.target.value); state.filters.manualAadtOverride = true; render(); });
   const manualFlag = el("manualAadtOverride");
   if (manualFlag) manualFlag.addEventListener("change", e => { state.filters.manualAadtOverride = e.target.value === "true"; render(); });
+
+  document.querySelectorAll("[data-select-tii-candidate]").forEach(node => {
+    node.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const idx = e.currentTarget.dataset.selectTiiCandidate;
+      applyTiiCandidateSelection(idx);
+    });
+    node.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        const idx = e.currentTarget.dataset.selectTiiCandidate;
+        applyTiiCandidateSelection(idx);
+      }
+    });
+  });
 
   const useManualMapPoint = async (lat, lon) => {
     const label = coordinateAddressLabel(lat, lon);

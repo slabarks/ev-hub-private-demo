@@ -1,11 +1,18 @@
-# Render deployment — V17.44
+# Render deployment — V17.45
 
-1. Replace the deployed application with the contents of `EVHub_V17_44_lean.zip`.
-2. Keep `server.py`, `index.html`, `js/`, `assets/`, `data/`, `render.yaml` and `DEPLOYMENT_MANIFEST.json` at the service root.
+1. Replace the complete deployed application with the contents of `EVHub_V17_45_lean.zip`; do not merge it into an older build.
+2. Keep `server.py`, `index.html`, `js/`, `assets/`, `data/`, `render.yaml` and `DEPLOYMENT_MANIFEST.json` directly at the service root.
 3. Build command: `python -m py_compile server.py`
 4. Start command: `python server.py`
 5. Health path: `/api/health`
 
-V17.44 does not block uploads based on `/api/version`. It sends the files first and validates the parsed response, matching the reliable behaviour used before the strict deployment gate was introduced.
+Expected build metadata:
 
-After deployment, refresh the page once. The unique V17.44 asset URL prevents V17.42/V17.43 JavaScript from being reused by browser or CDN caches.
+- `buildId`: `EVHUB-V17.45-20260711-R1`
+- `uploadSchemaVersion`: `v17.45-live-history-v6`
+- `parserBuildId`: `EVHUB-LIVE-PARSER-17.45.1`
+- `packageLayoutVersion`: `flat-root-v1`
+
+The browser sends calibration files before applying compatibility diagnostics. A valid response is accepted only after the returned site actuals and monthly histories pass content validation. A daily charger upload returning zero monthly histories is rejected while the last valid live dataset remains active.
+
+V17.45 uses a unique asset cache identifier and a dedicated preferred upload route, `/api/import-live-calibration-v1745`.

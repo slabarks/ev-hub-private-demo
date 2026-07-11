@@ -1,33 +1,54 @@
-# EV Charging Hub Investment Tool — V17.44 Lean Production Build
+# EV Charging Hub Investment Tool — V17.45 Lean Production Build
 
-V17.44 restores the reliable calibration-upload workflow while retaining the approved Portfolio Financial Performance changes from V17.43.
+V17.45 is a focused Portfolio Financials correction release. It restores strict live-history integrity after upload, reconciles the portfolio performance summary with the site-level badges, and replaces the conflicting financial-table CSS with one canonical layout.
 
 ## Build identity
 
-- Application: `V17.44`
-- Build: `EVHUB-V17.44-20260710-R1`
-- Upload schema: `v17.44-live-history-v5`
-- Parser: `EVHUB-LIVE-PARSER-17.44.1`
-- Package layout: flat root
+- Application: `V17.45`
+- Build: `EVHUB-V17.45-20260711-R1`
+- Upload schema: `v17.45-live-history-v6`
+- Parser: `EVHUB-LIVE-PARSER-17.45.1`
+- Package layout: `flat-root-v1`
 
-## Calibration upload behaviour
+## Live calibration upload
 
-The browser now uploads the selected Excel files or ZIP pack directly to `/api/import-live-calibration` and validates the returned site data. A missing or older backend build ID is diagnostic only and cannot block a valid upload.
+The browser uploads the selected Excel/CSV files or ZIP pack first and validates the parsed response content afterwards.
 
-Accepted inputs:
+Accepted inputs include:
 
 - `Daily_Charger_kWh.xlsx`
-- Multiple dashboard Excel/CSV exports selected together
-- Complete dashboard ZIP pack, including `Funded_Overview_Data_10_07_26.zip`
+- Multiple dashboard exports selected together
+- A complete dashboard ZIP pack such as `Funded_Overview_Data_10_07_26.zip`
 
-The app still rejects responses that contain no usable site actuals and prevents cumulative/running-total exports from becoming the primary daily source.
+When a daily charger file is present, zero returned monthly histories is treated as an incomplete backend response. The new upload is rejected and the last valid live dataset remains active. A missing backend build ID by itself does not block otherwise valid parsed data.
 
-## Deployment reliability changes
+The preferred endpoint is `/api/import-live-calibration-v1745`; the browser may fall back to the legacy route only when the new route is unavailable. Returned data must still pass the V17.45 content checks.
 
-- Unique V17.44 cache-busters are applied to `app.js` and `styles.css`.
-- Package-integrity diagnostics no longer terminate the Python server.
-- `/api/health` remains available but returns HTTP 200 with warnings rather than causing the hosting platform to retain an older deployment.
-- Backend version metadata remains visible for audit but is no longer a prerequisite for uploads.
+## Portfolio performance logic
+
+Performance status is always based on the same forward comparison shown in each site row:
+
+`next-12-month actual-led forecast kWh ÷ model forward-12-month benchmark kWh`
+
+- More than 15% above model: `Above benchmark`
+- Within ±15%: `In benchmark`
+- More than 15% below model: `Underperforming`
+- Comparison unavailable: `Review`
+
+History quality is separate. Early or limited data can add a concise note, but it never replaces the numerical variance or the Above / In / Under benchmark classification.
+
+## Financial table rendering
+
+The Portfolio Financials table uses one canonical V17.45 layout:
+
+- 10 fixed columns and explicit widths
+- 1,650 px table canvas with horizontal scrolling
+- sticky header and sticky Site column
+- synchronized top and standard bottom scrolling
+- wider Performance and Run-rate payback columns
+- no faded early-site rows
+- no duplicate CAPEX/payback messages
+- concise EBITDA reconciliation in-cell, with full values retained in the tooltip
 
 ## Run locally
 
@@ -35,14 +56,16 @@ The app still rejects responses that contain no usable site actuals and prevents
 python server.py
 ```
 
-Then open `http://localhost:10314/`.
+Then open the local URL printed by the server.
 
 ## Production deployment
 
-Deploy the ZIP contents at the service root and use:
+Deploy the ZIP contents at the service root. `server.py`, `index.html`, `js/`, `assets/`, `data/` and `DEPLOYMENT_MANIFEST.json` must remain at that root.
+
+Start command:
 
 ```text
 python server.py
 ```
 
-The package contains `render.yaml` and `Procfile` for hosted deployment.
+Health path: `/api/health`

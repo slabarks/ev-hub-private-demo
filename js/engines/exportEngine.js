@@ -782,8 +782,8 @@ function pfPdfPerformance(summary = {}) {
     ${pfPdfMetric("In benchmark", number(summary.inBenchmark || 0, 0), "forward variance within ±15%")}
     ${pfPdfMetric("Underperforming", number(summary.underperforming || 0, 0), "forward forecast below model")}
     ${pfPdfMetric("Above benchmark", number(summary.outperforming || 0, 0), "forward forecast above model")}
-    ${pfPdfMetric("Early / limited data", number(summary.notEnoughData || 0, 0), "new, limited or unavailable actual history")}
-  </div><div class="pf-pdf-warning"><strong>Investment data warnings:</strong> ${number(summary.capexMissing || 0,0)} sites missing actual CAPEX · ${number(summary.noPayback || 0,0)} sites with no positive run-rate payback.</div></section>`;
+    ${pfPdfMetric("Review", number(summary.performanceReview || 0, 0), "forecast/model comparison unavailable")}
+  </div><div class="pf-pdf-warning"><strong>History quality:</strong> ${number(summary.notEnoughData || 0,0)} sites are early or have limited monthly history. This flag is separate from performance status.</div><div class="pf-pdf-warning"><strong>Investment data warnings:</strong> ${number(summary.capexMissing || 0,0)} sites missing actual CAPEX · ${number(summary.noPayback || 0,0)} sites with no positive run-rate payback.</div></section>`;
 }
 
 export async function exportPortfolioFinancialsPdf(payload) {

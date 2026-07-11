@@ -1,8 +1,8 @@
 {
-  "appVersion": "V17.44",
-  "buildId": "EVHUB-V17.44-20260710-R1",
-  "uploadSchemaVersion": "v17.44-live-history-v5",
-  "parserBuildId": "EVHUB-LIVE-PARSER-17.44.1",
+  "appVersion": "V17.45",
+  "buildId": "EVHUB-V17.45-20260711-R1",
+  "uploadSchemaVersion": "v17.45-live-history-v6",
+  "parserBuildId": "EVHUB-LIVE-PARSER-17.45.1",
   "packageLayoutVersion": "flat-root-v1",
   "entrypoint": "python server.py",
   "requiredRootFiles": [

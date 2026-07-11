@@ -14,6 +14,7 @@ import { exportDemandCsv, exportYearByYearCsv, exportScenarioCsv, exportAssumpti
 import { PORTFOLIO_CALIBRATION_SITES } from "./data/operatingHubCalibrationLibrary.js";
 import { actualCapexForSite, capexStatusForSite, capexNoteForSite } from "./data/capexCalibrationLibrary.js";
 import { zeviFundingForSite, zeviFundingSuggestionsForSite, zeviFundingShortLabel } from "./data/zeviFundingLibrary.js";
+import { parseLiveCalibrationFilesClient } from "./liveUploadClientParser.js";
 
 const VALID_TABS = ["site", "demand", "setup", "investment", "annuals", "scenario", "portfolio", "portfolioFinancials", "advanced", "report"];
 const TAB_ALIASES = { simulation: "setup", yearbyyear: "annuals", export: "report" };
@@ -299,11 +300,11 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const APP_RELEASE_VERSION = "V17.45";
-const APP_BUILD_ID = "EVHUB-V17.45-20260711-R1";
-const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.45.1";
-const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v17_45";
-const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v17.45-live-history-v6";
+const APP_RELEASE_VERSION = "V17.46";
+const APP_BUILD_ID = "EVHUB-V17.46-20260711-R1";
+const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.46.1";
+const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v17_46";
+const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v17.46-live-history-v7";
 const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
   "evHub.portfolio.liveActuals.v1",
   "evHub.portfolio.liveActuals.v35_39",
@@ -313,7 +314,8 @@ const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
   "evHub.portfolio.liveActuals.v17_41",
   "evHub.portfolio.liveActuals.v17_42",
   "evHub.portfolio.liveActuals.v17_43",
-  "evHub.portfolio.liveActuals.v17_44"
+  "evHub.portfolio.liveActuals.v17_44",
+  "evHub.portfolio.liveActuals.v17_45"
 ];
 function portfolioServerCompatibility(info) {
   // Build metadata is diagnostic only. Validity is decided from the parsed
@@ -880,7 +882,7 @@ function table(headers, rows, cls = "") {
 
 function portfolioFinancialTableMarkup(headers, rows) {
   const labels = headers.map(plainTableLabel);
-  const widths = [300, 95, 185, 145, 180, 145, 130, 165, 150, 155];
+  const widths = [20, 5.5, 12, 8.5, 10.5, 8.5, 7, 8.5, 8, 11.5];
   const normaliseRow = row => Array.isArray(row) ? { cells: row, className: "" } : { cells: row?.cells || [], className: row?.className || "" };
   const body = rows.length
     ? rows.map(rawRow => {
@@ -888,34 +890,7 @@ function portfolioFinancialTableMarkup(headers, rows) {
       return `<tr${row.className ? ` class="${h(row.className)}"` : ""}>${row.cells.map((cell, i) => `<td data-label="${h(labels[i] || "Value")}">${cell}</td>`).join("")}</tr>`;
     }).join("")
     : `<tr><td data-label="Status" colspan="${headers.length}">No rows to display.</td></tr>`;
-  return `<div class="portfolio-financial-scroll-shell"><div class="portfolio-financial-scroll-top" aria-label="Horizontal table scroll"><div></div></div><div class="table-wrap portfolio-financial-table-wrap"><table class="portfolio-table portfolio-financial-table"><colgroup>${widths.map(width => `<col style="width:${width}px">`).join("")}</colgroup><thead><tr>${headers.map(header => `<th>${header}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div></div>`;
-}
-function setupPortfolioFinancialTableScroll() {
-  const shell = document.querySelector(".portfolio-financial-scroll-shell");
-  const top = shell?.querySelector(".portfolio-financial-scroll-top");
-  const topInner = top?.querySelector("div");
-  const bottom = shell?.querySelector(".table-wrap");
-  const tableEl = bottom?.querySelector("table");
-  if (!top || !topInner || !bottom || !tableEl) return;
-  const syncWidth = () => {
-    topInner.style.width = `${Math.max(tableEl.scrollWidth, bottom.clientWidth)}px`;
-    top.hidden = tableEl.scrollWidth <= bottom.clientWidth + 2;
-  };
-  let syncing = false;
-  top.addEventListener("scroll", () => {
-    if (syncing) return;
-    syncing = true;
-    bottom.scrollLeft = top.scrollLeft;
-    syncing = false;
-  });
-  bottom.addEventListener("scroll", () => {
-    if (syncing) return;
-    syncing = true;
-    top.scrollLeft = bottom.scrollLeft;
-    syncing = false;
-  });
-  syncWidth();
-  requestAnimationFrame(syncWidth);
+  return `<div class="table-wrap portfolio-financial-table-wrap"><table class="portfolio-table portfolio-financial-table"><colgroup>${widths.map(width => `<col style="width:${width}%">`).join("")}</colgroup><thead><tr>${headers.map(header => `<th>${header}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function preserveScrollRender() {
@@ -962,7 +937,7 @@ function resetPage(tab) {
   enforceConfigCompatibility();
 }
 
-const APP_BUILD_VERSION = "V17.45 upload integrity + performance reconciliation + canonical table";
+const APP_BUILD_VERSION = "V17.46 browser-local live-history parsing + fit-to-width portfolio table";
 const TAB_LABELS = {
   site: "Site Screening",
   demand: "Demand Forecast",
@@ -1127,12 +1102,12 @@ function aadtEngineMismatchWarning(ctx) {
   const source = String(t.source || "").toLowerCase();
   const mode = String(t.sample_mode || t.aadt_engine_mode || "").toLowerCase();
   const engineVersion = String(t.aadt_engine_version || "");
-  const hasCurrentServer = engineVersion.includes("V17.45");
+  const hasCurrentServer = engineVersion.includes("V17.46");
   const isOldCoordinateEngine = source.includes("ranked coordinate-enriched lookup") || mode.includes("ranked coordinate-enriched");
   const hasCandidates = Array.isArray(t.candidates) && t.candidates.length > 0;
   if (t.client_side_aadt_recalculated) return "";
   if (isOldCoordinateEngine && !hasCurrentServer) {
-    return "AADT API version mismatch: the browser is V17.45 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
+    return "AADT API version mismatch: the browser is V17.46 but the server returned an older coordinate-enriched AADT method. The browser will recalculate where possible, but redeploy/restart the full package including server.py before investor use.";
   }
   const plotted = (t.candidates || []).filter(c => c.official_location || c.mappable_location).length;
   if (hasCandidates && plotted === 0 && source.includes("tii")) {
@@ -1144,7 +1119,7 @@ function aadtEngineMismatchWarning(ctx) {
   return "";
 }
 
-const CLIENT_AADT_ENGINE_VERSION = "V17.45 browser provenance-controlled AADT engine";
+const CLIENT_AADT_ENGINE_VERSION = "V17.46 browser provenance-controlled AADT engine";
 let clientAadtRecordsPromise = null;
 // Coordinate provenance is supplied by the server/bundled location dataset; no hidden browser-only coordinate overrides.
 function clientAadtCounterId(rec) {
@@ -5291,6 +5266,7 @@ function render() {
       resetMapState("leaving site tab");
     }
     r = results();
+    el("app").classList.toggle("portfolio-financials-active", activeTab === "portfolioFinancials");
     el("app").innerHTML = `${firstUseBanner()}${pages[activeTab]()}${guidePanelHtml()}`;
     wirePage(r);
     if (activeTab === "site") setTimeout(() => {
@@ -5592,21 +5568,47 @@ function wirePage(r) {
     const form = new FormData();
     files.forEach(file => form.append("files", file, file.name));
     portfolioUploadInput.disabled = true;
-    if (portfolioUploadStatus) portfolioUploadStatus.textContent = "Uploading and validating calibration files…";
+    if (portfolioUploadStatus) portfolioUploadStatus.textContent = "Reading calibration files and validating monthly history…";
+    const localParsePromise = parseLiveCalibrationFilesClient(files, {
+      appVersion: APP_RELEASE_VERSION,
+      buildId: APP_BUILD_ID,
+      parserBuildId: `${LIVE_UPLOAD_PARSER_BUILD_ID}-browser`,
+      schemaVersion: PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION
+    }).catch(error => ({ ok: false, error: error?.message || String(error), source: "browser_local_parser" }));
     try {
-      // Restore the reliable workflow used in earlier releases: upload first,
-      // then validate the returned site data. Backend build metadata is useful
-      // for diagnostics but must never prevent a valid Excel/ZIP upload.
-      let res = await fetch("/api/import-live-calibration-v1745", { method: "POST", body: form, cache: "no-store" });
-      if (res.status === 404) {
-        res = await fetch("/api/import-live-calibration", { method: "POST", body: form, cache: "no-store" });
+      let serverPayload = null;
+      let serverError = null;
+      try {
+        let res = await fetch("/api/import-live-calibration-v1746", { method: "POST", body: form, cache: "no-store" });
+        if (res.status === 404) res = await fetch("/api/import-live-calibration", { method: "POST", body: form, cache: "no-store" });
+        serverPayload = await res.json().catch(() => ({}));
+        if (!res.ok || !serverPayload?.ok) serverError = serverPayload || { message: `Upload endpoint returned HTTP ${res.status}.` };
+      } catch (error) {
+        serverError = { message: error?.message || String(error) };
       }
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok || !payload.ok) throw payload;
-      if (!savePortfolioLiveActuals(payload)) {
-        render();
-        return;
+
+      const serverValidation = serverPayload?.ok ? portfolioSnapshotValidation(serverPayload) : { ok: false };
+      let payload = serverValidation.ok ? serverPayload : null;
+      if (!payload) {
+        const localPayload = await localParsePromise;
+        const localValidation = localPayload?.ok ? portfolioSnapshotValidation(localPayload) : { ok: false };
+        if (localPayload?.ok && localValidation.ok) {
+          payload = {
+            ...localPayload,
+            warnings: [...new Set([
+              ...(localPayload.warnings || []),
+              serverPayload?.ok
+                ? "The hosted Python backend returned incomplete monthly history, so the browser parsed Daily_Charger_kWh locally and used the complete validated result."
+                : serverError?.message
+                  ? `The hosted upload endpoint was unavailable (${serverError.message}); the browser parsed the selected files locally and used the validated result.`
+                  : "The browser parsed the selected files locally and used the validated result."
+            ])]
+          };
+        } else {
+          throw serverPayload?.ok ? { ...serverPayload, message: serverValidation.reason || serverPayload.message } : serverError || localPayload || { message: "Upload could not be parsed." };
+        }
       }
+      if (!savePortfolioLiveActuals(payload)) { render(); return; }
       render();
     } catch (err) {
       portfolioLiveUploadError = err || { message: "Unknown upload error" };
@@ -5916,7 +5918,6 @@ function wirePage(r) {
   if (exportPortfolioFinancialsExcelButton) exportPortfolioFinancialsExcelButton.addEventListener("click", () => exportPortfolioFinancialsExcel(portfolioFinancialExportPayload()));
   const exportPortfolioFinancialsPdfButton = el("exportPortfolioFinancialsPdf");
   if (exportPortfolioFinancialsPdfButton) exportPortfolioFinancialsPdfButton.addEventListener("click", () => exportPortfolioFinancialsPdf(portfolioFinancialExportPayload()));
-  setupPortfolioFinancialTableScroll();
 }
 
 function enforceConfigCompatibility() {

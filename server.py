@@ -41,12 +41,12 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-APP_VERSION = "V17.45"
-APP_BUILD_ID = "EVHUB-V17.45-20260711-R1"
-LIVE_UPLOAD_SCHEMA_VERSION = "v17.45-live-history-v6"
-LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.45.1"
-AADT_ENGINE_VERSION = "V17.45 AADT audited resolver + validated ZIP/live-history upload"
-DEPLOYMENT_REQUIRED_FILES = ("index.html", "js/app.js", "js/engines/maturityEngine.js", "assets/styles.css", "DEPLOYMENT_MANIFEST.json")
+APP_VERSION = "V17.46"
+APP_BUILD_ID = "EVHUB-V17.46-20260711-R1"
+LIVE_UPLOAD_SCHEMA_VERSION = "v17.46-live-history-v7"
+LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.46.1"
+AADT_ENGINE_VERSION = "V17.46 AADT audited resolver + browser-resilient live-history upload"
+DEPLOYMENT_REQUIRED_FILES = ("index.html", "js/app.js", "js/liveUploadClientParser.js", "js/engines/maturityEngine.js", "assets/styles.css", "DEPLOYMENT_MANIFEST.json")
 SERVER_FILE_FINGERPRINT = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
 PACKAGE_LAYOUT_VERSION = "flat-root-v1"
 
@@ -82,8 +82,8 @@ def _deployment_integrity() -> dict:
     if index_path.exists():
         try:
             index_text = index_path.read_text(encoding="utf-8")
-            if "17.45-performance-upload-20260711-r1" not in index_text:
-                problems.append("index.html cache-buster is not the V17.45 deployment build")
+            if "17.46-browser-parser-fit-table-20260711-r1" not in index_text:
+                problems.append("index.html cache-buster is not the V17.46 deployment build")
         except Exception as exc:
             problems.append(f"index.html could not be verified: {exc}")
     return {
@@ -4597,7 +4597,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self._send_json({"ok": False, "error": str(exc)}, status=422)
 
-        if parsed.path in ("/api/import-live-calibration", "/api/import-live-calibration-v1745"):
+        if parsed.path in ("/api/import-live-calibration", "/api/import-live-calibration-v1745", "/api/import-live-calibration-v1746"):
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 if length <= 0:

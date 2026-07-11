@@ -1,8 +1,8 @@
 {
-  "appVersion": "V17.45",
-  "buildId": "EVHUB-V17.45-20260711-R1",
-  "uploadSchemaVersion": "v17.45-live-history-v6",
-  "parserBuildId": "EVHUB-LIVE-PARSER-17.45.1",
+  "appVersion": "V17.46",
+  "buildId": "EVHUB-V17.46-20260711-R1",
+  "uploadSchemaVersion": "v17.46-live-history-v7",
+  "parserBuildId": "EVHUB-LIVE-PARSER-17.46.1",
   "packageLayoutVersion": "flat-root-v1",
   "entrypoint": "python server.py",
   "requiredRootFiles": [
@@ -10,6 +10,7 @@
     "index.html",
     "assets/styles.css",
     "js/app.js",
+    "js/liveUploadClientParser.js",
     "DEPLOYMENT_MANIFEST.json"
   ]
 }

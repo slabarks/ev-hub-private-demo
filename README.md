@@ -1,32 +1,32 @@
-# EV Charging Hub Investment Tool — V17.45 Lean Production Build
+# EV Charging Hub Investment Tool — V17.46 Lean Production Build
 
-V17.45 is a focused Portfolio Financials correction release. It restores strict live-history integrity after upload, reconciles the portfolio performance summary with the site-level badges, and replaces the conflicting financial-table CSS with one canonical layout.
+V17.46 is a focused Portfolio Financials reliability and presentation release. It removes the deployment dependency that repeatedly prevented monthly live history from loading and replaces the fixed-width scrolling site table with a fit-to-width investor layout.
 
 ## Build identity
 
-- Application: `V17.45`
-- Build: `EVHUB-V17.45-20260711-R1`
-- Upload schema: `v17.45-live-history-v6`
-- Parser: `EVHUB-LIVE-PARSER-17.45.1`
+- Application: `V17.46`
+- Build: `EVHUB-V17.46-20260711-R1`
+- Upload schema: `v17.46-live-history-v7`
+- Server parser: `EVHUB-LIVE-PARSER-17.46.1`
 - Package layout: `flat-root-v1`
 
 ## Live calibration upload
 
-The browser uploads the selected Excel/CSV files or ZIP pack first and validates the parsed response content afterwards.
-
 Accepted inputs include:
 
 - `Daily_Charger_kWh.xlsx`
-- Multiple dashboard exports selected together
-- A complete dashboard ZIP pack such as `Funded_Overview_Data_10_07_26.zip`
+- The Overview spreadsheet files selected together
+- A complete ZIP pack such as `Funded_Overview_Data_10_07_26.zip`
 
-When a daily charger file is present, zero returned monthly histories is treated as an incomplete backend response. The new upload is rejected and the last valid live dataset remains active. A missing backend build ID by itself does not block otherwise valid parsed data.
+The browser now starts a complete local parse of the selected XLSX/CSV/ZIP data while it also tries the Python import endpoint. A complete server response remains valid. When the hosted backend is older, unavailable, or returns a partial response without monthly histories, the browser uses the validated browser-parsed result instead.
 
-The preferred endpoint is `/api/import-live-calibration-v1745`; the browser may fall back to the legacy route only when the new route is unavailable. Returned data must still pass the V17.45 content checks.
+The browser parser retains the same monthly-history contract used by the Python parser: site-level actuals, commercial start, operational days, rolling 30-day kWh, annualised actual basis and per-site monthly history.
 
-## Portfolio performance logic
+A dataset is activated only after content validation. An incomplete parse does not replace the last valid live dataset.
 
-Performance status is always based on the same forward comparison shown in each site row:
+## Performance versus model
+
+Performance is based on the same comparison displayed in every site row:
 
 `next-12-month actual-led forecast kWh ÷ model forward-12-month benchmark kWh`
 
@@ -35,20 +35,20 @@ Performance status is always based on the same forward comparison shown in each 
 - More than 15% below model: `Underperforming`
 - Comparison unavailable: `Review`
 
-History quality is separate. Early or limited data can add a concise note, but it never replaces the numerical variance or the Above / In / Under benchmark classification.
+History quality remains a separate note and never replaces the performance classification.
 
-## Financial table rendering
+## Portfolio Financials table
 
-The Portfolio Financials table uses one canonical V17.45 layout:
+The 10-column site table now fits the available desktop width rather than using a 1,650 px scrolling canvas.
 
-- 10 fixed columns and explicit widths
-- 1,650 px table canvas with horizontal scrolling
+- all 10 columns visible together on desktop
+- no horizontal scrollbar
+- explicit percentage column widths
+- wider Site, Performance and Run-rate payback space
 - sticky header and sticky Site column
-- synchronized top and standard bottom scrolling
-- wider Performance and Run-rate payback columns
-- no faded early-site rows
-- no duplicate CAPEX/payback messages
-- concise EBITDA reconciliation in-cell, with full values retained in the tooltip
+- compact secondary text and reconciliation notes
+- no faded early-operation rows
+- under 1,180 px, rows become responsive labelled cards instead of forcing horizontal scroll
 
 ## Run locally
 

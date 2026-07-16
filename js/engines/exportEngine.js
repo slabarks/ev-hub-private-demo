@@ -748,7 +748,10 @@ function pfPdfDashboard(summary = {}, horizon = 5) {
   return `<section class="pf-pdf-dashboard"><div class="pf-pdf-section-head"><h2>Portfolio dashboard</h2><p>Selected sites together. Revenue is projected unless a trusted trailing-12-month revenue field exists. Landlord costs are not assumed without actual landlord terms.</p></div>
     ${pfPdfWindow("Investment position", "Actual day-one investment against the complete modelled day-one build for the selected sites.", [
       pfPdfMetric("Selected sites", number(summary.selectedSites || 0, 0), `${number(summary.totalSites || 0,0)} active sites`),
-      pfPdfMetric("Actual CAPEX tracked", currency(summary.actualCapex || 0, 0), `${number(summary.rowsWithCapex || 0,0)} of ${number(summary.selectedSites || 0,0)} selected sites`),
+      pfPdfMetric("Gross CAPEX tracked", currency(summary.actualCapex || 0, 0), `${number(summary.rowsWithCapex || 0,0)} of ${number(summary.selectedSites || 0,0)} selected sites`),
+      pfPdfMetric("Funding available", currency(summary.fundingAvailable || 0, 0), "known matched funding records"),
+      pfPdfMetric("Funding applied", currency(summary.fundingApplied || 0, 0), "user-selected reduction to invested capital"),
+      pfPdfMetric("Net invested CAPEX", currency(summary.netInvestedCapex || summary.actualCapex || 0, 0), "gross CAPEX minus applied funding"),
       pfPdfMetric("Model day-one CAPEX", currency(summary.modelCapex || 0, 0), "no replacements or later expansion"),
       pfPdfMetric("CAPEX Δ", currency(summary.capexDelta || 0, 0), "day-one model minus actual", Number(summary.capexDelta || 0) < 0 ? "bad" : "good"),
       pfPdfMetric("Within €30k", number(summary.capexWithin30k || 0, 0), "green accuracy band", "good"),
@@ -759,10 +762,11 @@ function pfPdfDashboard(summary = {}, horizon = 5) {
     ${pfPdfWindow("Forward 12-month performance", "One consistent forward period for every selected site. Maturity is excluded from year 1.", [
       pfPdfMetric("Next 12m kWh", kwh(summary.next12mKwh || 0, 0), `${number(summary.rowsWithActuals || 0,0)} selected sites with usable actuals`),
       pfPdfMetric("Next 12m net revenue", currency(summary.nextYearRevenue || 0, 0), "actual trajectory + bounded trend + seasonality"),
-      pfPdfMetric("Next 12m electricity", currency(summary.nextYearElectricity || 0, 0), "forecast kWh × electricity cost"),
-      pfPdfMetric("Next 12m OPEX excl. electricity", currency(summary.nextYearOpex || 0, 0), "one comparable forward operating-cost value"),
-      pfPdfMetric("Next 12m site EBITDA", currency(summary.nextYearEbitda || 0, 0), "revenue − electricity − OPEX"),
-      pfPdfMetric("Portfolio run-rate payback", payback, "actual day-one CAPEX / next-12-month site EBITDA")
+      pfPdfMetric("Electricity energy", currency(summary.nextYearElectricity || 0, 0), "forecast kWh × electricity unit cost"),
+      pfPdfMetric("Standing & capacity", currency(summary.nextYearNetwork || 0, 0), "DUoS standing + MIC capacity"),
+      pfPdfMetric("Other OPEX", currency(summary.nextYearOtherOpex || 0, 0), "support, services, warranty, transactions and landlord"),
+      pfPdfMetric("Next 12m site EBITDA", currency(summary.nextYearEbitda || 0, 0), "revenue − energy − network − other OPEX"),
+      pfPdfMetric("Portfolio run-rate payback", payback, "net invested CAPEX if funding applied; otherwise gross CAPEX")
     ], "operating")}
     ${pfPdfWindow(`${number(horizon || 5,0)}-year projection & profitability`, `Exact selected horizon. Year 1 is actual-led and maturity begins only from month 13.`, [
       pfPdfMetric("Projection horizon", `${number(horizon || 5,0)} yrs`, "selectable from 1 to 20 years"),
@@ -796,13 +800,13 @@ export async function exportPortfolioFinancialsPdf(payload) {
   const tableRows = rows.map(r => [
     compactPdfCell(r.site, r.configuration || r.commercialTerms),
     compactPdfCell(r.daysLabel, r.daysBasis),
-    compactPdfCell(Number.isFinite(r.actualCapex) ? currency(r.actualCapex, 0) : "CAPEX missing", `${r.capexBand || ""}${r.capexBand && r.capexNote ? " · " : ""}${r.capexNote || ""}`),
+    compactPdfCell(Number.isFinite(r.actualCapex) ? currency(r.actualCapex, 0) : "CAPEX missing", `${r.capexBand || ""}${r.capexBand && r.capexNote ? " · " : ""}${r.capexNote || ""}${Number(r.fundingAvailable || 0) > 0 ? ` · funding ${currency(r.fundingAvailable,0)}${r.fundingApplied ? ` applied · net ${currency(r.netInvestedCapex,0)}` : " available"}` : ""}`),
     compactPdfCell(kwh(r.next12mKwh, 0), `model ${kwh(r.modelForward12mKwh,0)}`),
     compactPdfCell(Number.isFinite(r.performanceVariance) ? `${r.performanceVariance >= 0 ? "+" : ""}${pct(r.performanceVariance,1)}` : "—", `${r.performanceClassification || "Review"} · ${r.dataQualityNote || ""}`),
     compactPdfCell(currency(r.next12mRevenue, 0), "base forecast used in EBITDA"),
-    compactPdfCell(currency(r.electricityCost, 0), "included in EBITDA"),
-    compactPdfCell(currency(r.opexExElectricity, 0), r.commercialTerms),
-    compactPdfCell(currency(r.ebitda, 0), "revenue − electricity − OPEX"),
+    compactPdfCell(currency(r.electricityCost, 0), `${currency(r.electricityUnitCost || 0,3)}/kWh · network ${currency(r.networkStandingAndCapacity || 0,0)}`),
+    compactPdfCell(currency(r.otherOpexExElectricityAndNetwork, 0), r.commercialTerms),
+    compactPdfCell(currency(r.ebitda, 0), "revenue − energy − network − other OPEX"),
     compactPdfCell(r.paybackLabel, r.paybackNote)
   ]);
   const report = `
@@ -816,7 +820,7 @@ export async function exportPortfolioFinancialsPdf(payload) {
       </div>
       <div class="report-grid portfolio-financial-print-kpis">
         ${reportMetric("Selected sites", number(summary.selectedSites || 0, 0))}
-        ${reportMetric("Actual CAPEX", currency(summary.actualCapex || 0, 0))}
+        ${reportMetric("Net invested CAPEX", currency(summary.netInvestedCapex || summary.actualCapex || 0, 0))}
         ${reportMetric("Annualised kWh", kwh(summary.annualKwh || 0, 0))}
         ${reportMetric("Next 12m EBITDA", currency(summary.nextYearEbitda || 0, 0))}
       </div>
@@ -828,10 +832,10 @@ export async function exportPortfolioFinancialsPdf(payload) {
   <section class="print-page portfolio-page portfolio-financial-print-page portfolio-financial-table-page">
     <div class="panel portfolio-financial-print-panel">
       <h3>Site financial performance table</h3>
-      <p class="report-caption">Same investor table as the app: forward kWh, matched model benchmark, performance variance, revenue, electricity, OPEX, site EBITDA and run-rate payback.</p>
+      <p class="report-caption">Same investor table as the app: forward kWh, matched model benchmark, performance variance, revenue, electricity energy plus network standing/capacity, other OPEX, funding and run-rate payback.</p>
       <div class="report-table-wrap portfolio-financial-pdf-table-wrap">
         <table class="portfolio-financial-pdf-table">
-          <thead><tr>${["Site", "Days", "Day-one CAPEX", "Next 12m kWh", "Performance vs model", "Next 12m revenue", "Electricity", "OPEX excl. elec.", "Site EBITDA", "Run-rate payback"].map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+          <thead><tr>${["Site", "Days", "CAPEX & funding", "Next 12m kWh", "Performance vs model", "Next 12m revenue", "Energy & network", "Other OPEX", "Site EBITDA", "Run-rate payback"].map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
           <tbody>${tableRows.map(row => `<tr>${row.map(x => `<td>${x}</td>`).join("")}</tr>`).join("")}</tbody>
         </table>
       </div>

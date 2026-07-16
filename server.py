@@ -41,12 +41,12 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-APP_VERSION = "V17.46"
-APP_BUILD_ID = "EVHUB-V17.46-20260711-R1"
-LIVE_UPLOAD_SCHEMA_VERSION = "v17.46-live-history-v7"
-LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-17.46.1"
-AADT_ENGINE_VERSION = "V17.46 AADT audited resolver + browser-resilient live-history upload"
-DEPLOYMENT_REQUIRED_FILES = ("index.html", "js/app.js", "js/liveUploadClientParser.js", "js/engines/maturityEngine.js", "assets/styles.css", "DEPLOYMENT_MANIFEST.json")
+APP_VERSION = "V21"
+APP_BUILD_ID = "EVHUB-V21-20260716-R1"
+LIVE_UPLOAD_SCHEMA_VERSION = "v21-live-history-v7"
+LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.1"
+AADT_ENGINE_VERSION = "V21 AADT audited resolver + validated ZIP/live-history upload"
+DEPLOYMENT_REQUIRED_FILES = ("index.html", "js/app.js", "js/engines/maturityEngine.js", "assets/styles.css", "DEPLOYMENT_MANIFEST.json")
 SERVER_FILE_FINGERPRINT = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
 PACKAGE_LAYOUT_VERSION = "flat-root-v1"
 
@@ -82,8 +82,8 @@ def _deployment_integrity() -> dict:
     if index_path.exists():
         try:
             index_text = index_path.read_text(encoding="utf-8")
-            if "17.46-browser-parser-fit-table-20260711-r1" not in index_text:
-                problems.append("index.html cache-buster is not the V17.46 deployment build")
+            if "21-portfolio-forecast-audit-20260716-r1" not in index_text:
+                problems.append("index.html cache-buster is not the V21 deployment build")
         except Exception as exc:
             problems.append(f"index.html could not be verified: {exc}")
     return {
@@ -111,6 +111,8 @@ def _version_payload() -> dict:
         "parser_build_id": LIVE_UPLOAD_PARSER_BUILD_ID,
         "monthlyHistorySupported": True,
         "monthly_history_supported": True,
+        "dailyHistorySupported": True,
+        "daily_history_supported": True,
         "serverFileFingerprint": SERVER_FILE_FINGERPRINT,
         "server_file_fingerprint": SERVER_FILE_FINGERPRINT,
         "deploymentRootOk": integrity["ok"],
@@ -4069,6 +4071,40 @@ def _build_monthly_live_history(daily: dict, first_active: dt.date | None, lates
     return rows
 
 
+def _build_daily_live_history(daily: dict, first_active: dt.date | None, latest_date: dt.date | None) -> list[dict]:
+    """Return a compact, continuous site-day history with auditable rolling-30 kWh.
+
+    Missing source dates remain explicit through sourcePresent=False rather than being
+    silently confused with a reported zero-energy day.
+    """
+    if not first_active or not latest_date or latest_date < first_active:
+        return []
+    rows: list[dict] = []
+    cursor = first_active
+    rolling_window: list[float] = []
+    rolling_total = 0.0
+    while cursor <= latest_date:
+        values = daily.get(cursor)
+        source_present = values is not None
+        kwh = float((values or {}).get("kwh", 0.0) or 0.0)
+        sessions = float((values or {}).get("sessions", 0.0) or 0.0)
+        net = float((values or {}).get("net", 0.0) or 0.0)
+        rolling_window.append(kwh)
+        rolling_total += kwh
+        if len(rolling_window) > 30:
+            rolling_total -= rolling_window.pop(0)
+        rows.append({
+            "date": cursor.isoformat(),
+            "kwh": round(kwh, 3),
+            "sessions": round(sessions, 3),
+            "netRevenue": round(net, 2),
+            "rolling30Kwh": round(rolling_total, 3),
+            "sourcePresent": source_present,
+        })
+        cursor += dt.timedelta(days=1)
+    return rows
+
+
 def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
     errors: list[str] = []
     expanded_files, archive_warnings, uploaded_archive_count = _expand_calibration_upload_files(files)
@@ -4137,8 +4173,6 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
     if not all_dates:
         raise ValueError("The uploaded charger-level export did not contain any readable dated rows.")
     latest_date = max(all_dates)
-    rolling_start = latest_date - dt.timedelta(days=29)
-    trailing_start = latest_date - dt.timedelta(days=364)
     actuals: list[dict] = []
     for site in site_days.values():
         daily = site["daily"]
@@ -4152,9 +4186,12 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         first_kwh = min(kwh_active_dates) if kwh_active_dates else None
         first_active = first_session or first_kwh
         days_basis = "first_session" if first_session else "first_kwh" if first_kwh else "no_commercial_activity"
-        data_days = (latest_date - first_active).days + 1 if first_active else 0
-        rolling_vals = [vals for d, vals in daily.items() if rolling_start <= d <= latest_date]
-        trailing_vals = [vals for d, vals in daily.items() if trailing_start <= d <= latest_date]
+        site_latest_date = max(daily.keys()) if daily else latest_date
+        site_rolling_start = site_latest_date - dt.timedelta(days=29)
+        site_trailing_start = site_latest_date - dt.timedelta(days=364)
+        data_days = (site_latest_date - first_active).days + 1 if first_active else 0
+        rolling_vals = [vals for d, vals in daily.items() if site_rolling_start <= d <= site_latest_date]
+        trailing_vals = [vals for d, vals in daily.items() if site_trailing_start <= d <= site_latest_date]
         rolling_kwh = sum(v["kwh"] for v in rolling_vals)
         rolling_net = sum(v["net"] for v in rolling_vals)
         rolling_sessions = sum(v["sessions"] for v in rolling_vals)
@@ -4171,7 +4208,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         #   live period is less seasonally biased than a June/summer rolling30 snapshot.
         # mature: true trailing 365-day actual. This is the clean annual comparison
         #   basis and must not be replaced by rolling30×365 for benchmark validation.
-        cumulative_vals = [vals for d, vals in daily.items() if first_active and d >= first_active and d <= latest_date]
+        cumulative_vals = [vals for d, vals in daily.items() if first_active and d >= first_active and d <= site_latest_date]
         cumulative_kwh = sum(v["kwh"] for v in cumulative_vals)
         cumulative_sessions = sum(v["sessions"] for v in cumulative_vals)
         cumulative_net = sum(v["net"] for v in cumulative_vals)
@@ -4183,7 +4220,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
             daily_kwh_avg = round(trailing_kwh / 365, 4)
             daily_sessions_avg = round(trailing_sessions / 365, 4)
             annualisation_method = "trailing365"
-            annualisation_basis = f"trailing 365-day actual — {round(trailing_kwh, 1)} kWh from {trailing_start.isoformat()} to {latest_date.isoformat()}"
+            annualisation_basis = f"trailing 365-day actual — {round(trailing_kwh, 1)} kWh from {site_trailing_start.isoformat()} to {site_latest_date.isoformat()}"
         elif data_days > 0:
             annualised_kwh = round(cumulative_kwh / data_days * 365, 3)
             annualised_sessions = round(cumulative_sessions / data_days * 365, 3)
@@ -4192,7 +4229,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
             daily_sessions_avg = round(cumulative_sessions / data_days, 4)
             annualisation_method = "partial_cumulative" if tier == "near" else "daily_cumulative"
             label = "partial-year cumulative annualised" if tier == "near" else "daily cumulative"
-            annualisation_basis = f"{label} — {round(cumulative_kwh, 1)} kWh over {data_days} days live ({first_active.isoformat() if first_active else '?'} to {latest_date.isoformat()})"
+            annualisation_basis = f"{label} — {round(cumulative_kwh, 1)} kWh over {data_days} days live ({first_active.isoformat() if first_active else '?'} to {site_latest_date.isoformat()})"
         else:
             annualised_kwh = 0
             annualised_sessions = 0
@@ -4202,7 +4239,10 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
             annualisation_method = "no_actual"
             annualisation_basis = "no usable live actuals"
 
-        monthly_history = _build_monthly_live_history(daily, first_active, latest_date)
+        monthly_history = _build_monthly_live_history(daily, first_active, site_latest_date)
+        daily_history = _build_daily_live_history(daily, first_active, site_latest_date)
+        source_day_count = sum(1 for row in daily_history if row.get("sourcePresent"))
+        source_coverage = (source_day_count / data_days) if data_days > 0 else 0.0
         actual = {
             "siteName": site["siteName"],
             "siteKey": site["siteKey"],
@@ -4218,7 +4258,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "annualKwh": annualised_kwh,
                 "annualSessions": annualised_sessions,
                 "annualNetRevenue": annualised_net,
-                "asOfDate": latest_date.isoformat(),
+                "asOfDate": site_latest_date.isoformat(),
                 "sourceFile": ", ".join(sorted(site["sourceFiles"])),
                 "source": "Uploaded live calibration files",
                 "annualisationBasis": annualisation_basis,
@@ -4227,6 +4267,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "firstCommercialKwhDate": first_kwh.isoformat() if first_kwh else None,
                 "commercialDaysBasis": days_basis,
                 "monthlyHistory": monthly_history,
+                "dailyHistory": daily_history,
             },
             "maturity": {"dataDays": int(data_days), "tier": tier},
             "diagnostics": {
@@ -4234,12 +4275,15 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "firstCommercialSessionDate": first_session.isoformat() if first_session else None,
                 "firstCommercialKwhDate": first_kwh.isoformat() if first_kwh else None,
                 "commercialDaysBasis": days_basis,
-                "latestDate": latest_date.isoformat(),
+                "latestDate": site_latest_date.isoformat(),
                 "chargerCount": len(site["chargerNames"]),
                 "chargerNames": sorted(site["chargerNames"]),
                 "cumulativeKwh": round(cumulative_kwh, 1),
                 "daysLive": data_days,
                 "monthlyHistoryMonths": len(monthly_history),
+                "dailyHistoryDays": len(daily_history),
+                "sourceDayCount": source_day_count,
+                "sourceCoveragePct": round(source_coverage * 100, 2),
                 "completeCalendarMonths": sum(1 for row in monthly_history if row.get("isCompleteCalendarMonth")),
             }
         }
@@ -4248,6 +4292,8 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
     actuals.sort(key=lambda x: x["siteName"].lower())
     monthly_history_site_count = sum(1 for item in actuals if len(item.get("actual", {}).get("monthlyHistory", [])) > 0)
     monthly_observation_count = sum(len(item.get("actual", {}).get("monthlyHistory", [])) for item in actuals)
+    daily_history_site_count = sum(1 for item in actuals if len(item.get("actual", {}).get("dailyHistory", [])) > 0)
+    daily_observation_count = sum(len(item.get("actual", {}).get("dailyHistory", [])) for item in actuals)
     complete_month_observation_count = sum(
         1
         for item in actuals
@@ -4269,6 +4315,8 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         "parser_build_id": LIVE_UPLOAD_PARSER_BUILD_ID,
         "monthlyHistorySupported": True,
         "monthly_history_supported": True,
+        "dailyHistorySupported": True,
+        "daily_history_supported": True,
         "serverFileFingerprint": SERVER_FILE_FINGERPRINT,
         "server_file_fingerprint": SERVER_FILE_FINGERPRINT,
         "deploymentRootOk": _deployment_integrity()["ok"],
@@ -4289,12 +4337,14 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         "expandedSpreadsheetCount": len(expanded_files),
         "monthlyHistorySiteCount": monthly_history_site_count,
         "monthlyObservationCount": monthly_observation_count,
+        "dailyHistorySiteCount": daily_history_site_count,
+        "dailyObservationCount": daily_observation_count,
         "completeMonthObservationCount": complete_month_observation_count,
         "parsedFiles": parsed_sources,
         "supportingFiles": supporting_files[:25],
         "warnings": warnings[:25],
         "errors": [],
-        "message": f"Uploaded live calibration actuals loaded successfully. Latest actuals date: {latest_date.isoformat()}. Retained {monthly_observation_count} monthly observations across {monthly_history_site_count} sites."
+        "message": f"Uploaded live calibration actuals loaded successfully. Latest portfolio date: {latest_date.isoformat()}. Retained {daily_observation_count} site-day and {monthly_observation_count} monthly observations across {monthly_history_site_count} sites."
     }
 
 
@@ -4597,7 +4647,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self._send_json({"ok": False, "error": str(exc)}, status=422)
 
-        if parsed.path in ("/api/import-live-calibration", "/api/import-live-calibration-v1745", "/api/import-live-calibration-v1746"):
+        if parsed.path in ("/api/import-live-calibration", "/api/import-live-calibration-v1745"):
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 if length <= 0:

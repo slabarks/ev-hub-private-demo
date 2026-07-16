@@ -38,20 +38,27 @@ class LiveFinancialMaturityTests(unittest.TestCase):
             ]))
         ])
         self.assertTrue(payload["ok"])
-        self.assertEqual(payload["schemaVersion"], "v17.46-live-history-v7")
-        self.assertEqual(payload["buildId"], "EVHUB-V17.46-20260711-R1")
-        self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-17.46.1")
+        self.assertEqual(payload["schemaVersion"], "v21-live-history-v7")
+        self.assertEqual(payload["buildId"], "EVHUB-V21-20260716-R1")
+        self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-21.1")
         self.assertTrue(payload["monthlyHistorySupported"])
+        self.assertTrue(payload["dailyHistorySupported"])
         self.assertEqual(payload["siteCount"], 2)
         self.assertEqual(payload["monthlyHistorySiteCount"], 2)
         self.assertGreaterEqual(payload["monthlyObservationCount"], 17)
         self.assertGreater(payload["completeMonthObservationCount"], 0)
+        self.assertEqual(payload["dailyHistorySiteCount"], 2)
+        self.assertEqual(payload["dailyObservationCount"], 500)
         by_name = {row["siteName"]: row for row in payload["siteActuals"]}
 
         mature = by_name["Synthetic Mature Site - Charger 1"]
         self.assertEqual(mature["maturity"]["tier"], "mature")
         self.assertEqual(mature["actual"]["annualisationMethod"], "trailing365")
         self.assertEqual(mature["actual"]["dataDays"] if "dataDays" in mature["actual"] else mature["maturity"]["dataDays"], 400)
+        daily_history = mature["actual"]["dailyHistory"]
+        self.assertEqual(len(daily_history), 400)
+        self.assertEqual(daily_history[-1]["date"], latest.isoformat())
+        self.assertGreater(daily_history[-1]["rolling30Kwh"], 0)
         history = mature["actual"]["monthlyHistory"]
         self.assertGreaterEqual(len(history), 13)
         self.assertEqual([row["monthIndex"] for row in history], list(range(1, len(history) + 1)))
@@ -83,7 +90,44 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         self.assertEqual(payload["siteCount"], 1)
         self.assertEqual(payload["monthlyHistorySiteCount"], 1)
         self.assertGreaterEqual(payload["monthlyObservationCount"], 3)
+        self.assertEqual(payload["dailyHistorySiteCount"], 1)
+        self.assertEqual(payload["dailyObservationCount"], 70)
         self.assertTrue(any("expanded 1 calibration spreadsheet" in warning for warning in payload["warnings"]))
+
+
+    def test_each_site_uses_its_own_latest_source_date(self):
+        start = dt.date(2026, 1, 1)
+        payload = server.parse_live_calibration_uploads([
+            ("Daily_Charger_kWh.csv", daily_csv([
+                ("Long Reporting Site - Charger 1", start, 60),
+                ("Short Reporting Site - Charger 1", start, 30),
+            ]))
+        ])
+        by_name = {row["siteName"]: row for row in payload["siteActuals"]}
+        long_site = by_name["Long Reporting Site - Charger 1"]
+        short_site = by_name["Short Reporting Site - Charger 1"]
+        self.assertEqual(long_site["diagnostics"]["daysLive"], 60)
+        self.assertEqual(short_site["diagnostics"]["daysLive"], 30)
+        self.assertEqual(len(short_site["actual"]["dailyHistory"]), 30)
+        self.assertEqual(short_site["actual"]["asOfDate"], (start + dt.timedelta(days=29)).isoformat())
+        self.assertEqual(short_site["diagnostics"]["sourceCoveragePct"], 100.0)
+
+    def test_daily_history_preserves_missing_source_dates_and_rolling_window(self):
+        start = dt.date(2026, 1, 1)
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(["Date of start_time", "charge_point_name", "Total charge_amount", "Total net", "transaction_id Count"])
+        writer.writerow([start.isoformat(), "Daily Audit Site - Charger 1", 30, 19.2, 1])
+        writer.writerow([(start + dt.timedelta(days=30)).isoformat(), "Daily Audit Site - Charger 1", 30, 19.2, 1])
+        payload = server.parse_live_calibration_uploads([("Daily_Charger_kWh.csv", stream.getvalue().encode("utf-8"))])
+        site = payload["siteActuals"][0]
+        history = site["actual"]["dailyHistory"]
+        self.assertEqual(len(history), 31)
+        self.assertEqual(sum(1 for row in history if row["sourcePresent"]), 2)
+        self.assertFalse(history[1]["sourcePresent"])
+        self.assertEqual(history[1]["kwh"], 0)
+        self.assertAlmostEqual(history[-1]["rolling30Kwh"], 30.0, places=3)
+        self.assertAlmostEqual(site["diagnostics"]["sourceCoveragePct"], 2 / 31 * 100, places=2)
 
     def test_zero_demand_days_remain_inside_calendar_denominator(self):
         start = dt.date(2026, 1, 1)

@@ -99,7 +99,7 @@ function historyForSite(site) {
     site?.liveActuals?.monthlyHistory,
     site?.liveActuals?.diagnostics?.monthlyHistory
   ];
-  const raw = candidates.find(Array.isArray) || [];
+  const raw = candidates.find(candidate => Array.isArray(candidate) && candidate.length) || [];
   return raw.map((row, idx) => {
     const days = finitePositive(row.calendarDays ?? row.daysInScope ?? row.periodDays ?? row.days) || DAYS_PER_MONTH;
     const kwh = Math.max(0, Number(row.kwh ?? row.energyKwh ?? 0) || 0);
@@ -119,6 +119,41 @@ function historyForSite(site) {
       dailySessions: days > 0 ? sessions / days : 0
     };
   }).filter(row => row.monthIndex > 0 && row.calendarDays >= 10);
+}
+
+export function dailyHistoryForSite(site) {
+  const candidates = [
+    site?.actual?.dailyHistory,
+    site?.dailyHistory,
+    site?.liveActuals?.dailyHistory,
+    site?.liveActuals?.diagnostics?.dailyHistory
+  ];
+  const raw = candidates.find(candidate => Array.isArray(candidate) && candidate.length) || [];
+  return raw.map(row => ({
+    date: String(row?.date || "").slice(0, 10),
+    kwh: Math.max(0, Number(row?.kwh || 0) || 0),
+    sessions: Math.max(0, Number(row?.sessions || 0) || 0),
+    netRevenue: Math.max(0, Number(row?.netRevenue || row?.revenue || 0) || 0),
+    rolling30Kwh: Math.max(0, Number(row?.rolling30Kwh || 0) || 0),
+    sourcePresent: row?.sourcePresent !== false
+  })).filter(row => /^\d{4}-\d{2}-\d{2}$/.test(row.date)).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function dailyCalendarMonth(date) {
+  const match = String(date || "").match(/^\d{4}-(\d{2})/);
+  return match ? clamp(Number(match[1]), 1, 12) : 1;
+}
+
+function recentAdjustedDailyFromDailyHistory(site, seasonality, dataDays) {
+  const daily = dailyHistoryForSite(site);
+  if (!daily.length) return null;
+  const windowDays = Math.min(daily.length, dataDays >= 180 ? 90 : dataDays >= 60 ? 60 : 30);
+  const usable = daily.slice(-Math.max(14, windowDays));
+  const sourceRows = usable.filter(row => row.sourcePresent);
+  const rows = sourceRows.length >= usable.length * 0.85 ? usable : sourceRows;
+  if (!rows.length) return null;
+  const adjusted = rows.reduce((acc, row) => acc + row.kwh / seasonalityFactor(seasonality, dailyCalendarMonth(row.date)), 0);
+  return adjusted / rows.length;
 }
 
 function maturityDays(site) {
@@ -362,7 +397,7 @@ function recentAdjustedDaily(history, seasonality) {
 }
 
 function recentTrendInfo(history, seasonality) {
-  const usable = history.filter(row => row.dailyKwh > 0 && row.calendarDays >= 14).map(row => ({
+  const usable = history.filter(row => row.complete && row.dailyKwh > 0 && row.calendarDays >= 24).map(row => ({
     ...row,
     adjustedDailyKwh: row.dailyKwh / seasonalityFactor(seasonality, row.calendarMonth)
   }));
@@ -370,7 +405,7 @@ function recentTrendInfo(history, seasonality) {
   const previous = median(usable.slice(-6, -3).map(row => row.adjustedDailyKwh));
   const blockChange = recent > 0 && previous > 0 ? recent / previous - 1 : null;
   const monthlyGrowth = Number.isFinite(blockChange) && blockChange > -1 ? Math.pow(1 + blockChange, 1 / 3) - 1 : null;
-  return { recent, previous, blockChange, monthlyGrowth, sampleMonths: usable.length };
+  return { recent, previous, blockChange, monthlyGrowth, sampleMonths: usable.length, eligible: usable.length >= 6 };
 }
 
 function impliedCurveAge(model, factor) {
@@ -390,27 +425,29 @@ function forwardForecastConfidence(dataDays, historyLength) {
   return { key: "low", label: "Low", uncertainty: 0.32 };
 }
 
-function forwardTrendPolicy(dataDays, historyLength, rawMonthlyGrowth) {
-  if (!Number.isFinite(rawMonthlyGrowth) || historyLength < 2 || dataDays < 60) {
-    return { monthlyGrowth: 0, rawMonthlyGrowth: Number.isFinite(rawMonthlyGrowth) ? rawMonthlyGrowth : null, weight: 0, cap: 0 };
+function forwardTrendPolicy(dataDays, historyLength, rawMonthlyGrowth, eligible = false) {
+  if (!eligible || !Number.isFinite(rawMonthlyGrowth) || historyLength < 6 || dataDays < 90) {
+    return { monthlyGrowth: 0, rawMonthlyGrowth: Number.isFinite(rawMonthlyGrowth) ? rawMonthlyGrowth : null, weight: 0, cap: 0, floor: 0, eligible: false };
   }
-  let weight = 0.35;
-  let cap = 0.025;
-  let floor = -0.018;
+  let weight = 0.30;
+  let cap = 0.012;
+  let floor = -0.010;
   if (dataDays >= 365) {
-    weight = 0.75;
-    cap = 0.015;
-    floor = -0.012;
+    weight = 0.30;
+    cap = 0.008;
+    floor = -0.008;
   } else if (dataDays >= 180) {
-    weight = 0.60;
-    cap = 0.020;
-    floor = -0.015;
+    weight = 0.40;
+    cap = 0.012;
+    floor = -0.010;
   }
   return {
     monthlyGrowth: clamp(rawMonthlyGrowth * weight, floor, cap),
     rawMonthlyGrowth,
     weight,
-    cap
+    cap,
+    floor,
+    eligible: true
   };
 }
 
@@ -433,10 +470,10 @@ function siteSeasonalityFactors(history, portfolioSeasonality) {
 }
 
 function forwardBaseAdjustedDaily({ dataDays, annualDaily, recentAdjusted }) {
-  if (!(recentAdjusted > 0)) return Math.max(0, Number(annualDaily || 0));
-  if (!(annualDaily > 0)) return recentAdjusted;
-  const recentWeight = dataDays < 60 ? 0.35 : dataDays < 180 ? 0.55 : dataDays < 365 ? 0.70 : 0.75;
-  return recentAdjusted * recentWeight + annualDaily * (1 - recentWeight);
+  if (!(recentAdjusted > 0)) return { value: Math.max(0, Number(annualDaily || 0)), recentWeight: 0 };
+  if (!(annualDaily > 0)) return { value: recentAdjusted, recentWeight: 1 };
+  const recentWeight = dataDays < 60 ? 0.30 : dataDays < 180 ? 0.45 : dataDays < 365 ? 0.50 : 0.35;
+  return { value: recentAdjusted * recentWeight + annualDaily * (1 - recentWeight), recentWeight };
 }
 
 export function forecastSiteForward12M(params = {}) {
@@ -453,10 +490,16 @@ export function forecastSiteForward12M(params = {}) {
   const annualDaily = annualKwh > 0 ? annualKwh / 365 : null;
   const recentDailyInput = finitePositive(params.recentDailyKwh);
   const historyAdjustedDaily = recentAdjustedDaily(history, model.seasonality);
-  const recentAdjusted = historyAdjustedDaily || (recentDailyInput ? recentDailyInput / currentSeasonality : annualDaily);
-  const baseAdjustedDaily = forwardBaseAdjustedDaily({ dataDays, annualDaily, recentAdjusted });
+  const dailyHistoryAdjusted = recentAdjustedDailyFromDailyHistory(site, model.seasonality, dataDays);
+  const rolling30Adjusted = recentDailyInput ? recentDailyInput / currentSeasonality : null;
+  const recentSignals = [dailyHistoryAdjusted, historyAdjustedDaily, rolling30Adjusted].filter(value => Number.isFinite(value) && value > 0);
+  const recentAdjusted = recentSignals.length
+    ? (dailyHistoryAdjusted && rolling30Adjusted ? dailyHistoryAdjusted * 0.70 + rolling30Adjusted * 0.30 : recentSignals[0])
+    : annualDaily;
+  const baseInfo = forwardBaseAdjustedDaily({ dataDays, annualDaily, recentAdjusted });
+  const baseAdjustedDaily = baseInfo.value;
   const trend = recentTrendInfo(history, model.seasonality);
-  const trendPolicy = forwardTrendPolicy(dataDays, history.length, trend.monthlyGrowth);
+  const trendPolicy = forwardTrendPolicy(dataDays, trend.sampleMonths, trend.monthlyGrowth, trend.eligible);
   const seasonality = siteSeasonalityFactors(history, model.seasonality);
   const fallbackPrice = Math.max(0, Number(params.fallbackPrice || 0));
   const currentPrice = annualKwh > 0 && annualRevenue / annualKwh >= 0.20 && annualRevenue / annualKwh <= 2.0
@@ -507,10 +550,10 @@ export function forecastSiteForward12M(params = {}) {
   }
   const sum = (rows, key) => rows.reduce((acc, row) => acc + (Number(row[key]) || 0), 0);
   const methodology = dataDays < 60
-    ? "Forward 12-month forecast from observed run-rate, conservative stabilisation, portfolio seasonality and near-term market/tariff growth; no maturity uplift."
-    : history.length >= 2
-      ? "Forward 12-month forecast from observed run-rate, bounded recent trend, seasonality and near-term market/tariff growth; no maturity uplift."
-      : "Forward 12-month forecast from the stored observed run-rate with neutral short-term trend, portfolio seasonality and near-term market/tariff growth; no maturity uplift.";
+    ? "Forward 12-month forecast from all available daily actuals, conservative run-rate stabilisation, portfolio seasonality and near-term traffic/tariff growth; no maturity uplift."
+    : trendPolicy.eligible
+      ? "Forward 12-month forecast from full daily history, annual actual basis, controlled recent trend, seasonality and near-term traffic/tariff growth; no maturity uplift."
+      : "Forward 12-month forecast from full daily history and annual actual basis with neutral short-term trend, seasonality and near-term traffic/tariff growth; no maturity uplift.";
   return {
     source: "actual-forward",
     label: "Actual-trajectory forward forecast",
@@ -518,7 +561,13 @@ export function forecastSiteForward12M(params = {}) {
     confidence,
     dataDays,
     historyMonths: history.length,
+    annualDailyKwh: annualDaily,
+    recentAdjustedDailyKwh: recentAdjusted,
+    dailyHistoryAdjustedDailyKwh: dailyHistoryAdjusted,
+    monthlyHistoryAdjustedDailyKwh: historyAdjustedDaily,
+    rolling30AdjustedDailyKwh: rolling30Adjusted,
     baseAdjustedDailyKwh: baseAdjustedDaily,
+    recentWeight: baseInfo.recentWeight,
     trendPolicy,
     recentTrend: trend,
     currentPrice,

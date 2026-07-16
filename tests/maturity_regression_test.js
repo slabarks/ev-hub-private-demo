@@ -112,6 +112,67 @@ assert.ok(Math.abs(forwardOnly.next12mRevenue - forecast.next12mRevenue) < 1e-6,
 assert.ok(forecast.monthly.slice(0, 12).every(row => row.forecastStage === "forward-actual-trajectory"));
 assert.ok(forecast.monthly.slice(12).some(row => row.forecastStage === "long-term-maturity-transition"));
 
+
+// Daily history must influence the recent run-rate while remaining blended with the annual basis.
+const dailySignalSite = {
+  name: "Daily signal site",
+  maturity: { dataDays: 180 },
+  actual: {
+    monthlyHistory: syntheticHistory(0.8, 6, 1),
+    dailyHistory: Array.from({ length: 180 }, (_, idx) => ({
+      date: new Date(Date.UTC(2025, 0, 1 + idx)).toISOString().slice(0, 10),
+      kwh: idx < 90 ? 100 : 200,
+      sessions: idx < 90 ? 3 : 6,
+      netRevenue: (idx < 90 ? 100 : 200) * 0.66,
+      sourcePresent: true
+    }))
+  }
+};
+const dailySignalForecast = forecastSiteForward12M({
+  site: dailySignalSite,
+  model,
+  dataDays: 180,
+  latestDate: "2025-06-29",
+  currentAnnualKwh: 100 * 365,
+  currentAnnualRevenue: 100 * 365 * 0.66,
+  currentAnnualSessions: 100 * 365 / 30.4,
+  recentDailyKwh: 100,
+  trafficGrowth: 0.01,
+  tariffGrowth: 0,
+  fallbackPrice: 0.66,
+  averageSessionKwh: 30.4
+});
+assert.ok(dailySignalForecast.dailyHistoryAdjustedDailyKwh > dailySignalForecast.annualDailyKwh);
+assert.ok(dailySignalForecast.baseAdjustedDailyKwh > dailySignalForecast.annualDailyKwh);
+assert.ok(dailySignalForecast.baseAdjustedDailyKwh < dailySignalForecast.recentAdjustedDailyKwh);
+assert.equal(dailySignalForecast.recentWeight, 0.5);
+
+// Fewer than six complete months must never create an extrapolated site trend.
+const fiveMonthSite = {
+  name: "Five month site",
+  maturity: { dataDays: 150 },
+  actual: { monthlyHistory: syntheticHistory(1, 5, 1), dataDays: 150 }
+};
+const fiveMonthForecast = forecastSiteForward12M({
+  site: fiveMonthSite,
+  model,
+  dataDays: 150,
+  latestDate: "2025-05-31",
+  currentAnnualKwh: 45000,
+  currentAnnualRevenue: 45000 * 0.66,
+  currentAnnualSessions: 45000 / 30.4,
+  recentDailyKwh: 130,
+  fallbackPrice: 0.66,
+  averageSessionKwh: 30.4
+});
+assert.equal(fiveMonthForecast.trendPolicy.eligible, false);
+assert.equal(fiveMonthForecast.trendPolicy.monthlyGrowth, 0);
+
+// Six complete months may use a bounded trend, never above the policy cap.
+assert.equal(forwardOnly.trendPolicy.eligible, true);
+assert.ok(forwardOnly.trendPolicy.monthlyGrowth <= forwardOnly.trendPolicy.cap + 1e-12);
+assert.ok(forwardOnly.trendPolicy.monthlyGrowth >= forwardOnly.trendPolicy.floor - 1e-12);
+
 const lowPlateauForecast = forecastSiteMaturity({
   site: early,
   model,

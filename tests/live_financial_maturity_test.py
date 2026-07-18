@@ -39,8 +39,8 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         ])
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["schemaVersion"], "v21-live-history-v7")
-        self.assertEqual(payload["buildId"], "EVHUB-V21-20260716-R1")
-        self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-21.1")
+        self.assertEqual(payload["buildId"], "EVHUB-V21.1-20260717-R1")
+        self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-21.2")
         self.assertTrue(payload["monthlyHistorySupported"])
         self.assertTrue(payload["dailyHistorySupported"])
         self.assertEqual(payload["siteCount"], 2)
@@ -87,6 +87,9 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["uploadedArchiveCount"], 1)
         self.assertEqual(payload["expandedSpreadsheetCount"], 1)
+        self.assertEqual(payload["primarySourceSelection"], "canonical_filename")
+        self.assertEqual(payload["primarySourceFiles"], ["Funded_Overview_Data/Overview/Daily_Charger_kWh.csv"])
+        self.assertIn("parserTotal", payload["parserTimingsMs"])
         self.assertEqual(payload["siteCount"], 1)
         self.assertEqual(payload["monthlyHistorySiteCount"], 1)
         self.assertGreaterEqual(payload["monthlyObservationCount"], 3)
@@ -94,6 +97,21 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         self.assertEqual(payload["dailyObservationCount"], 70)
         self.assertTrue(any("expanded 1 calibration spreadsheet" in warning for warning in payload["warnings"]))
 
+
+    def test_full_pack_skips_supporting_workbooks_without_opening_them(self):
+        start = dt.date(2026, 1, 1)
+        daily = daily_csv([("Optimised Pack Site - Charger 1", start, 40)])
+        archive_stream = io.BytesIO()
+        with zipfile.ZipFile(archive_stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("Overview/Daily_Charger_kWh.csv", daily)
+            archive.writestr("Overview/Unrelated_Broken.xlsx", b"not an excel workbook")
+            archive.writestr("Overview/kWh_-_Running_Total.xlsx", b"not an excel workbook")
+        payload = server.parse_live_calibration_uploads([("pack.zip", archive_stream.getvalue())])
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["primarySourceSelection"], "canonical_filename")
+        self.assertEqual(payload["siteCount"], 1)
+        self.assertIn("Overview/Unrelated_Broken.xlsx", payload["supportingFiles"])
+        self.assertFalse(any("Unrelated_Broken" in err for err in payload["errors"]))
 
     def test_each_site_uses_its_own_latest_source_date(self):
         start = dt.date(2026, 1, 1)

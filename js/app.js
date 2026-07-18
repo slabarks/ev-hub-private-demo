@@ -299,10 +299,10 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const APP_RELEASE_VERSION = "V21";
-const APP_BUILD_ID = "EVHUB-V21-20260716-R1";
-const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.1";
-const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21";
+const APP_RELEASE_VERSION = "V21.1";
+const APP_BUILD_ID = "EVHUB-V21.1-20260717-R1";
+const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.2";
+const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21_1";
 const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7";
 const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
   "evHub.portfolio.liveActuals.v1",
@@ -316,21 +316,117 @@ const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
   "evHub.portfolio.liveActuals.v17_44"
 ];
 function portfolioServerCompatibility(info) {
-  // Build metadata is diagnostic only. Validity is decided from the parsed
-  // calibration content returned after the files are uploaded.
   const actualBuild = String(info?.buildId || info?.build_id || "legacy / not reported");
   const actualSchema = String(info?.uploadSchemaVersion || info?.upload_schema_version || info?.schemaVersion || "legacy / not reported");
   const actualParser = String(info?.parserBuildId || info?.parser_build_id || "legacy / not reported");
   const fingerprint = String(info?.serverFileFingerprint || info?.server_file_fingerprint || "not reported");
-  const warnings = [];
-  if (actualBuild !== "legacy / not reported" && actualBuild !== APP_BUILD_ID) {
-    warnings.push(`Upload response came from backend ${actualBuild}; browser build is ${APP_BUILD_ID}. Parsed-content validation was applied.`);
-  } else if (actualBuild === "legacy / not reported") {
-    warnings.push("The backend did not report a build ID. Parsed-content validation was applied.");
+  const deploymentOk = info?.deploymentRootOk ?? info?.deployment_root_ok;
+  const mismatches = [];
+  if (actualBuild !== APP_BUILD_ID) mismatches.push(`backend ${actualBuild}; browser ${APP_BUILD_ID}`);
+  if (actualSchema !== PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION) mismatches.push(`schema ${actualSchema}; required ${PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION}`);
+  if (actualParser !== LIVE_UPLOAD_PARSER_BUILD_ID) mismatches.push(`parser ${actualParser}; required ${LIVE_UPLOAD_PARSER_BUILD_ID}`);
+  if (deploymentOk === false) mismatches.push("backend reports an incomplete deployment root");
+  return { ok: mismatches.length === 0, warnings: [], mismatches, actualBuild, actualSchema, actualParser, fingerprint, deploymentOk };
+}
+
+const PORTFOLIO_UPLOAD_PREFLIGHT_TIMEOUT_MS = 20000;
+const PORTFOLIO_UPLOAD_REQUEST_TIMEOUT_MS = 150000;
+function portfolioUploadError(title, message, whatToDo = [], extra = {}) {
+  return { title, message, what_to_do: whatToDo, ...extra };
+}
+function portfolioUploadResponsePreview(text) {
+  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 180);
+}
+async function portfolioFetchJson(url, options = {}, timeoutMs = PORTFOLIO_UPLOAD_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const { allowNotFound = false, ...fetchOptions } = options || {};
+  let response;
+  try {
+    response = await fetch(url, { cache: "no-store", credentials: "same-origin", ...fetchOptions, signal: controller.signal });
+    const contentType = String(response.headers.get("content-type") || "");
+    const responseText = await response.text();
+    if (allowNotFound && response.status === 404) {
+      return { response, payload: { ok: false, error: "Route not found" }, contentType };
+    }
+    const looksHtml = /^\s*</.test(responseText) || /text\/html/i.test(contentType);
+    if (looksHtml) {
+      const likelyLogin = /<form|password|login/i.test(responseText);
+      throw portfolioUploadError(
+        likelyLogin ? "Your application session has expired." : "The backend returned a web page instead of upload data.",
+        `${url} returned HTTP ${response.status} with ${contentType || "an unknown content type"}. ${portfolioUploadResponsePreview(responseText)}`,
+        likelyLogin
+          ? ["Refresh the application and sign in again, then retry the ZIP upload."]
+          : ["Confirm the Python backend is running from the same package as the browser frontend.", "Check the hosting logs for a proxy, gateway or server error."],
+        { code: "non-json-response", httpStatus: response.status, contentType }
+      );
+    }
+    let payload;
+    try {
+      payload = responseText ? JSON.parse(responseText) : {};
+    } catch (error) {
+      throw portfolioUploadError(
+        "The backend response could not be read.",
+        `${url} returned HTTP ${response.status}, but the response was not valid JSON. ${portfolioUploadResponsePreview(responseText)}`,
+        ["Confirm the frontend and backend were deployed together.", "Review the hosting logs for a truncated or gateway response."],
+        { code: "invalid-json-response", httpStatus: response.status, contentType }
+      );
+    }
+    return { response, payload, contentType };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw portfolioUploadError(
+        "Calibration upload timed out.",
+        `The request did not complete within ${Math.round(timeoutMs / 1000)} seconds and was cancelled instead of loading indefinitely.`,
+        ["Retry the complete ZIP pack once.", "If it times out again, check the hosting service logs and confirm the backend is not restarting or sleeping."],
+        { code: "upload-timeout" }
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return { ok: true, warnings, actualBuild, actualSchema, actualParser, fingerprint };
+}
+async function portfolioVerifyUploadBackend() {
+  const { response, payload } = await portfolioFetchJson("/api/version", { method: "GET" }, PORTFOLIO_UPLOAD_PREFLIGHT_TIMEOUT_MS);
+  if (!response.ok || !payload?.ok) {
+    throw portfolioUploadError("The upload backend is not ready.", payload?.error || payload?.message || `Version check returned HTTP ${response.status}.`, ["Restart or redeploy the Python backend from this package."]);
+  }
+  const compatibility = portfolioServerCompatibility(payload);
+  if (!compatibility.ok) {
+    throw portfolioUploadError(
+      "Frontend and backend versions do not match.",
+      `The upload was stopped before processing to protect the active dataset. ${compatibility.mismatches.join("; ")}.`,
+      ["Deploy the complete package, not individual frontend files.", "Restart the Python service after deployment.", "Hard-refresh the browser after the service is healthy."],
+      { code: "deployment-mismatch", backend: payload }
+    );
+  }
+  return payload;
+}
+function portfolioCalibrationFormData(files) {
+  const form = new FormData();
+  files.forEach(file => form.append("files", file, file.name));
+  return form;
+}
+function portfolioUploadStatusText(text) {
+  const node = el("portfolioCalibrationUploadStatus");
+  if (node) node.textContent = text;
+}
+function portfolioNormaliseUploadError(error) {
+  if (error?.title || error?.message || error?.error) return error;
+  return portfolioUploadError("Calibration upload failed.", String(error || "Unknown upload error"), ["Retry the complete ZIP pack."]);
 }
 function portfolioSnapshotValidation(snapshot) {
+  const compatibility = portfolioServerCompatibility(snapshot || {});
+  if (!compatibility.ok) {
+    return {
+      ok: false,
+      code: "deployment-mismatch",
+      title: "Frontend and backend versions do not match.",
+      reason: `The returned upload data came from an incompatible backend: ${compatibility.mismatches.join("; ")}.`,
+      what_to_do: ["Deploy and restart the complete package, then hard-refresh the browser."]
+    };
+  }
   if (!snapshot || !Array.isArray(snapshot.siteActuals) || snapshot.siteActuals.length === 0) {
     return { ok: false, code: "no-site-actuals", reason: "Upload response did not contain any site actuals." };
   }
@@ -355,7 +451,6 @@ function portfolioSnapshotValidation(snapshot) {
     return { ok: false, code: "no-usable-actuals", reason: "The server returned site rows, but none contained usable kWh, session, revenue or monthly-history data." };
   }
   if (dailyFilePresent && (historySiteCount === 0 || dailyHistorySiteCount === 0)) {
-    const compatibility = portfolioServerCompatibility(snapshot);
     return {
       ok: false,
       code: "history-missing",
@@ -368,7 +463,6 @@ function portfolioSnapshotValidation(snapshot) {
       ]
     };
   }
-  const compatibility = portfolioServerCompatibility(snapshot);
   return {
     ok: true,
     historySiteCount,
@@ -676,6 +770,13 @@ function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {
   const hasLive = status.hasLive;
   const latest = portfolioLiveActualsSnapshot?.latestDate || "—";
   const parsedFiles = portfolioLiveActualsSnapshot?.parsedFiles || [];
+  const requestMs = Number(portfolioLiveActualsSnapshot?.requestTimingsMs?.serverBeforeResponse || 0);
+  const parserMs = Number(portfolioLiveActualsSnapshot?.parserTimingsMs?.parserTotal || 0);
+  const processingMs = requestMs || parserMs;
+  const primarySelection = portfolioLiveActualsSnapshot?.primarySourceSelection === "canonical_filename" ? "canonical daily source" : "header-detected daily source";
+  const uploadStatusSummary = hasLive
+    ? `Source files: ${h(parsedFiles.join(", ") || "uploaded dashboard export")}${processingMs ? ` · processed in ${(processingMs / 1000).toFixed(1)}s server time` : ""}${portfolioLiveActualsSnapshot?.primarySourceSelection ? ` · ${h(primarySelection)}` : ""}`
+    : "Choose one or more calibration Excel files. The app validates them automatically and only uses them if they pass.";
   const rawWarnings = portfolioLiveActualsSnapshot?.warnings || [];
   const supportingFiles = [...(portfolioLiveActualsSnapshot?.supportingFiles || []), ...rawWarnings.filter(w => String(w).includes("supporting file"))];
   const warnings = rawWarnings.filter(w => !String(w).includes("supporting file"));
@@ -702,7 +803,7 @@ function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {
       <input id="portfolioCalibrationFiles" type="file" accept=".xlsx,.xlsm,.csv,.zip" multiple style="display:none" />
       ${hasLive ? `<button type="button" class="secondary" id="clearPortfolioCalibrationUpload">Reset to stored app data</button>` : ""}
     </div>
-    <div id="portfolioCalibrationUploadStatus" class="muted small">${hasLive ? `Source files: ${h(parsedFiles.join(", ") || "uploaded dashboard export")}` : "Choose one or more calibration Excel files. The app validates them automatically and only uses them if they pass."}</div>
+    <div id="portfolioCalibrationUploadStatus" class="muted small">${uploadStatusSummary}</div>
   </section>`;
 }
 
@@ -898,7 +999,7 @@ function table(headers, rows, cls = "") {
 
 function portfolioFinancialTableMarkup(headers, rows) {
   const labels = headers.map(plainTableLabel);
-  const widths = [300, 95, 185, 145, 180, 145, 130, 165, 150, 155];
+  const widths = [18.2, 5.8, 11.2, 8.8, 10.9, 8.8, 7.9, 10.0, 9.1, 9.3];
   const normaliseRow = row => Array.isArray(row) ? { cells: row, className: "" } : { cells: row?.cells || [], className: row?.className || "" };
   const body = rows.length
     ? rows.map(rawRow => {
@@ -906,34 +1007,11 @@ function portfolioFinancialTableMarkup(headers, rows) {
       return `<tr${row.className ? ` class="${h(row.className)}"` : ""}>${row.cells.map((cell, i) => `<td data-label="${h(labels[i] || "Value")}">${cell}</td>`).join("")}</tr>`;
     }).join("")
     : `<tr><td data-label="Status" colspan="${headers.length}">No rows to display.</td></tr>`;
-  return `<div class="portfolio-financial-scroll-shell"><div class="portfolio-financial-scroll-top" aria-label="Horizontal table scroll"><div></div></div><div class="table-wrap portfolio-financial-table-wrap"><table class="portfolio-table portfolio-financial-table"><colgroup>${widths.map(width => `<col style="width:${width}px">`).join("")}</colgroup><thead><tr>${headers.map(header => `<th>${header}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+  return `<div class="table-wrap portfolio-financial-table-wrap"><table class="portfolio-table portfolio-financial-table"><colgroup>${widths.map(width => `<col style="width:${width}%">`).join("")}</colgroup><thead><tr>${headers.map(header => `<th>${header}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function setupPortfolioFinancialTableScroll() {
-  const shell = document.querySelector(".portfolio-financial-scroll-shell");
-  const top = shell?.querySelector(".portfolio-financial-scroll-top");
-  const topInner = top?.querySelector("div");
-  const bottom = shell?.querySelector(".table-wrap");
-  const tableEl = bottom?.querySelector("table");
-  if (!top || !topInner || !bottom || !tableEl) return;
-  const syncWidth = () => {
-    topInner.style.width = `${Math.max(tableEl.scrollWidth, bottom.clientWidth)}px`;
-    top.hidden = tableEl.scrollWidth <= bottom.clientWidth + 2;
-  };
-  let syncing = false;
-  top.addEventListener("scroll", () => {
-    if (syncing) return;
-    syncing = true;
-    bottom.scrollLeft = top.scrollLeft;
-    syncing = false;
-  });
-  bottom.addEventListener("scroll", () => {
-    if (syncing) return;
-    syncing = true;
-    top.scrollLeft = bottom.scrollLeft;
-    syncing = false;
-  });
-  syncWidth();
-  requestAnimationFrame(syncWidth);
+  // The desktop table is fluid and fits the Portfolio Financials canvas.
+  // Controlled horizontal scrolling remains available only on genuinely narrow screens.
 }
 
 function preserveScrollRender() {
@@ -4310,7 +4388,7 @@ function portfolioFinancialRows() {
 const PORTFOLIO_FINANCIAL_PROJECTION_HORIZONS = Array.from({ length: 20 }, (_, i) => i + 1);
 const PORTFOLIO_FINANCIAL_QUICK_HORIZONS = [5, 10, 15, 20];
 const PORTFOLIO_FINANCIAL_FILTERS = ["status", "historyQuality", "quality", "history", "daysBasis", "capex", "revenue", "payback"];
-const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v21";
+const PORTFOLIO_FINANCIAL_STORAGE_PREFIX = "evHub.portfolioFinancials.v21_1";
 function portfolioFinancialHorizon() {
   const raw = Math.round(Number(localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.horizon`) || 5));
   return Math.max(1, Math.min(20, Number.isFinite(raw) ? raw : 5));
@@ -5597,6 +5675,8 @@ function render() {
   };
   try {
     activeTab = VALID_TABS.includes(activeTab) ? activeTab : "site";
+    document.body.classList.toggle("portfolio-financial-active", activeTab === "portfolioFinancials");
+    el("app")?.classList.toggle("portfolio-financial-wide", activeTab === "portfolioFinancials");
     updateResponsiveTabNavigation();
     document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
     updateWorkflowStepper();
@@ -5984,33 +6064,40 @@ function wirePage(r) {
   if (portfolioUploadInput) portfolioUploadInput.addEventListener("change", async () => {
     const files = Array.from(portfolioUploadInput.files || []);
     if (!files.length) {
-      if (portfolioUploadStatus) portfolioUploadStatus.textContent = "No files selected. Stored calibration data remains active.";
+      portfolioUploadStatusText("No files selected. Stored calibration data remains active.");
       return;
     }
-    const form = new FormData();
-    files.forEach(file => form.append("files", file, file.name));
     portfolioUploadInput.disabled = true;
-    if (portfolioUploadStatus) portfolioUploadStatus.textContent = "Uploading and validating calibration files…";
+    portfolioLiveUploadError = null;
+    const stageTimers = [];
     try {
-      // Restore the reliable workflow used in earlier releases: upload first,
-      // then validate the returned site data. Backend build metadata is useful
-      // for diagnostics but must never prevent a valid Excel/ZIP upload.
-      let res = await fetch("/api/import-live-calibration-v1745", { method: "POST", body: form, cache: "no-store" });
-      if (res.status === 404) {
-        res = await fetch("/api/import-live-calibration", { method: "POST", body: form, cache: "no-store" });
+      portfolioUploadStatusText("Step 1 of 5 — Checking frontend/backend compatibility…");
+      await portfolioVerifyUploadBackend();
+      portfolioUploadStatusText(`Step 2 of 5 — Uploading ${files.length} file${files.length === 1 ? "" : "s"} and reading Daily_Charger_kWh…`);
+      stageTimers.push(setTimeout(() => portfolioUploadStatusText("Step 3 of 5 — Backend is aggregating daily rows into site histories…"), 8000));
+      stageTimers.push(setTimeout(() => portfolioUploadStatusText("Step 3 of 5 — Still processing; the request will cancel automatically if the backend does not respond."), 30000));
+      let result = await portfolioFetchJson("/api/import-live-calibration-v1745", { method: "POST", body: portfolioCalibrationFormData(files), allowNotFound: true });
+      if (result.response.status === 404) {
+        portfolioUploadStatusText("Compatibility route unavailable — retrying the current upload route…");
+        result = await portfolioFetchJson("/api/import-live-calibration", { method: "POST", body: portfolioCalibrationFormData(files) });
       }
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok || !payload.ok) throw payload;
+      const { response, payload } = result;
+      if (!response.ok || !payload?.ok) throw portfolioNormaliseUploadError(payload || { message: `Upload returned HTTP ${response.status}.` });
+      portfolioUploadStatusText("Step 4 of 5 — Validating daily and monthly site histories…");
       if (!savePortfolioLiveActuals(payload)) {
         render();
         return;
       }
+      const parseMs = Number(payload?.requestTimingsMs?.serverBeforeResponse || payload?.parserTimingsMs?.parserTotal || 0);
+      portfolioUploadStatusText(`Step 5 of 5 — Complete${parseMs ? ` in ${(parseMs / 1000).toFixed(1)} seconds server time` : ""}. Activating forecasts…`);
       render();
     } catch (err) {
-      portfolioLiveUploadError = err || { message: "Unknown upload error" };
+      portfolioLiveUploadError = portfolioNormaliseUploadError(err);
       render();
     } finally {
+      stageTimers.forEach(clearTimeout);
       portfolioUploadInput.disabled = false;
+      portfolioUploadInput.value = "";
     }
   });
   const clearPortfolioUpload = el("clearPortfolioCalibrationUpload");

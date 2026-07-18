@@ -1,8 +1,8 @@
 {
-  "appVersion": "V21",
-  "buildId": "EVHUB-V21-20260716-R1",
+  "appVersion": "V21.1",
+  "buildId": "EVHUB-V21.1-20260717-R1",
   "uploadSchemaVersion": "v21-live-history-v7",
-  "parserBuildId": "EVHUB-LIVE-PARSER-21.1",
+  "parserBuildId": "EVHUB-LIVE-PARSER-21.2",
   "packageLayoutVersion": "flat-root-v1",
   "entrypoint": "python server.py",
   "requiredRootFiles": [
@@ -11,5 +11,6 @@
     "assets/styles.css",
     "js/app.js",
     "DEPLOYMENT_MANIFEST.json"
-  ]
+  ],
+  "cacheBuster": "21-1-upload-layout-20260717-r1"
 }

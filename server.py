@@ -16,6 +16,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import hashlib
+import gzip
 import hmac
 import io
 import json
@@ -41,11 +42,11 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-APP_VERSION = "V21"
-APP_BUILD_ID = "EVHUB-V21-20260716-R1"
+APP_VERSION = "V21.1"
+APP_BUILD_ID = "EVHUB-V21.1-20260717-R1"
 LIVE_UPLOAD_SCHEMA_VERSION = "v21-live-history-v7"
-LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.1"
-AADT_ENGINE_VERSION = "V21 AADT audited resolver + validated ZIP/live-history upload"
+LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.2"
+AADT_ENGINE_VERSION = "V21.1 AADT audited resolver + hardened ZIP/live-history upload"
 DEPLOYMENT_REQUIRED_FILES = ("index.html", "js/app.js", "js/engines/maturityEngine.js", "assets/styles.css", "DEPLOYMENT_MANIFEST.json")
 SERVER_FILE_FINGERPRINT = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
 PACKAGE_LAYOUT_VERSION = "flat-root-v1"
@@ -82,8 +83,8 @@ def _deployment_integrity() -> dict:
     if index_path.exists():
         try:
             index_text = index_path.read_text(encoding="utf-8")
-            if "21-portfolio-forecast-audit-20260716-r1" not in index_text:
-                problems.append("index.html cache-buster is not the V21 deployment build")
+            if "21-1-upload-layout-20260717-r1" not in index_text:
+                problems.append("index.html cache-buster is not the V21.1 deployment build")
         except Exception as exc:
             problems.append(f"index.html could not be verified: {exc}")
     return {
@@ -4105,29 +4106,88 @@ def _build_daily_live_history(daily: dict, first_active: dt.date | None, latest_
     return rows
 
 
+
+def _is_primary_daily_calibration_filename(filename: str) -> bool:
+    """Return True for the charger-level daily export used as the canonical source.
+
+    A full dashboard pack contains many derived workbooks. Opening every workbook is
+    slow and can create proxy timeouts. When the canonical Daily_Charger_kWh export
+    is present, only that workbook is parsed; all other workbooks are retained as
+    supporting-file diagnostics without being opened.
+    """
+    base = str(filename or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+    stem = re.sub(r"\.(xlsx|xlsm|csv)$", "", base)
+    normalised = re.sub(r"[^a-z0-9]+", "_", stem).strip("_")
+    return normalised == "daily_charger_kwh" or normalised.startswith("daily_charger_kwh_")
+
+
+def _dashboard_header_probe(filename: str, raw: bytes) -> list[object]:
+    """Read only the first row when a non-standard filename must be inspected."""
+    lower = (filename or "").lower()
+    if lower.endswith((".xlsx", ".xlsm")) or raw[:2] == b"PK":
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+            ws = wb.worksheets[0]
+            row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+            try:
+                wb.close()
+            except Exception:
+                pass
+            return list(row)
+        except Exception:
+            rows = _xlsx_rows_stdlib(raw, max_rows=1)
+            return rows[0] if rows else []
+    text = raw.decode("utf-8-sig", errors="replace")
+    row = next(csv.reader(io.StringIO(text)), [])
+    return list(row)
+
+
 def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
+    started = time.perf_counter()
     errors: list[str] = []
     expanded_files, archive_warnings, uploaded_archive_count = _expand_calibration_upload_files(files)
+    expanded_at = time.perf_counter()
     warnings: list[str] = list(archive_warnings)
     supporting_files: list[str] = []
     parsed_sources: list[str] = []
     site_days: dict[str, dict] = {}
     total_rows = 0
 
-    for filename, raw in expanded_files:
-        lower = filename.lower()
-        if not lower.endswith((".xlsx", ".xlsm", ".csv")):
-            warnings.append(f"Ignored unsupported file type: {filename}")
-            continue
-        # Running-total / cumulative dashboard exports can contain the same
-        # column names as the daily charger export, but their kWh values are
-        # cumulative. They must not be added into the rolling 30-day actuals.
-        # Keep them as supporting files only so a full dashboard pack can be
-        # uploaded without inflating live performance by orders of magnitude.
-        if re.search(r"running[_\s-]*total|cumulative", lower):
-            supporting_files.append(filename)
-            warnings.append(f"{filename}: treated as supporting cumulative file and excluded from rolling 30-day actuals.")
-            continue
+    spreadsheet_files = [(filename, raw) for filename, raw in expanded_files if filename.lower().endswith((".xlsx", ".xlsm", ".csv"))]
+    primary_files = [(filename, raw) for filename, raw in spreadsheet_files if _is_primary_daily_calibration_filename(filename)]
+    selection_mode = "canonical_filename" if primary_files else "header_probe"
+
+    if primary_files:
+        primary_names = {filename for filename, _ in primary_files}
+        for filename, _ in spreadsheet_files:
+            if filename not in primary_names:
+                supporting_files.append(filename)
+        files_to_parse = primary_files
+    else:
+        files_to_parse = []
+        for filename, raw in spreadsheet_files:
+            lower = filename.lower()
+            if re.search(r"running[_\s-]*total|cumulative", lower):
+                supporting_files.append(filename)
+                continue
+            try:
+                headers = _dashboard_header_probe(filename, raw)
+                date_idx = _header_index(headers, "Date of start_time", "date")
+                cp_idx = _header_index(headers, "charge_point_name")
+                kwh_idx = _header_index(headers, "Total charge_amount")
+                if cp_idx is not None and kwh_idx is not None and date_idx is not None:
+                    files_to_parse.append((filename, raw))
+                else:
+                    supporting_files.append(filename)
+            except Exception as exc:
+                errors.append(f"{filename}: could not inspect file ({exc})")
+
+    selection_at = time.perf_counter()
+    if not files_to_parse:
+        raise ValueError("No usable charger-level daily export was found. Upload Daily_Charger_kWh.xlsx or another file containing Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns.")
+
+    for filename, raw in files_to_parse:
         try:
             matrix = _dashboard_matrix_from_upload(filename, raw)
         except Exception as exc:
@@ -4166,6 +4226,7 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
             day["net"] += _live_number(row[net_idx] if net_idx is not None and net_idx < len(row) else 0)
             day["sessions"] += _live_number(row[sessions_idx] if sessions_idx is not None and sessions_idx < len(row) else 0)
 
+    parsed_at = time.perf_counter()
     if not parsed_sources:
         raise ValueError("No usable charger-level daily export was found. Upload Daily_Charger_kWh.xlsx or another file containing Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns.")
 
@@ -4300,6 +4361,14 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         for row in item.get("actual", {}).get("monthlyHistory", [])
         if row.get("isCompleteCalendarMonth")
     )
+    finished = time.perf_counter()
+    parser_timings = {
+        "expandArchive": round((expanded_at - started) * 1000, 1),
+        "selectPrimarySource": round((selection_at - expanded_at) * 1000, 1),
+        "readAndAggregateDailyRows": round((parsed_at - selection_at) * 1000, 1),
+        "buildSiteHistories": round((finished - parsed_at) * 1000, 1),
+        "parserTotal": round((finished - started) * 1000, 1),
+    }
     return {
         "ok": True,
         "source": "uploaded_live_calibration_files",
@@ -4335,6 +4404,9 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
         "rowCount": total_rows,
         "uploadedArchiveCount": uploaded_archive_count,
         "expandedSpreadsheetCount": len(expanded_files),
+        "primarySourceSelection": selection_mode,
+        "primarySourceFiles": parsed_sources,
+        "parserTimingsMs": parser_timings,
         "monthlyHistorySiteCount": monthly_history_site_count,
         "monthlyObservationCount": monthly_observation_count,
         "dailyHistorySiteCount": daily_history_site_count,
@@ -4578,16 +4650,27 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
 
-    def _send_json(self, payload, status=200):
-        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    def _send_json(self, payload, status=200, extra_headers=None):
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        encoded = raw
+        use_gzip = len(raw) >= 1024 and "gzip" in (self.headers.get("Accept-Encoding", "").lower())
+        if use_gzip:
+            encoded = gzip.compress(raw, compresslevel=6)
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(raw)))
+        if use_gzip:
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
+        self.send_header("Content-Length", str(len(encoded)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         self.send_header("Pragma", "no-cache")
+        self.send_header("X-EVHub-Build", APP_BUILD_ID)
+        self.send_header("X-EVHub-Parser", LIVE_UPLOAD_PARSER_BUILD_ID)
+        for name, value in (extra_headers or {}).items():
+            self.send_header(str(name), str(value))
         self.end_headers()
-        self.wfile.write(raw)
+        self.wfile.write(encoded)
 
     def _send_file(self, path: Path, content_type="text/html; charset=utf-8"):
         raw = path.read_bytes()
@@ -4648,6 +4731,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"ok": False, "error": str(exc)}, status=422)
 
         if parsed.path in ("/api/import-live-calibration", "/api/import-live-calibration-v1745"):
+            request_started = time.perf_counter()
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 if length <= 0:
@@ -4656,19 +4740,35 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send_json({"ok": False, "error": "Upload is too large. Please upload the dashboard Excel exports only."}, status=400)
                 content_type = self.headers.get("Content-Type", "")
                 body = self.rfile.read(length)
+                body_read_at = time.perf_counter()
                 files = _extract_multipart_files(body, content_type)
+                multipart_at = time.perf_counter()
                 parsed_actuals = parse_live_calibration_uploads(files)
-                return self._send_json(parsed_actuals)
+                parsed_at = time.perf_counter()
+                request_timings = {
+                    "readUploadBody": round((body_read_at - request_started) * 1000, 1),
+                    "extractMultipart": round((multipart_at - body_read_at) * 1000, 1),
+                    "parseCalibration": round((parsed_at - multipart_at) * 1000, 1),
+                    "serverBeforeResponse": round((parsed_at - request_started) * 1000, 1),
+                }
+                parsed_actuals["requestTimingsMs"] = request_timings
+                server_timing = ", ".join([
+                    f'upload;dur={request_timings["readUploadBody"]}',
+                    f'multipart;dur={request_timings["extractMultipart"]}',
+                    f'parse;dur={request_timings["parseCalibration"]}',
+                ])
+                return self._send_json(parsed_actuals, extra_headers={"Server-Timing": server_timing})
             except Exception as exc:
                 error_payload = {
                     "ok": False,
                     "error": str(exc),
                     "message": "Live calibration upload failed. The app will continue using the stored calibration dataset.",
                     "what_to_do": [
-                        "Upload Daily_Charger_kWh.xlsx or equivalent charger-level daily export.",
+                        "Upload the complete ZIP pack or Daily_Charger_kWh.xlsx.",
                         "Check that the file contains Date of start_time, charge_point_name, Total charge_amount and transaction_id Count columns.",
-                        "If the export format changed, re-export from the dashboard and try again."
-                    ]
+                        "Confirm the browser frontend and Python backend were deployed from the same package."
+                    ],
+                    "requestTimingsMs": {"serverBeforeError": round((time.perf_counter() - request_started) * 1000, 1)},
                 }
                 error_payload.update(_version_payload())
                 error_payload["ok"] = False

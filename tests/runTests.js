@@ -19,12 +19,13 @@ function run(command, args) {
 console.log("\n[1/6] Syntax and static production guards");
 run(python, ["-m", "py_compile", "server.py"]);
 for (const file of ["js/app.js", "js/engines/maturityEngine.js", "js/engines/exportEngine.js"]) run("node", ["--check", file]);
+run("node", ["tests/upload_route_resilience_test.js"]);
 const app = fs.readFileSync(path.join(root, "js", "app.js"), "utf8");
 const server = fs.readFileSync(path.join(root, "server.py"), "utf8");
 const css = fs.readFileSync(path.join(root, "assets", "styles.css"), "utf8");
 const bundle = JSON.parse(fs.readFileSync(path.join(root, "data", "tii_counter_locations_bundled_vetted.json"), "utf8"));
 assert.match(app, /V21 browser provenance-controlled AADT engine/);
-assert.match(server, /V21\.1 AADT audited resolver/);
+assert.match(server, /V21\.2 AADT audited resolver/);
 assert.match(app, /if \(absolute <= 30000\).*capex-delta-green/);
 assert.match(app, /if \(absolute <= 50000\).*capex-delta-amber/);
 assert.match(app, /return \{ key: "red", cls: "capex-delta-red"/);
@@ -58,16 +59,16 @@ assert.match(css, /app\.portfolio-financial-wide/);
 assert.match(css, /portfolio-financial-table th:nth-child\(10\)/);
 assert.match(css, /portfolio-financial-table td:first-child[\s\S]*position: sticky/);
 assert.match(css, /portfolio-financial-table \{[\s\S]*table-layout: fixed/);
-const v211CssMarker = css.lastIndexOf("/* V21.1 — full-width Portfolio Financials");
-assert.ok(v211CssMarker > css.lastIndexOf("width: 1650px"), "V21.1 fluid-width rules must override legacy fixed-width rules");
-const v211Css = css.slice(v211CssMarker);
-assert.match(v211Css, /overflow-x: visible/);
-assert.match(v211Css, /min-width: 0/);
-assert.match(v211Css, /@media \(max-width: 1279px\)[\s\S]*overflow-x: auto/);
+const v212CssMarker = css.lastIndexOf("/* V21.2 — full-width Portfolio Financials");
+assert.ok(v212CssMarker > css.lastIndexOf("width: 1650px"), "V21.2 fluid-width rules must override legacy fixed-width rules");
+const v212Css = css.slice(v212CssMarker);
+assert.match(v212Css, /overflow-x: visible/);
+assert.match(v212Css, /min-width: 0/);
+assert.match(v212Css, /@media \(max-width: 1279px\)[\s\S]*overflow-x: auto/);
 assert.match(server, /"monthlyHistory": monthly_history/);
 assert.match(server, /LIVE_UPLOAD_SCHEMA_VERSION = "v21-live-history-v7"/);
-assert.match(server, /APP_BUILD_ID = "EVHUB-V21.1-20260717-R1"/);
-assert.match(server, /LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21\.2"/);
+assert.match(server, /APP_BUILD_ID = "EVHUB-V21.2-20260718-R1"/);
+assert.match(server, /LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21\.3"/);
 assert.match(server, /"monthlyObservationCount": monthly_observation_count/);
 assert.match(server, /"dailyHistory": daily_history/);
 assert.match(server, /"dailyObservationCount": daily_observation_count/);
@@ -77,7 +78,7 @@ assert.match(app, /data-funding-modal-open/);
 assert.match(app, /Standing \+ capacity/);
 assert.match(app, /Funding available EUR/);
 assert.match(app, /PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7"/);
-assert.match(app, /APP_BUILD_ID = "EVHUB-V21.1-20260717-R1"/);
+assert.match(app, /APP_BUILD_ID = "EVHUB-V21.2-20260718-R1"/);
 assert.match(app, /accept="\.xlsx,\.xlsm,\.csv,\.zip"/);
 assert.match(server, /def _expand_calibration_upload_files/);
 assert.match(server, /def _is_primary_daily_calibration_filename/);
@@ -111,32 +112,35 @@ assert.match(exportEngine, /History quality/);
 assert.match(fs.readFileSync(path.join(root, "js", "engines", "exportEngine.js"), "utf8"), /name: "Portfolio Summary"/);
 assert.match(fs.readFileSync(path.join(root, "js", "engines", "exportEngine.js"), "utf8"), /name: "Definitions"/);
 assert.doesNotMatch(app, /<h3>Maturity forecast summary<\/h3>/);
-assert.match(fs.readFileSync(path.join(root, "index.html"), "utf8"), /21-1-upload-layout-20260717-r1/);
+assert.match(fs.readFileSync(path.join(root, "index.html"), "utf8"), /21-2-route-discovery-20260718-r1/);
 assert.doesNotMatch(server, /raise SystemExit\(2\)/);
-const compatibilitySource = app.match(/function portfolioServerCompatibility\(info\) \{[\s\S]*?\n\}/)?.[0];
+const compatibilitySource = app.match(/function portfolioServerCompatibility\(info, options = \{\}\) \{[\s\S]*?\n\}/)?.[0];
 const snapshotValidationSource = app.match(/function portfolioSnapshotValidation\(snapshot\) \{[\s\S]*?\n\}/)?.[0];
 assert.ok(compatibilitySource, "server compatibility diagnostics must exist");
 assert.ok(snapshotValidationSource, "live-upload snapshot validation must exist");
 assert.match(app, /portfolioVerifyUploadBackend/);
-assert.match(app, /portfolioFetchJson\("\/api\/version"/);
+assert.match(app, /portfolioApiCandidates\("api\/version"\)/);
+assert.match(app, /portfolioUploadCalibrationFiles/);
+assert.match(app, /Version route unavailable; trying compatible upload routes automatically/);
 assert.match(app, /PORTFOLIO_UPLOAD_REQUEST_TIMEOUT_MS = 150000/);
 assert.match(app, /responseText \? JSON\.parse/);
 assert.match(app, /api\/import-live-calibration-v1745/);
 const snapshotContext = {};
-vm.runInNewContext(`const APP_RELEASE_VERSION = "V21.1"; const APP_BUILD_ID = "EVHUB-V21.1-20260717-R1"; const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.2"; const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7"; ${compatibilitySource}; ${snapshotValidationSource}; this.validate = portfolioSnapshotValidation;`, snapshotContext);
-const buildMeta = { buildId: "EVHUB-V21.1-20260717-R1", uploadSchemaVersion: "v21-live-history-v7", parserBuildId: "EVHUB-LIVE-PARSER-21.2", monthlyHistorySupported: true, dailyHistorySupported: true, deploymentRootOk: true, packageLayoutVersion: "flat-root-v1", serverFileFingerprint: "testfingerprint" };
+vm.runInNewContext(`const APP_RELEASE_VERSION = "V21.2"; const APP_BUILD_ID = "EVHUB-V21.2-20260718-R1"; const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.3"; const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7"; ${compatibilitySource}; ${snapshotValidationSource}; this.validate = portfolioSnapshotValidation;`, snapshotContext);
+const buildMeta = { buildId: "EVHUB-V21.2-20260718-R1", uploadSchemaVersion: "v21-live-history-v7", parserBuildId: "EVHUB-LIVE-PARSER-21.3", monthlyHistorySupported: true, dailyHistorySupported: true, deploymentRootOk: true, packageLayoutVersion: "flat-root-v1", serverFileFingerprint: "testfingerprint" };
 const missingHistoryResult = snapshotContext.validate({ ...buildMeta, parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: { annualKwh: 1000, monthlyHistory: [], dailyHistory: [] } }] });
 assert.equal(missingHistoryResult.ok, false, "Daily_Charger_kWh must not be activated when the backend omits daily or monthly histories");
 assert.equal(missingHistoryResult.code, "history-missing");
 assert.match(missingHistoryResult.reason, /both daily and monthly site histories/i);
 const validHistory = { annualKwh: 1000, monthlyHistory: [{ month: "2026-01", kwh: 100 }], dailyHistory: [{ date: "2026-01-01", kwh: 10, rolling30Kwh: 10 }] };
 assert.equal(snapshotContext.validate({ ...buildMeta, parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: validHistory }] }).ok, true, "valid daily and monthly history upload must be accepted");
-const mismatched = snapshotContext.validate({ ...buildMeta, buildId: "OLD", parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: validHistory }] });
-assert.equal(mismatched.ok, false, "an incompatible backend must be blocked before activation");
-assert.equal(mismatched.code, "deployment-mismatch");
-const legacyCompatible = snapshotContext.validate({ aadt_engine_version: "V17.40 legacy", parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: validHistory }] });
-assert.equal(legacyCompatible.ok, false);
-assert.equal(legacyCompatible.code, "deployment-mismatch");
+const mismatchedBuild = snapshotContext.validate({ ...buildMeta, buildId: "OLDER-COMPATIBLE-BUILD", parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: validHistory }] });
+assert.equal(mismatchedBuild.ok, true, "a build-ID difference must not block a structurally valid history payload");
+const legacyCompatible = snapshotContext.validate({ aadt_engine_version: "legacy", parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: validHistory }] });
+assert.equal(legacyCompatible.ok, true, "an unversioned backend response must be accepted when the daily/monthly payload validates");
+const schemaMismatch = snapshotContext.validate({ ...buildMeta, uploadSchemaVersion: "old-schema", parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: validHistory }] });
+assert.equal(schemaMismatch.ok, false, "an explicitly incompatible history schema must still be rejected");
+assert.equal(schemaMismatch.code, "schema-mismatch");
 assert.equal(snapshotContext.validate({ parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: { monthlyHistory: [] } }] }).ok, false, "empty rows without usable actuals must still be rejected");
 const performanceSource = app.match(/function portfolioFinancialPerformanceStatus\(forecastKwh, modelKwh\) \{[\s\S]*?\n\}/)?.[0];
 assert.ok(performanceSource, "forward performance status function must exist");
@@ -230,7 +234,7 @@ console.log("\n[5/6] Live local API and static-delivery smoke test");
 const port = await freePort();
 const child = spawn(python, ["server.py"], {
   cwd: root,
-  env: { ...process.env, PORT: String(port), DISABLE_BROWSER_OPEN: "1", PYTHONUNBUFFERED: "1" },
+  env: { ...process.env, PORT: String(port), EVHUB_ALLOW_PORT_FALLBACK: "0", DISABLE_BROWSER_OPEN: "1", PYTHONUNBUFFERED: "1" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let logs = "";
@@ -241,20 +245,25 @@ try {
   const version = await versionResp.json();
   assert.equal(version.ok, true);
   assert.match(version.aadt_engine_version, /V21/);
-  assert.equal(version.buildId, "EVHUB-V21.1-20260717-R1");
+  assert.equal(version.buildId, "EVHUB-V21.2-20260718-R1");
   assert.equal(version.uploadSchemaVersion, "v21-live-history-v7");
-  assert.equal(version.parserBuildId, "EVHUB-LIVE-PARSER-21.2");
+  assert.equal(version.parserBuildId, "EVHUB-LIVE-PARSER-21.3");
   assert.equal(version.monthlyHistorySupported, true);
   assert.equal(version.deploymentRootOk, true);
   assert.equal(version.packageLayoutVersion, "flat-root-v1");
   assert.equal(version.frontendBuildVerified, true);
   assert.match(version.serverFileFingerprint, /^[a-f0-9]{16}$/);
 
+  const prefixedVersionResp = await fetch(`http://127.0.0.1:${port}/embedded/app/api/version`);
+  assert.equal(prefixedVersionResp.status, 200);
+  const prefixedVersion = await prefixedVersionResp.json();
+  assert.equal(prefixedVersion.buildId, "EVHUB-V21.2-20260718-R1");
+
   const healthResp = await fetch(`http://127.0.0.1:${port}/api/health`);
   assert.equal(healthResp.status, 200);
   const health = await healthResp.json();
   assert.equal(health.health, "ok");
-  assert.equal(health.buildId, "EVHUB-V21.1-20260717-R1");
+  assert.equal(health.buildId, "EVHUB-V21.2-20260718-R1");
   assert.equal(health.packageLayoutVersion, "flat-root-v1");
 
   const empty = await fetch(`http://127.0.0.1:${port}/api/auto-tii-aadt`);
@@ -288,9 +297,9 @@ try {
   assert.equal(uploadResp.status, 200);
   const upload = await uploadResp.json();
   assert.equal(upload.ok, true);
-  assert.equal(upload.buildId, "EVHUB-V21.1-20260717-R1");
+  assert.equal(upload.buildId, "EVHUB-V21.2-20260718-R1");
   assert.equal(upload.schemaVersion, "v21-live-history-v7");
-  assert.equal(upload.parserBuildId, "EVHUB-LIVE-PARSER-21.2");
+  assert.equal(upload.parserBuildId, "EVHUB-LIVE-PARSER-21.3");
   assert.equal(upload.packageLayoutVersion, "flat-root-v1");
   assert.equal(upload.monthlyHistorySiteCount, 1);
   assert.ok(upload.monthlyObservationCount >= 3);
@@ -300,9 +309,16 @@ try {
   assert.ok(Number(upload.parserTimingsMs?.parserTotal) >= 0);
   assert.ok(Number(upload.requestTimingsMs?.serverBeforeResponse) >= 0);
   assert.match(uploadResp.headers.get("server-timing") || "", /parse;dur=/);
-  assert.equal(uploadResp.headers.get("x-evhub-build"), "EVHUB-V21.1-20260717-R1");
-  assert.equal(uploadResp.headers.get("x-evhub-parser"), "EVHUB-LIVE-PARSER-21.2");
+  assert.equal(uploadResp.headers.get("x-evhub-build"), "EVHUB-V21.2-20260718-R1");
+  assert.equal(uploadResp.headers.get("x-evhub-parser"), "EVHUB-LIVE-PARSER-21.3");
   assert.equal(uploadResp.headers.get("content-encoding"), "gzip");
+
+  const prefixedUploadForm = new FormData();
+  prefixedUploadForm.append("files", new Blob([csvRows.join("\n")], { type: "text/csv" }), "Daily_Charger_kWh.csv");
+  const prefixedUploadResp = await fetch(`http://127.0.0.1:${port}/embedded/app/api/import-live-calibration`, { method: "POST", body: prefixedUploadForm });
+  assert.equal(prefixedUploadResp.status, 200, "upload API must work behind an application subpath");
+  const prefixedUpload = await prefixedUploadResp.json();
+  assert.equal(prefixedUpload.dailyHistorySiteCount, 1);
 
   const indexResp = await fetch(`http://127.0.0.1:${port}/`);
   assert.equal(indexResp.status, 200);
@@ -322,5 +338,5 @@ try {
 }
 
 console.log("\n[6/6] Result");
-console.log("PASS — V21.1 upload integrity, reconciled performance status, 1–20-year horizon, canonical Portfolio Financials rendering, exports and API smoke tests completed successfully.");
+console.log("PASS — V21.2 route-resilient upload integrity, reconciled performance status, 1–20-year horizon, canonical Portfolio Financials rendering, exports and API smoke tests completed successfully.");
 if (logs.trim()) console.log("Server smoke log:\n" + logs.trim());

@@ -1,10 +1,10 @@
 @echo off
 cd /d "%~dp0"
 set PORT=10314
-echo Starting EV Hub Investment Tool FULL HTML App v33 on http://localhost:10314/ ...
+set EVHUB_ALLOW_PORT_FALLBACK=1
+echo Starting EV Hub Investment Tool V21.2...
+echo The browser will open only after the matching Python backend has started.
+echo If port 10314 is occupied by an older build, V21.2 will select the next free port automatically.
 echo.
-echo If an old Site Location-only dashboard is open on port 8000, ignore it and use port 10314.
-echo.
-start http://localhost:10314/
 python server.py
 pause

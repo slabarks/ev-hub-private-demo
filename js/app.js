@@ -299,12 +299,13 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const APP_RELEASE_VERSION = "V21.1";
-const APP_BUILD_ID = "EVHUB-V21.1-20260717-R1";
-const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.2";
-const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21_1";
+const APP_RELEASE_VERSION = "V21.2";
+const APP_BUILD_ID = "EVHUB-V21.2-20260718-R1";
+const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.3";
+const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21_2";
 const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7";
 const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
+  "evHub.portfolio.liveActuals.v21_1",
   "evHub.portfolio.liveActuals.v1",
   "evHub.portfolio.liveActuals.v35_39",
   "evHub.portfolio.liveActuals.v35_40",
@@ -315,18 +316,35 @@ const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
   "evHub.portfolio.liveActuals.v17_43",
   "evHub.portfolio.liveActuals.v17_44"
 ];
-function portfolioServerCompatibility(info) {
-  const actualBuild = String(info?.buildId || info?.build_id || "legacy / not reported");
-  const actualSchema = String(info?.uploadSchemaVersion || info?.upload_schema_version || info?.schemaVersion || "legacy / not reported");
-  const actualParser = String(info?.parserBuildId || info?.parser_build_id || "legacy / not reported");
+function portfolioServerCompatibility(info, options = {}) {
+  const strictBuild = Boolean(options.strictBuild);
+  const rawBuild = info?.buildId || info?.build_id || "";
+  const rawSchema = info?.uploadSchemaVersion || info?.upload_schema_version || info?.schemaVersion || "";
+  const rawParser = info?.parserBuildId || info?.parser_build_id || "";
+  const actualBuild = String(rawBuild || "legacy / not reported");
+  const actualSchema = String(rawSchema || "legacy / not reported");
+  const actualParser = String(rawParser || "legacy / not reported");
   const fingerprint = String(info?.serverFileFingerprint || info?.server_file_fingerprint || "not reported");
   const deploymentOk = info?.deploymentRootOk ?? info?.deployment_root_ok;
   const mismatches = [];
-  if (actualBuild !== APP_BUILD_ID) mismatches.push(`backend ${actualBuild}; browser ${APP_BUILD_ID}`);
-  if (actualSchema !== PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION) mismatches.push(`schema ${actualSchema}; required ${PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION}`);
-  if (actualParser !== LIVE_UPLOAD_PARSER_BUILD_ID) mismatches.push(`parser ${actualParser}; required ${LIVE_UPLOAD_PARSER_BUILD_ID}`);
-  if (deploymentOk === false) mismatches.push("backend reports an incomplete deployment root");
-  return { ok: mismatches.length === 0, warnings: [], mismatches, actualBuild, actualSchema, actualParser, fingerprint, deploymentOk };
+  const warnings = [];
+
+  // The upload payload itself is the source of truth. Build IDs are useful diagnostics,
+  // but an unavailable /api/version route or an older compatible build must not prevent
+  // a valid Daily_Charger_kWh upload from being processed.
+  if (rawSchema && actualSchema !== PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION) {
+    mismatches.push(`schema ${actualSchema}; required ${PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION}`);
+  }
+  if (rawBuild && actualBuild !== APP_BUILD_ID) {
+    (strictBuild ? mismatches : warnings).push(`backend ${actualBuild}; browser ${APP_BUILD_ID}`);
+  }
+  if (rawParser && actualParser !== LIVE_UPLOAD_PARSER_BUILD_ID) {
+    (strictBuild ? mismatches : warnings).push(`parser ${actualParser}; browser expects ${LIVE_UPLOAD_PARSER_BUILD_ID}`);
+  }
+  if (deploymentOk === false) warnings.push("backend reports an incomplete deployment root");
+  if (!rawBuild) warnings.push("backend build ID was not reported");
+  if (!rawSchema) warnings.push("backend schema version was not reported; response shape will be validated directly");
+  return { ok: mismatches.length === 0, warnings, mismatches, actualBuild, actualSchema, actualParser, fingerprint, deploymentOk };
 }
 
 const PORTFOLIO_UPLOAD_PREFLIGHT_TIMEOUT_MS = 20000;
@@ -336,6 +354,30 @@ function portfolioUploadError(title, message, whatToDo = [], extra = {}) {
 }
 function portfolioUploadResponsePreview(text) {
   return String(text || "").replace(/\s+/g, " ").trim().slice(0, 180);
+}
+function portfolioAppBaseUrl() {
+  const base = new URL(document.baseURI || window.location.href);
+  base.hash = "";
+  base.search = "";
+  if (!base.pathname.endsWith("/")) base.pathname = base.pathname.replace(/[^/]*$/, "");
+  return base;
+}
+function portfolioApiCandidates(route) {
+  const clean = String(route || "").replace(/^\/+/, "");
+  const candidates = [];
+  const add = value => {
+    try {
+      const url = new URL(value, window.location.href).toString();
+      if (!candidates.includes(url)) candidates.push(url);
+    } catch (_) {}
+  };
+  add(new URL(clean, portfolioAppBaseUrl()).toString());
+  add(new URL(`/${clean}`, window.location.origin).toString());
+  return candidates;
+}
+function portfolioRetryableRouteError(error) {
+  const status = Number(error?.httpStatus || error?.status || 0);
+  return status === 404 || status === 405 || error?.code === "route-not-found";
 }
 async function portfolioFetchJson(url, options = {}, timeoutMs = PORTFOLIO_UPLOAD_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -388,20 +430,70 @@ async function portfolioFetchJson(url, options = {}, timeoutMs = PORTFOLIO_UPLOA
   }
 }
 async function portfolioVerifyUploadBackend() {
-  const { response, payload } = await portfolioFetchJson("/api/version", { method: "GET" }, PORTFOLIO_UPLOAD_PREFLIGHT_TIMEOUT_MS);
-  if (!response.ok || !payload?.ok) {
-    throw portfolioUploadError("The upload backend is not ready.", payload?.error || payload?.message || `Version check returned HTTP ${response.status}.`, ["Restart or redeploy the Python backend from this package."]);
+  const diagnostics = [];
+  for (const url of portfolioApiCandidates("api/version")) {
+    try {
+      const { response, payload } = await portfolioFetchJson(url, { method: "GET", allowNotFound: true }, PORTFOLIO_UPLOAD_PREFLIGHT_TIMEOUT_MS);
+      if (response.status === 404) {
+        diagnostics.push(`${url}: route unavailable`);
+        continue;
+      }
+      if (response.ok && payload?.ok) {
+        const compatibility = portfolioServerCompatibility(payload, { strictBuild: false });
+        return { available: true, url, payload, compatibility };
+      }
+      diagnostics.push(`${url}: HTTP ${response.status}`);
+    } catch (error) {
+      if (portfolioRetryableRouteError(error)) {
+        diagnostics.push(`${url}: route unavailable`);
+        continue;
+      }
+      diagnostics.push(`${url}: ${error?.message || error}`);
+    }
   }
-  const compatibility = portfolioServerCompatibility(payload);
-  if (!compatibility.ok) {
-    throw portfolioUploadError(
-      "Frontend and backend versions do not match.",
-      `The upload was stopped before processing to protect the active dataset. ${compatibility.mismatches.join("; ")}.`,
-      ["Deploy the complete package, not individual frontend files.", "Restart the Python service after deployment.", "Hard-refresh the browser after the service is healthy."],
-      { code: "deployment-mismatch", backend: payload }
-    );
+  // Advisory only. Older compatible backends did not always expose /api/version.
+  // The real upload request is attempted and its returned history payload is validated.
+  return { available: false, diagnostics };
+}
+async function portfolioUploadCalibrationFiles(files) {
+  const routes = ["api/import-live-calibration", "api/import-live-calibration-v1745"];
+  const attempts = [];
+  let lastDefinitiveError = null;
+  for (const route of routes) {
+    for (const url of portfolioApiCandidates(route)) {
+      try {
+        const result = await portfolioFetchJson(url, {
+          method: "POST",
+          body: portfolioCalibrationFormData(files),
+          allowNotFound: true
+        });
+        if (result.response.status === 404 || result.response.status === 405) {
+          attempts.push(`${url}: HTTP ${result.response.status}`);
+          continue;
+        }
+        return { ...result, uploadUrl: url, attempts };
+      } catch (error) {
+        if (portfolioRetryableRouteError(error)) {
+          attempts.push(`${url}: HTTP ${error?.httpStatus || "route unavailable"}`);
+          continue;
+        }
+        // Preserve a real backend/proxy error while continuing to try alternative route forms.
+        if (Number(error?.httpStatus || 0) >= 400 && Number(error?.httpStatus || 0) < 500 && Number(error?.httpStatus || 0) !== 404) throw error;
+        lastDefinitiveError = error;
+        attempts.push(`${url}: ${error?.message || error}`);
+      }
+    }
   }
-  return payload;
+  if (lastDefinitiveError) throw lastDefinitiveError;
+  throw portfolioUploadError(
+    "The application could not reach its calibration upload service.",
+    `All supported upload routes were tried without a usable response. ${attempts.slice(0, 6).join(" | ")}`,
+    [
+      "Keep this browser page open and restart the packaged application once; the app will rediscover the correct route automatically.",
+      "For hosted deployments, confirm that POST requests to the application's /api path are forwarded to server.py rather than a static-file service."
+    ],
+    { code: "upload-route-unavailable", attempts }
+  );
 }
 function portfolioCalibrationFormData(files) {
   const form = new FormData();
@@ -417,14 +509,14 @@ function portfolioNormaliseUploadError(error) {
   return portfolioUploadError("Calibration upload failed.", String(error || "Unknown upload error"), ["Retry the complete ZIP pack."]);
 }
 function portfolioSnapshotValidation(snapshot) {
-  const compatibility = portfolioServerCompatibility(snapshot || {});
+  const compatibility = portfolioServerCompatibility(snapshot || {}, { strictBuild: false });
   if (!compatibility.ok) {
     return {
       ok: false,
-      code: "deployment-mismatch",
-      title: "Frontend and backend versions do not match.",
-      reason: `The returned upload data came from an incompatible backend: ${compatibility.mismatches.join("; ")}.`,
-      what_to_do: ["Deploy and restart the complete package, then hard-refresh the browser."]
+      code: "schema-mismatch",
+      title: "The returned upload data uses an incompatible history schema.",
+      reason: `The upload response cannot be activated safely: ${compatibility.mismatches.join("; ")}.`,
+      what_to_do: ["Use the complete current package or upload Daily_Charger_kWh.xlsx through the current application backend."]
     };
   }
   if (!snapshot || !Array.isArray(snapshot.siteActuals) || snapshot.siteActuals.length === 0) {
@@ -6071,16 +6163,14 @@ function wirePage(r) {
     portfolioLiveUploadError = null;
     const stageTimers = [];
     try {
-      portfolioUploadStatusText("Step 1 of 5 — Checking frontend/backend compatibility…");
-      await portfolioVerifyUploadBackend();
-      portfolioUploadStatusText(`Step 2 of 5 — Uploading ${files.length} file${files.length === 1 ? "" : "s"} and reading Daily_Charger_kWh…`);
-      stageTimers.push(setTimeout(() => portfolioUploadStatusText("Step 3 of 5 — Backend is aggregating daily rows into site histories…"), 8000));
-      stageTimers.push(setTimeout(() => portfolioUploadStatusText("Step 3 of 5 — Still processing; the request will cancel automatically if the backend does not respond."), 30000));
-      let result = await portfolioFetchJson("/api/import-live-calibration-v1745", { method: "POST", body: portfolioCalibrationFormData(files), allowNotFound: true });
-      if (result.response.status === 404) {
-        portfolioUploadStatusText("Compatibility route unavailable — retrying the current upload route…");
-        result = await portfolioFetchJson("/api/import-live-calibration", { method: "POST", body: portfolioCalibrationFormData(files) });
-      }
+      portfolioUploadStatusText("Step 1 of 5 — Discovering the available upload service…");
+      const preflight = await portfolioVerifyUploadBackend();
+      portfolioUploadStatusText(preflight.available
+        ? `Step 2 of 5 — Uploading ${files.length} file${files.length === 1 ? "" : "s"} and reading Daily_Charger_kWh…`
+        : `Step 2 of 5 — Version route unavailable; trying compatible upload routes automatically…`);
+      stageTimers.push(setTimeout(() => portfolioUploadStatusText("Step 3 of 5 — Aggregating daily rows into site histories…"), 8000));
+      stageTimers.push(setTimeout(() => portfolioUploadStatusText("Step 3 of 5 — Still processing; the request will cancel automatically if no upload service responds."), 30000));
+      const result = await portfolioUploadCalibrationFiles(files);
       const { response, payload } = result;
       if (!response.ok || !payload?.ok) throw portfolioNormaliseUploadError(payload || { message: `Upload returned HTTP ${response.status}.` });
       portfolioUploadStatusText("Step 4 of 5 — Validating daily and monthly site histories…");
@@ -6089,7 +6179,7 @@ function wirePage(r) {
         return;
       }
       const parseMs = Number(payload?.requestTimingsMs?.serverBeforeResponse || payload?.parserTimingsMs?.parserTotal || 0);
-      portfolioUploadStatusText(`Step 5 of 5 — Complete${parseMs ? ` in ${(parseMs / 1000).toFixed(1)} seconds server time` : ""}. Activating forecasts…`);
+      portfolioUploadStatusText(`Step 5 of 5 — Complete${parseMs ? ` in ${(parseMs / 1000).toFixed(1)} seconds server time` : ""}. Activating forecasts${result.uploadUrl ? ` via ${new URL(result.uploadUrl).pathname}` : ""}…`);
       render();
     } catch (err) {
       portfolioLiveUploadError = portfolioNormaliseUploadError(err);

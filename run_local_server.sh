@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+set -e
 cd "$(dirname "$0")"
-export PORT=10314
-echo "Starting EV Hub Investment Tool FULL HTML App v33 on http://localhost:10314/ ..."
-echo "If an old Site Location-only dashboard is open on port 8000, ignore it and use port 10314."
+export PORT="${PORT:-10314}"
+export EVHUB_ALLOW_PORT_FALLBACK=1
+echo "Starting EV Hub Investment Tool V21.2..."
+echo "The browser will open only after the matching Python backend has started."
 python3 server.py

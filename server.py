@@ -42,11 +42,11 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-APP_VERSION = "V21.1"
-APP_BUILD_ID = "EVHUB-V21.1-20260717-R1"
+APP_VERSION = "V21.2"
+APP_BUILD_ID = "EVHUB-V21.2-20260718-R1"
 LIVE_UPLOAD_SCHEMA_VERSION = "v21-live-history-v7"
-LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.2"
-AADT_ENGINE_VERSION = "V21.1 AADT audited resolver + hardened ZIP/live-history upload"
+LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.3"
+AADT_ENGINE_VERSION = "V21.2 AADT audited resolver + route-resilient live-history upload"
 DEPLOYMENT_REQUIRED_FILES = ("index.html", "js/app.js", "js/engines/maturityEngine.js", "assets/styles.css", "DEPLOYMENT_MANIFEST.json")
 SERVER_FILE_FINGERPRINT = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
 PACKAGE_LAYOUT_VERSION = "flat-root-v1"
@@ -83,8 +83,8 @@ def _deployment_integrity() -> dict:
     if index_path.exists():
         try:
             index_text = index_path.read_text(encoding="utf-8")
-            if "21-1-upload-layout-20260717-r1" not in index_text:
-                problems.append("index.html cache-buster is not the V21.1 deployment build")
+            if "21-2-route-discovery-20260718-r1" not in index_text:
+                problems.append("index.html cache-buster is not the V21.2 deployment build")
         except Exception as exc:
             problems.append(f"index.html could not be verified: {exc}")
     return {
@@ -4623,6 +4623,13 @@ def resolve_auto_tii_aadt(address: str, *, params: dict | None = None, mode: str
 
     raise RuntimeError("No credible AADT could be calculated. " + " | ".join(errors[-8:]))
 
+def _api_path_matches(path: str, endpoint: str) -> bool:
+    """Accept root API routes and the same routes behind a reverse-proxy subpath."""
+    clean_path = "/" + str(path or "").strip("/")
+    clean_endpoint = "/" + str(endpoint or "").strip("/")
+    return clean_path == clean_endpoint or clean_path.endswith(clean_endpoint)
+
+
 class Handler(BaseHTTPRequestHandler):
     def _auth_enabled(self):
         return bool(DEMO_PASSWORD)
@@ -4705,9 +4712,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_login("Incorrect password. Please try again.")
         if not self._is_authenticated():
             return self._redirect_to_login()
-        if parsed.path == "/api/version":
+        if _api_path_matches(parsed.path, "/api/version"):
             return self._send_json(_version_payload())
-        if parsed.path == "/api/health":
+        if _api_path_matches(parsed.path, "/api/health"):
             payload = _version_payload()
             payload["health"] = "ok" if payload.get("deploymentRootOk") else "ok_with_warnings"
             return self._send_json(payload, status=200)
@@ -4730,7 +4737,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self._send_json({"ok": False, "error": str(exc)}, status=422)
 
-        if parsed.path in ("/api/import-live-calibration", "/api/import-live-calibration-v1745"):
+        if _api_path_matches(parsed.path, "/api/import-live-calibration") or _api_path_matches(parsed.path, "/api/import-live-calibration-v1745"):
             request_started = time.perf_counter()
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -4807,9 +4814,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path in ("/", "/index.html"):
             return self._send_file(ROOT / "index.html")
 
-        if parsed.path == "/api/version":
+        if _api_path_matches(parsed.path, "/api/version"):
             return self._send_json(_version_payload())
-        if parsed.path == "/api/health":
+        if _api_path_matches(parsed.path, "/api/health"):
             payload = _version_payload()
             payload["health"] = "ok" if payload.get("deploymentRootOk") else "ok_with_warnings"
             return self._send_json(payload, status=200)
@@ -4890,11 +4897,31 @@ def main():
         for problem in integrity["missing"]:
             print(f" - {problem}", file=sys.stderr)
         print("The service will continue running so calibration uploads are not blocked.", file=sys.stderr)
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    url = f"http://localhost:{PORT}/"
+
+    requested_port = PORT
+    local_fallback = os.environ.get("EVHUB_ALLOW_PORT_FALLBACK", "1") == "1" and not os.environ.get("RENDER")
+    candidates = [requested_port] + (list(range(requested_port + 1, requested_port + 11)) if local_fallback else [])
+    server = None
+    selected_port = requested_port
+    last_error = None
+    for candidate_port in candidates:
+        try:
+            server = ThreadingHTTPServer(("0.0.0.0", candidate_port), Handler)
+            selected_port = candidate_port
+            break
+        except OSError as exc:
+            last_error = exc
+            if not local_fallback:
+                raise
+    if server is None:
+        raise last_error or RuntimeError("Could not bind the application server")
+
+    url = f"http://localhost:{selected_port}/"
+    if selected_port != requested_port:
+        print(f"Port {requested_port} was already in use. V21.2 selected {selected_port} to avoid opening a stale application instance.")
     print(f"EV Hub Investment Tool {APP_VERSION} running at {url}")
     print(f"Build: {APP_BUILD_ID} | Parser: {LIVE_UPLOAD_PARSER_BUILD_ID} | Layout: {PACKAGE_LAYOUT_VERSION}")
-    print("Opening your default browser...")
+    print("Opening your default browser after the correct backend has started...")
     print("Press Ctrl+C to stop.")
 
     if os.environ.get("DISABLE_BROWSER_OPEN", "0") != "1" and not os.environ.get("RENDER") and not os.environ.get("DEMO_PASSWORD"):

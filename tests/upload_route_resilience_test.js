@@ -55,7 +55,7 @@ const functionNames = [
 
 const validHistory = annualKwh => ({
   ok: true,
-  buildId: "EVHUB-V21.4-20260719-R1",
+  buildId: "EVHUB-V21.5-20260719-R1",
   uploadSchemaVersion: "v21-live-history-v7",
   parserBuildId: "EVHUB-LIVE-PARSER-21.5",
   parsedFiles: ["Daily_Charger_kWh.csv"],
@@ -100,8 +100,8 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(`
-const APP_RELEASE_VERSION = "V21.4";
-const APP_BUILD_ID = "EVHUB-V21.4-20260719-R1";
+const APP_RELEASE_VERSION = "V21.5";
+const APP_BUILD_ID = "EVHUB-V21.5-20260719-R1";
 const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.5";
 const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7";
 const PORTFOLIO_UPLOAD_PREFLIGHT_TIMEOUT_MS = 20000;

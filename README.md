@@ -1,11 +1,11 @@
-# EV Charging Hub Investment Tool — V21.4
+# EV Charging Hub Investment Tool — V21.5
 
-V21.4 removes the calibration upload's dependency on a matching backend response. The selected `Daily_Charger_kWh.xlsx` or dashboard ZIP is now parsed directly in the browser first, including the complete daily and monthly histories required by Portfolio Financial Performance.
+V21.5 removes the calibration upload's dependency on a matching backend response. The selected `Daily_Charger_kWh.xlsx` or dashboard ZIP is now parsed directly in the browser first, including the complete daily and monthly histories required by Portfolio Financial Performance.
 
 ## Build
 
-- Application: `V21.4`
-- Build: `EVHUB-V21.4-20260719-R1`
+- Application: `V21.5`
+- Build: `EVHUB-V21.5-20260719-R1`
 - History schema: `v21-live-history-v7`
 - Parser: `EVHUB-LIVE-PARSER-21.5`
 
@@ -24,15 +24,17 @@ The Portfolio Financial Performance upload now:
 
 ## Portfolio Financial Performance board update
 
-V21.4 also adds the agreed investor-facing controls and comparisons:
+V21.5 also adds the agreed investor-facing controls and comparisons:
 
 - portfolio-wide landlord and funding management from the main table header;
 - exact whole-euro funding inputs and bulk funding actions;
 - board-standard CAPEX variance direction (actual minus model);
-- actual-versus-forecast visibility beside Next 12m kWh;
-- historical actual versus age-matched model as the primary performance test;
+- compact two-card forecast and actual-evidence presentation;
+- compact two-card historical actual versus age-matched model presentation;
+- consistent investor terminology across table, filters and PDF exports;
+- confirmed SuperValu Tipperary LDV3 funding eligibility;
 - stored snapshot date visibility; and
-- MIC transparency in network charges.
+- simplified MIC transparency in network charges.
 
 ## Local start
 

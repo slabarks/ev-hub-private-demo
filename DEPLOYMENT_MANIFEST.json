@@ -1,6 +1,6 @@
 {
-  "appVersion": "V21.4",
-  "buildId": "EVHUB-V21.4-20260719-R1",
+  "appVersion": "V21.5",
+  "buildId": "EVHUB-V21.5-20260719-R1",
   "uploadSchemaVersion": "v21-live-history-v7",
   "parserBuildId": "EVHUB-LIVE-PARSER-21.5",
   "packageLayoutVersion": "flat-root-v1",
@@ -14,7 +14,7 @@
     "js/liveHistoryLocalParser.js",
     "DEPLOYMENT_MANIFEST.json"
   ],
-  "cacheBuster": "21-4-board-performance-20260719-r1",
+  "cacheBuster": "21-5-investor-table-20260719-r1",
   "releaseDate": "2026-07-19",
   "localHistoryParser": true
 }

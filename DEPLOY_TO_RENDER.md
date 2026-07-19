@@ -1,6 +1,6 @@
-# Hosted deployment — V21.4
+# Hosted deployment — V21.5
 
-Deploy the complete extracted V21.4 package as one application. Do not merge selected frontend files into an older release.
+Deploy the complete extracted V21.5 package as one application. Do not merge selected frontend files into an older release.
 
 ## Start command
 
@@ -25,8 +25,8 @@ Keep these at the same deployment root:
 
 Open `/api/version` on the deployed domain. It should report:
 
-- `appVersion`: `V21.4`
-- `buildId`: `EVHUB-V21.4-20260719-R1`
+- `appVersion`: `V21.5`
+- `buildId`: `EVHUB-V21.5-20260719-R1`
 - `parserBuildId`: `EVHUB-LIVE-PARSER-21.5`
 - `deploymentRootOk`: `true`
 

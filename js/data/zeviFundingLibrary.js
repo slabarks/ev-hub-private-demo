@@ -172,9 +172,9 @@ export const ZEVI_CONFIRMED_FUNDING = [
     "grantAmount": 79870,
     "chargersFunded": 1,
     "evSpacesFunded": 2,
-    "confidence": "medium",
+    "confidence": "confirmed",
     "sourceType": "confirmed-matched",
-    "matchNotes": "Possible match - generic name 'TIPPERARY', not fully certain",
+    "matchNotes": "Confirmed exact portfolio match: SuperValu, Kickham Place, Tipperary, E34 VP78",
     "aliases": [
       "Kickham Place Tipperary",
       "SuperValu Tipperary",

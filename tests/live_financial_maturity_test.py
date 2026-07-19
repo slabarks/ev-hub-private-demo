@@ -39,7 +39,7 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         ])
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["schemaVersion"], "v21-live-history-v7")
-        self.assertEqual(payload["buildId"], "EVHUB-V21.4-20260719-R1")
+        self.assertEqual(payload["buildId"], "EVHUB-V21.5-20260719-R1")
         self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-21.5")
         self.assertTrue(payload["monthlyHistorySupported"])
         self.assertTrue(payload["dailyHistorySupported"])

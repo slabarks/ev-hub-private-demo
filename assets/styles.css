@@ -4327,7 +4327,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 }
 
 
-/* V21.4 — full-width Portfolio Financials and no desktop horizontal scrollbar */
+/* V21.5 — full-width Portfolio Financials and no desktop horizontal scrollbar */
 body.portfolio-financial-active { overflow-x: hidden; }
 .app.portfolio-financial-wide {
   width: 100%;
@@ -4380,7 +4380,7 @@ body.portfolio-financial-active { overflow-x: hidden; }
   .app.portfolio-financial-wide .portfolio-financial-table-panel { padding: 12px; }
 }
 
-/* V21.4 — upload workflow status remains readable during longer server processing */
+/* V21.5 — upload workflow status remains readable during longer server processing */
 #portfolioCalibrationUploadStatus {
   min-height: 18px;
   font-weight: 650;
@@ -4389,7 +4389,7 @@ body.portfolio-financial-active { overflow-x: hidden; }
 .live-calibration-card .notice.bad { overflow-wrap: anywhere; }
 
 
-/* V21.4 — board-facing Portfolio Financial Performance controls and model-accuracy hierarchy */
+/* V21.5 — board-facing Portfolio Financial Performance controls and model-accuracy hierarchy */
 .portfolio-financial-table-heading {
   align-items: flex-start;
   gap: 24px;
@@ -4514,3 +4514,46 @@ body.portfolio-financial-active { overflow-x: hidden; }
 @media (max-width: 620px) {
   .portfolio-terms-summary-grid { grid-template-columns: 1fr; }
 }
+
+
+/* V21.5 — compact investor cards for kWh and age-matched model evidence */
+.portfolio-two-card-stack {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  text-align: right;
+}
+.portfolio-two-card {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(0,112,74,.12);
+  border-radius: 9px;
+  background: rgba(247,251,249,.96);
+}
+.portfolio-two-card span,
+.portfolio-two-card small {
+  display: block;
+  color: #60716b;
+  font-size: clamp(9.2px,.66vw,10.2px);
+  line-height: 1.2;
+}
+.portfolio-two-card strong {
+  display: block;
+  margin: 2px 0;
+  color: #17392e;
+  font-size: clamp(11.4px,.82vw,13.1px);
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+}
+.portfolio-two-card.primary { background: #fbfdfc; }
+.portfolio-two-card.secondary { background: #f5faf7; }
+.model-performance-card.good { border-color:#a8d8c2; background:#eef9f3; }
+.model-performance-card.good strong { color:#087443; }
+.model-performance-card.bad { border-color:#efb0aa; background:#fff1f0; }
+.model-performance-card.bad strong { color:#a61b13; }
+.model-performance-card.warn { border-color:#ead49a; background:#fffaf0; }
+.model-performance-card.warn strong { color:#8a6200; }
+.model-performance-card.neutral { border-color:#cfdad6; background:#f4f7f6; }
+.model-performance-card.neutral strong { color:#425c53; }
+.kwh-card-stack .forecast-change-badge { margin-left: 3px; }
+.portfolio-financial-table th:nth-child(5) .portfolio-financial-sort-button { white-space: normal; line-height: 1.12; }

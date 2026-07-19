@@ -782,12 +782,12 @@ function pfPdfDashboard(summary = {}, horizon = 5) {
 }
 
 function pfPdfPerformance(summary = {}) {
-  return `<section class="pf-pdf-performance"><div class="pf-pdf-section-head"><h2>Performance versus model</h2><p>Next-12-month actual-led forecast compared with the calibrated model for the same period.</p></div><div class="pf-pdf-performance-grid">
-    ${pfPdfMetric("In benchmark", number(summary.inBenchmark || 0, 0), "forward variance within ±15%")}
-    ${pfPdfMetric("Underperforming", number(summary.underperforming || 0, 0), "forward forecast below model")}
-    ${pfPdfMetric("Above benchmark", number(summary.outperforming || 0, 0), "forward forecast above model")}
-    ${pfPdfMetric("Review", number(summary.performanceReview || 0, 0), "forecast/model comparison unavailable")}
-  </div><div class="pf-pdf-warning"><strong>History quality:</strong> ${number(summary.notEnoughData || 0,0)} sites are early or have limited monthly history. This flag is separate from performance status.</div><div class="pf-pdf-warning"><strong>Investment data warnings:</strong> ${number(summary.capexMissing || 0,0)} sites missing actual CAPEX · ${number(summary.noPayback || 0,0)} sites with no positive run-rate payback.</div></section>`;
+  return `<section class="pf-pdf-performance"><div class="pf-pdf-section-head"><h2>Actual performance vs age-matched model</h2><p>Real delivered kWh compared with the current calibrated model over the exact same elapsed operating period.</p></div><div class="pf-pdf-performance-grid">
+    ${pfPdfMetric("In line with model", number(summary.inBenchmark || 0, 0), "historical actual within ±15%")}
+    ${pfPdfMetric("Actual below model", number(summary.underperforming || 0, 0), "historical actual more than 15% below model")}
+    ${pfPdfMetric("Actual above model", number(summary.outperforming || 0, 0), "historical actual more than 15% above model")}
+    ${pfPdfMetric("Review / early", number(summary.performanceReview || 0, 0), "insufficient history or comparison unavailable")}
+  </div><div class="pf-pdf-warning"><strong>History quality:</strong> ${number(summary.notEnoughData || 0,0)} sites are early or have limited monthly history. This flag is separate from model-performance classification.</div><div class="pf-pdf-warning"><strong>Investment data warnings:</strong> ${number(summary.capexMissing || 0,0)} sites missing actual CAPEX · ${number(summary.noPayback || 0,0)} sites with no positive run-rate payback.</div></section>`;
 }
 
 export async function exportPortfolioFinancialsPdf(payload) {
@@ -832,10 +832,10 @@ export async function exportPortfolioFinancialsPdf(payload) {
   <section class="print-page portfolio-page portfolio-financial-print-page portfolio-financial-table-page">
     <div class="panel portfolio-financial-print-panel">
       <h3>Site financial performance table</h3>
-      <p class="report-caption">Same investor table as the app: forward kWh, matched model benchmark, performance variance, revenue, electricity energy plus network standing/capacity, other OPEX, funding and run-rate payback.</p>
+      <p class="report-caption">Same investor table as the app: forward kWh, age-matched historical model performance, revenue, electricity energy plus network standing/capacity, other OPEX, funding and run-rate payback.</p>
       <div class="report-table-wrap portfolio-financial-pdf-table-wrap">
         <table class="portfolio-financial-pdf-table">
-          <thead><tr>${["Site", "Days", "CAPEX & funding", "Next 12m kWh", "Performance vs model", "Next 12m revenue", "Energy & network", "Other OPEX", "Site EBITDA", "Run-rate payback"].map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+          <thead><tr>${["Site", "Days", "CAPEX & funding", "Next 12m kWh", "Actual vs age-matched model", "Next 12m revenue", "Energy & network", "Other OPEX", "Site EBITDA", "Run-rate payback"].map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
           <tbody>${tableRows.map(row => `<tr>${row.map(x => `<td>${x}</td>`).join("")}</tr>`).join("")}</tbody>
         </table>
       </div>

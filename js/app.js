@@ -300,8 +300,8 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const APP_RELEASE_VERSION = "V21.4";
-const APP_BUILD_ID = "EVHUB-V21.4-20260719-R1";
+const APP_RELEASE_VERSION = "V21.5";
+const APP_BUILD_ID = "EVHUB-V21.5-20260719-R1";
 const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.5";
 const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21_3";
 const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7";
@@ -4319,9 +4319,9 @@ function portfolioHistoricalPerformanceStatus(actualKwh, modelKwh, periodDays) {
   if (!(actual >= 0) || !(model > 0)) return { key: "review", label: "Review", cls: "warn", variance: null, note: "Historical actual or age-matched model is unavailable." };
   const variance = (actual - model) / model;
   if (days < 30) return { key: "review", label: "Early evidence", cls: "warn", variance, note: `Only ${number(days,0)} commercial days are available; the variance is shown but no definitive model-accuracy status is assigned.` };
-  if (variance > PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) return { key: "above-benchmark", label: "Above model", cls: "good", variance, note: "Actual delivered kWh to date is more than 15% above the current calibrated age-matched model." };
-  if (variance < -PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) return { key: "underperforming", label: "Below model", cls: "bad", variance, note: "Actual delivered kWh to date is more than 15% below the current calibrated age-matched model." };
-  return { key: "in-benchmark", label: "In benchmark", cls: "good", variance, note: "Actual delivered kWh to date is within ±15% of the current calibrated age-matched model." };
+  if (variance > PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) return { key: "above-benchmark", label: "Actual above model", cls: "good", variance, note: "Actual delivered kWh to date is more than 15% above the current calibrated age-matched model." };
+  if (variance < -PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE) return { key: "underperforming", label: "Actual below model", cls: "bad", variance, note: "Actual delivered kWh to date is more than 15% below the current calibrated age-matched model." };
+  return { key: "in-benchmark", label: "In line with model", cls: "neutral", variance, note: "Actual delivered kWh to date is within ±15% of the current calibrated age-matched model." };
 }
 function portfolioHistoricalModelBacktest(site, result, annualActual, operationalDays) {
   const daily = Array.isArray(site?.actual?.dailyHistory) ? site.actual.dailyHistory.filter(row => row && row.date) : [];
@@ -4664,8 +4664,8 @@ function portfolioFinancialCapexKey(fin) {
 }
 function portfolioFinancialFilterDefinitions() {
   return [
-    { key: "status", label: "Actual vs model", options: [
-      ["all", "All model accuracy"], ["above-benchmark", "Above model"], ["in-benchmark", "In benchmark"], ["underperforming", "Below model"], ["review", "Review / early evidence"]
+    { key: "status", label: "Actual vs age-matched model", options: [
+      ["all", "All model accuracy"], ["above-benchmark", "Actual above model"], ["in-benchmark", "In line with model"], ["underperforming", "Actual below model"], ["review", "Review / early evidence"]
     ]},
     { key: "historyQuality", label: "History quality", options: [
       ["all", "All history quality"], ["usable-history", "History usable"], ["early-operation", "Early operation"], ["limited-history", "Limited monthly history"], ["monthly-history-unavailable", "Monthly history unavailable"], ["actual-unavailable", "Actual unavailable"], ["start-unavailable", "Start date unavailable"]
@@ -4952,11 +4952,11 @@ function portfolioFinancialAdvancedMethodologyPanel(model, rows) {
   return `<details class="panel portfolio-financial-advanced-methodology"><summary><span>Advanced forecast methodology & audit</span><small>Collapsed by default · maturity diagnostics are not part of the investor dashboard</small></summary><div class="portfolio-maturity-detail-body"><div class="portfolio-summary-grid">${kpi("Training sites", number(maturity.trainingSiteCount,0), `${number(maturity.eligibleTrainingSiteCount,0)} eligible with 365+ days`)}${kpi("Stable mature sites", number(maturity.stableSiteCount,0), "late-stage monthly slope within ±15%")} ${kpi("Revenue with usable history", pct(maturity.historyCoverage,0), "share of current revenue from sites with ≥5 observations")}${kpi("Mature training coverage", pct(maturity.matureTrainingCoverage,0), "revenue share from 365+ day sites with ≥10 months")}</div><p class="muted small">${h(model?.methodology || "Maturity methodology unavailable.")} The first 12 forecast months remain independent of this curve.</p>${chart}</div></details>`;
 }
 function portfolioFinancialPerformanceCards(summary) {
-  return `<div class="portfolio-summary-grid portfolio-financial-performance-grid">${kpi("In benchmark", number(summary.inBenchmark,0), "historical actual within ±15% of age-matched model")}${kpi("Below model", number(summary.underperforming,0), "historical actual more than 15% below model")}${kpi("Above model", number(summary.outperforming,0), "historical actual more than 15% above model")}${kpi("Review / early", number(summary.performanceReview,0), "insufficient history or comparison unavailable")}</div>`;
+  return `<div class="portfolio-summary-grid portfolio-financial-performance-grid">${kpi("In line with model", number(summary.inBenchmark,0), "historical actual within ±15% of age-matched model")}${kpi("Actual below model", number(summary.underperforming,0), "historical actual more than 15% below model")}${kpi("Actual above model", number(summary.outperforming,0), "historical actual more than 15% above model")}${kpi("Review / early", number(summary.performanceReview,0), "insufficient history or comparison unavailable")}</div>`;
 }
 function portfolioFinancialHistoryWarning(summary) {
   if (!summary.notEnoughData) return `<div class="portfolio-history-warning good"><strong>History quality</strong><span>All selected sites have usable monthly history for trend diagnostics.</span></div>`;
-  return `<div class="portfolio-history-warning"><strong>History quality</strong><span>${number(summary.notEnoughData,0)} site${summary.notEnoughData === 1 ? "" : "s"} flagged as early or limited data. This is a separate data-stage flag and does not replace the Above / In / Under benchmark classification.</span></div>`;
+  return `<div class="portfolio-history-warning"><strong>History quality</strong><span>${number(summary.notEnoughData,0)} site${summary.notEnoughData === 1 ? "" : "s"} flagged as early or limited data. This is a separate data-stage flag and does not replace the actual-versus-age-matched-model classification.</span></div>`;
 }
 function portfolioFinancialInvestmentWarnings(summary) {
   if (!summary.capexMissing && !summary.noPayback) return `<div class="portfolio-investment-warnings good"><strong>Investment data checks passed</strong><span>All selected sites have tracked CAPEX and a positive run-rate payback calculation.</span></div>`;
@@ -5357,7 +5357,10 @@ function portfolioFinancialSortValue(fin, key) {
     "Underperforming": 2,
     "Low history": 3,
     "In benchmark": 4,
+    "In line with model": 4,
     "Above benchmark": 5,
+    "Actual above model": 5,
+    "Actual below model": 2,
     "Review": 6,
     "Not enough data": 9
   };
@@ -5591,20 +5594,22 @@ function portfolioFinancialTableRow(fin) {
   const forward = fin.maturityForecast?.forward12m || fin.maturityForecast || {};
   const trendPct = Number(forward?.trendPolicy?.monthlyGrowth || 0);
   const trendLabel = Math.abs(trendPct) < 0.0005 ? "neutral bounded trend" : `${trendPct > 0 ? "+" : ""}${pct(trendPct,1)} bounded monthly trend`;
-  const actualLine = fin.actualComparableBasis === "trailing 12m actual"
-    ? `Actual trailing 12m ${kwh(fin.actualComparableKwh,0)}`
-    : `Actual ${kwh(fin.historicalActualKwh,0)} over ${number(fin.historicalPeriodDays,0)} days · annualised ${kwh(fin.actualComparableKwh,0)}`;
-  const forecastValue = `${kwh(fin.next12mKwh,0)} ${portfolioForecastChangeBadge(fin.forecastVsActualVariance)}`;
-  const kwhSub = `Next 12m forecast vs ${h(fin.actualComparableBasis)}<br>${actualLine}<br>Forward model ${kwh(fin.modelForward12mKwh || 0,0)} · <span class="forecast-view-link">View graph</span>`;
-  const kwhCell = fin.hasActualKwh ? `<button type="button" class="portfolio-metric-button forecast-audit-button" data-forecast-modal-open="${h(portfolioCommercialTermsKey(fin.site))}" title="Open full historical graph and forecast calculation audit">${portfolioFinancialMetric(forecastValue, kwhSub, "", `${forward.methodology || "Forward 12-month actual trajectory."} ${fin.modelForward12mBasis || ""}. ${trendLabel}.`)}</button>` : "—";
+  const matureActualBasis = fin.actualComparableBasis === "trailing 12m actual";
+  const forecastComparisonLabel = matureActualBasis ? "vs trailing 12m actual" : "vs annualised actual run-rate";
+  const actualEvidenceLabel = matureActualBasis ? "Trailing 12m actual" : "Actual delivered";
+  const actualEvidenceValue = matureActualBasis
+    ? kwh(fin.actualComparableKwh,0)
+    : `${kwh(fin.historicalActualKwh,0)} · ${number(fin.historicalPeriodDays,0)} days`;
+  const actualEvidenceSub = matureActualBasis
+    ? `<span class="forecast-view-link">View graph</span>`
+    : `Annualised basis ${kwh(fin.actualComparableKwh,0)}<br><span class="forecast-view-link">View graph</span>`;
+  const kwhCell = fin.hasActualKwh ? `<button type="button" class="portfolio-metric-button forecast-audit-button" data-forecast-modal-open="${h(portfolioCommercialTermsKey(fin.site))}" title="Open full historical graph and forecast calculation audit"><div class="portfolio-two-card-stack kwh-card-stack"><div class="portfolio-two-card primary"><span>Next 12m forecast</span><strong>${kwh(fin.next12mKwh,0)} ${portfolioForecastChangeBadge(fin.forecastVsActualVariance)}</strong><small>${h(forecastComparisonLabel)}</small></div><div class="portfolio-two-card secondary"><span>${h(actualEvidenceLabel)}</span><strong>${h(actualEvidenceValue)}</strong><small>${actualEvidenceSub}</small></div></div></button>` : "—";
   const varianceLabel = portfolioFinancialVarianceLabel(fin.performanceVariance);
-  const qualityNote = fin.historyQuality?.low ? `${fin.historyQuality.label} · ${fin.historyQuality.note}` : "";
-  const qualityHtml = qualityNote ? `<small class="low-history-note">${h(qualityNote)}</small>` : "";
-  const performanceCell = `<div class="portfolio-performance-cell historical-model-cell" title="${h(fin.performanceStatus?.note || "Historical model comparison unavailable")}"><strong class="performance-variance ${h(fin.performanceStatus?.cls || "neutral")}">${h(varianceLabel)}</strong><span class="badge ${h(fin.performanceStatus?.cls || "neutral")}">${h(fin.performanceStatus?.label || "Review")}</span><small class="historical-model-basis">Actual ${kwh(fin.historicalActualKwh,0)} · model ${kwh(fin.historicalModelKwh,0)}<br>${number(fin.historicalPeriodDays,0)} matched days</small>${qualityHtml}</div>`;
+  const performanceCell = `<div class="portfolio-two-card-stack performance-card-stack" title="${h(fin.performanceStatus?.note || "Historical model comparison unavailable")}"><div class="portfolio-two-card primary model-performance-card ${h(fin.performanceStatus?.cls || "neutral")}"><span>Model performance</span><strong>${h(varianceLabel)}</strong><small>${h(fin.performanceStatus?.label || "Review")}</small></div><div class="portfolio-two-card secondary model-evidence-card"><span>Same operating period</span><strong>Actual ${kwh(fin.historicalActualKwh,0)}</strong><small>Model ${kwh(fin.historicalModelKwh,0)}</small></div></div>`;
   const revenueCell = fin.next12mRevenue > 0 ? portfolioFinancialMetric(currency(fin.next12mRevenue, 0), "base forecast used in EBITDA", "", "Forward 12-month net revenue used in the financial calculations. It is derived from actual trajectory, bounded trend, seasonality, market growth and net tariff. Maturity is not used.") : "—";
   const mic = Number(fin.micKva || fin.site?.realMicKva || 0);
   const capacityRate = mic > 0 ? Number(fin.duosCapacityCharge || 0) / mic : 0;
-  const electricityCell = fin.hasActualKwh ? `<div class="portfolio-cost-breakdown" title="Energy purchase and DUoS standing/capacity costs are shown separately. Both are included in EBITDA."><div><span>Energy</span><strong>${currency(fin.forecastElectricityCost,0)}</strong><small>${currency(fin.electricityUnitCost || 0,3)}/kWh</small></div><div><span>Standing + capacity</span><strong>${currency(fin.forecastNetworkStandingAndCapacity,0)}</strong><small>standing ${currency(fin.duosStandingCharge,0)} · MIC ${number(mic,0)} kVA × ${currency(capacityRate,2)} = ${currency(fin.duosCapacityCharge,0)}</small></div></div>` : "—";
+  const electricityCell = fin.hasActualKwh ? `<div class="portfolio-cost-breakdown" title="Energy purchase ${currency(fin.forecastElectricityCost,0)} at ${currency(fin.electricityUnitCost || 0,3)}/kWh. Network cost ${currency(fin.forecastNetworkStandingAndCapacity,0)} includes standing ${currency(fin.duosStandingCharge,0)} and capacity ${currency(fin.duosCapacityCharge,0)} at MIC ${number(mic,0)} kVA."><div><span>Energy</span><strong>${currency(fin.forecastElectricityCost,0)}</strong><small>${currency(fin.electricityUnitCost || 0,3)}/kWh</small></div><div><span>Standing + capacity</span><strong>${currency(fin.forecastNetworkStandingAndCapacity,0)}</strong><small>MIC ${number(mic,0)} kVA</small></div></div>` : "—";
   const landlordShort = fin.landlordApplied ? "landlord included" : "landlord €0 — no terms";
   const opexCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOtherOpexExElectricityAndNetwork, 0), landlordShort, "", `Other forward 12-month OPEX excludes electricity purchase and DUoS standing/capacity, which are shown separately. ${fin.landlordNote || "No actual landlord terms provided."}`) : "—";
   const ebitdaCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOperatingCashflow, 0), "revenue − energy − network − other OPEX", fin.forecastOperatingCashflow < 0 ? "cashflow-negative" : "", `Revenue ${currency(fin.next12mRevenue,0)} − energy ${currency(fin.forecastElectricityCost,0)} − network ${currency(fin.forecastNetworkStandingAndCapacity,0)} − other OPEX ${currency(fin.forecastOtherOpexExElectricityAndNetwork,0)} = site EBITDA ${currency(fin.forecastOperatingCashflow,0)}. CAPEX, depreciation, interest, tax and unallocated corporate overhead are excluded.`) : "—";
@@ -5625,7 +5630,7 @@ function renderPortfolioFinancialPerformance() {
   const horizon = portfolioFinancialHorizon();
   const projection = portfolioFinancialProjectionSummary(filteredRows, horizon);
   const headers = [
-    portfolioFinancialSortHeader("site", "Site"), portfolioFinancialSortHeader("days", "Days"), portfolioFinancialSortHeader("capex", "Day-one CAPEX"), portfolioFinancialSortHeader("kwh", "Actual & Next 12m kWh"), portfolioFinancialSortHeader("performance", "Actual vs model"), portfolioFinancialSortHeader("revenue", "Next 12m revenue"), portfolioFinancialSortHeader("electricity", "Energy & network"), portfolioFinancialSortHeader("opex", "Other OPEX"), portfolioFinancialSortHeader("ebitda", "Site EBITDA"), portfolioFinancialSortHeader("payback", "Run-rate payback")
+    portfolioFinancialSortHeader("site", "Site"), portfolioFinancialSortHeader("days", "Days"), portfolioFinancialSortHeader("capex", "Day-one CAPEX"), portfolioFinancialSortHeader("kwh", "Actual & Next 12m kWh"), portfolioFinancialSortHeader("performance", "Actual vs age-matched model"), portfolioFinancialSortHeader("revenue", "Next 12m revenue"), portfolioFinancialSortHeader("electricity", "Energy & network"), portfolioFinancialSortHeader("opex", "Other OPEX"), portfolioFinancialSortHeader("ebitda", "Site EBITDA"), portfolioFinancialSortHeader("payback", "Run-rate payback")
   ];
   const sorted = portfolioFinancialSortRows(filteredRows);
   const sortNames = { site: "site", days: "commercial operational days", capex: "actual CAPEX", kwh: "next 12-month kWh", performance: "historical actual versus age-matched model", revenue: "next 12-month revenue", electricity: "next 12-month energy and network cost", opex: "next 12-month other OPEX", ebitda: "next 12-month site EBITDA", payback: "run-rate payback", status: "performance status", quality: "data quality" };
@@ -5639,7 +5644,7 @@ function renderPortfolioFinancialPerformance() {
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
     <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Every operating metric uses the same forward 12-month period. CAPEX compares actual and complete modelled day-one build cost. The projection horizon can be selected in one-year steps from 1 to 20.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Actual performance versus model to date</h3><p class="muted small">Real delivered kWh compared with the current calibrated model over the exact same commercial-age period. This is the primary investor model-accuracy view.</p></div></div>${portfolioFinancialPerformanceCards(summary)}${portfolioFinancialHistoryWarning(summary)}${portfolioFinancialInvestmentWarnings(summary)}<p class="muted small">The comparison is historical and age-matched. Forward outlook versus the current benchmark remains available inside each Next 12m kWh audit graph.</p></section>
-    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row portfolio-financial-table-heading"><div><h3>Site financial performance</h3><p class="portfolio-financial-section-subtitle">Site-level actual performance, forward outlook, CAPEX accuracy, operating costs and investment returns.</p><p class="muted small">Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Showing ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Day-one CAPEX excludes replacements, later plugs and progressive CAPEX.</p></div>${portfolioCommercialTermsManagerButton(rows)}</div><details class="portfolio-financial-methodology"><summary>Calculation definitions</summary><div><p><strong>Actual & Next 12m kWh:</strong> forecast is compared with trailing-12-month actuals or the annualised actual run-rate. Click any value to inspect full daily history, rolling-30 trend, monthly factors and the controlled forecast.</p><p><strong>Actual vs model:</strong> realised delivered kWh compared with the current calibrated age-matched model over the exact same historical period. ±15% is in benchmark; sites with less than 30 days remain early evidence.</p><p><strong>Forward model:</strong> the current calibrated forward benchmark covers the same next 12 months and is shown inside the forecast cell/audit as a secondary planning comparison.</p><p><strong>CAPEX variance:</strong> actual gross day-one CAPEX minus model day-one CAPEX. Positive overspend is red; negative underspend is green. Funding affects net investment returns only.</p><p><strong>Site EBITDA:</strong> revenue − energy − standing/capacity − other OPEX. <strong>Run-rate payback:</strong> gross or user-selected net CAPEX ÷ next-12-month site EBITDA.</p></div></details>${filteredRows.length ? portfolioFinancialTableMarkup(headers, sorted.map(portfolioFinancialTableRow)) : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
+    <section class="panel portfolio-financial-table-panel"><div class="panel-title-row portfolio-financial-table-heading"><div><h3>Site financial performance</h3><p class="portfolio-financial-section-subtitle">Site-level actual performance, forward outlook, CAPEX accuracy, operating costs and investment returns.</p><p class="muted small">Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Showing ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Day-one CAPEX excludes replacements, later plugs and progressive CAPEX.</p></div>${portfolioCommercialTermsManagerButton(rows)}</div><details class="portfolio-financial-methodology"><summary>Calculation definitions</summary><div><p><strong>Actual & Next 12m kWh:</strong> forecast is compared with trailing-12-month actuals or the annualised actual run-rate. Click any value to inspect full daily history, rolling-30 trend, monthly factors and the controlled forecast.</p><p><strong>Actual vs age-matched model:</strong> realised delivered kWh compared with the current calibrated age-matched model over the exact same historical period. ±15% is in line with model; sites with less than 30 days remain early evidence.</p><p><strong>Forward model:</strong> the current calibrated forward benchmark covers the same next 12 months and remains available inside the forecast audit as a secondary planning comparison.</p><p><strong>CAPEX variance:</strong> actual gross day-one CAPEX minus model day-one CAPEX. Positive overspend is red; negative underspend is green. Funding affects net investment returns only.</p><p><strong>Site EBITDA:</strong> revenue − energy − standing/capacity − other OPEX. <strong>Run-rate payback:</strong> gross or user-selected net CAPEX ÷ next-12-month site EBITDA.</p></div></details>${filteredRows.length ? portfolioFinancialTableMarkup(headers, sorted.map(portfolioFinancialTableRow)) : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioFinancialAdvancedMethodologyPanel(maturityModel, filteredRows)}
     ${portfolioCommercialTermsModal(rows)}
     ${portfolioForecastModal(rows)}

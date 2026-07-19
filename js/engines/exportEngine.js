@@ -613,9 +613,14 @@ export function exportScenarioCsv(compare) {
     totalCostToServeDemand: s.totalCostToServeDemand,
     cumulativeCashFlow: s.cumulativeCashFlow,
     roi: s.roi,
+    roiOnGrossInitialCapex: s.roiOnGrossInitialCapex,
+    paybackYears: s.paybackYears,
     breakEvenYear: s.breakEvenYear || "",
     npv: s.npv,
     irr: s.irr,
+    securedLeaseNpv: s.securedLeaseNpv,
+    securedLeaseIrr: s.securedLeaseIrr,
+    postLeaseCashFlow: s.postLeaseCashFlow,
     servedDemandPercentage: s.servedDemandPercentage,
     lostDemand: s.lostDemand,
     lostRevenue: s.lostRevenue,
@@ -657,11 +662,25 @@ export function exportAnnualFinancialsExcel(state, results) {
     ["Selected MIC kVA", Number(state.config.selectedMicKva || 0)],
     ["Selected battery", state.config.batterySize || "No battery"],
     ["Recommended scenario", recommended?.name || "No feasible scenario"],
+    ["Gross initial investment", Number(financial.grossInitialInvestmentBeforeGrant || 0)],
+    ["Grant requested", Number(financial.grantRequested || 0)],
+    ["Grant applied", Number(financial.grantApplied || 0)],
+    ["Operator-funded initial investment", Number(financial.initialInvestment || 0)],
+    ["Gross lifecycle CAPEX", Number(financial.grossTotalCapex || 0)],
+    ["Operator-funded lifecycle CAPEX", Number(financial.operatorFundedTotalCapex || 0)],
     ["Cumulative cash flow", Number(financial.cumulativeCashFlow || 0)],
-    ["ROI", Number.isFinite(financial.roi) ? financial.roi : ""],
+    ["ROI on net initial investment", Number.isFinite(financial.roi) ? financial.roi : ""],
+    ["ROI on gross initial CAPEX", Number.isFinite(financial.roiOnGrossInitialCapex) ? financial.roiOnGrossInitialCapex : ""],
+    ["NPV", Number.isFinite(financial.npv) ? financial.npv : ""],
+    ["Discount rate", Number(financial.discountRate || 0)],
+    ["IRR", Number.isFinite(financial.irr) ? financial.irr : "No valid IRR"],
+    ["Fractional payback years", Number.isFinite(financial.paybackYears) ? financial.paybackYears : "Not within horizon"],
+    ["Secured lease NPV", Number.isFinite(financial.securedLeaseNpv) ? financial.securedLeaseNpv : ""],
+    ["Secured lease IRR", Number.isFinite(financial.securedLeaseIrr) ? financial.securedLeaseIrr : "No valid IRR"],
+    ["Post-lease cash flow", Number(financial.postLeaseCashFlow || 0)],
     ["Break-even year", financial.breakEvenYear || "Not within horizon"]
   ];
-  const annualRows = [["Year","Sessions served","Delivered kWh","Revenue","Electricity cost","Gross profit","Total opex","Annual cash flow","Cumulative cash flow"],
+  const annualRows = [["Year","Sessions served","Delivered kWh","Revenue","Electricity cost","Gross profit","Total opex","Year-end project cash flow","Cumulative project cash flow"],
     ...rows.map(r => [
       r.year,
       Number(r.sessionsServed || 0),
@@ -670,7 +689,7 @@ export function exportAnnualFinancialsExcel(state, results) {
       Number(r.electricityCost || 0),
       Number(r.grossProfit || 0),
       Number(r.totalOperatingCosts || 0),
-      Number(r.annualCashFlow || 0),
+      Number(r.postInitialAnnualCashFlow || 0),
       Number(r.cumulativeCashFlow || 0)
     ])
   ];
@@ -897,7 +916,7 @@ export async function exportInvestorPdf(state, results) {
     currency(r.electricityCost, 0),
     currency(r.grossProfit, 0),
     currency(r.totalOperatingCosts, 0),
-    currency(r.annualCashFlow, 0),
+    currency(r.postInitialAnnualCashFlow, 0),
     currency(r.cumulativeCashFlow, 0)
   ]);
 
@@ -919,7 +938,7 @@ export async function exportInvestorPdf(state, results) {
 
   const scenarioTableRows = scenarioRows(results.compare);
   const portfolioTableRows = portfolioPdfTableRows(80);
-  const capexRows = (f.capexEvents || []).map(e => [e.year, currency(e.amount, 0), esc(e.reason)]);
+  const capexRows = (f.capexEvents || []).map(e => [e.year, currency(e.amount, 0), currency(e.grantApplied || 0,0), currency(e.operatorFundedAmount ?? e.amount,0), esc(e.reason)]);
   const technicalStatus = results.yearByYear.technical.feasible
     ? "Configuration is technically feasible under the model checks."
     : (results.yearByYear.technical.failures || []).join("; ");
@@ -933,14 +952,14 @@ export async function exportInvestorPdf(state, results) {
 
   const investmentChart = financeComboChart("reportCashflowBreakEvenChart", horizonRows, {
     title: "Cash flow and break-even over the selected horizon",
-    bars: [{ key: "annualCashFlow", label: "Annual cash flow" }],
+    bars: [{ key: "postInitialAnnualCashFlow", label: "Year-end project cash flow" }],
     lines: [{ key: "cumulativeCashFlow", label: "Cumulative cash flow" }]
   });
 
   const annualCharts = [
     financeComboChart("reportAnnualPerformanceTrend", annualChartRows, {
       title: "Annual performance trend",
-      bars: [{ key: "annualCashFlow", label: "Annual cash flow" }],
+      bars: [{ key: "postInitialAnnualCashFlow", label: "Year-end project cash flow" }],
       lines: [{ key: "totalRevenue", label: "Revenue" }, { key: "grossProfit", label: "Gross profit" }, { key: "cumulativeCashFlow", label: "Cumulative cash flow" }]
     }),
     stackedBarChart("reportAnnualCostBreakdown", annualChartRows, "year", [
@@ -1019,17 +1038,23 @@ export async function exportInvestorPdf(state, results) {
   <section class="print-page">
     <h2>4. Investment Case</h2>
     <div class="report-grid">
-      ${reportMetric("Initial investment", currency(f.grossInitialInvestmentBeforeGrant, 0))}
-      ${reportMetric("Net initial investment", currency(f.initialInvestment, 0))}
-      ${reportMetric("Total capex", currency(f.totalCapex, 0))}
+      ${reportMetric("Gross initial CAPEX", currency(f.grossInitialInvestmentBeforeGrant, 0))}
+      ${reportMetric("Grant applied", currency(f.grantApplied, 0))}
+      ${reportMetric("Operator-funded initial", currency(f.initialInvestment, 0))}
+      ${reportMetric("Gross lifecycle CAPEX", currency(f.grossTotalCapex, 0))}
+      ${reportMetric("Operator-funded lifecycle CAPEX", currency(f.operatorFundedTotalCapex, 0))}
       ${reportMetric("Cumulative cash flow", currency(f.cumulativeCashFlow, 0))}
-      ${reportMetric("ROI", Number.isFinite(f.roi) ? pct(f.roi, 1) : "—")}
-      ${reportMetric("Break-even", f.breakEvenYear || "Not within horizon")}
+      ${reportMetric("Net ROI", Number.isFinite(f.roi) ? pct(f.roi, 1) : "—")}
+      ${reportMetric("Gross ROI", Number.isFinite(f.roiOnGrossInitialCapex) ? pct(f.roiOnGrossInitialCapex, 1) : "—")}
+      ${reportMetric(`NPV @ ${pct(f.discountRate || 0,1)}`, currency(f.npv, 0))}
+      ${reportMetric("IRR", Number.isFinite(f.irr) ? pct(f.irr,1) : "No valid IRR")}
+      ${reportMetric("Payback", Number.isFinite(f.paybackYears) ? `${number(f.paybackYears,1)} years` : "Not within horizon")}
+      ${reportMetric(`Secured lease NPV (${number(f.securedLeaseHorizon || 0,0)} yrs)`, Number.isFinite(f.securedLeaseNpv) ? currency(f.securedLeaseNpv,0) : "—")}
     </div>
     <div class="report-chart-grid">${investmentChart}</div>
     <div class="panel">
       <h3>Capex deployment years</h3>
-      ${htmlTable(["Year", "Amount", "Reason"], capexRows)}
+      ${htmlTable(["Year", "Gross amount", "Grant", "Operator funded", "Reason"], capexRows)}
     </div>
   </section>
 

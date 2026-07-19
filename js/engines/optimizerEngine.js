@@ -1,7 +1,7 @@
 import { EXCEL_SIX_SCENARIOS } from "../data/scenarioLibrary.js";
 import { MIC_VALUES } from "../data/defaultAssumptions.js";
 import { calculateYearByYear, summariseFinancials } from "./financialEngine.js";
-import { technicalChecks, validateConfiguration } from "./technicalEngine.js";
+import { technicalChecks, validateConfiguration, batteryUsableEnergyKwh, rechargeWindowDurationHours } from "./technicalEngine.js";
 import { batteryItem, batteryOptionsFor } from "../data/batteryLibrary.js";
 import { cabinetOptions, standaloneChargerOptions, effectiveCabinetMaxDualDisp } from "../data/platformLibrary.js";
 
@@ -68,7 +68,7 @@ function maxResidualBatteryDuty(inputs, demand, micKva) {
   const rows = Array.isArray(demand?.years) ? demand.years : [];
   const residualPowerKw = Math.max(0, ...rows.map(y => Math.max(0, Number(y.peakDemandRequiredKw || 0) - usableGridKw)));
   const residualEnergyKwh = Math.max(0, ...rows.map(y => Math.max(0, Number(y.peakWindowKwh || 0) - usableGridKw * peakWindowHours)));
-  const overnightRechargeAvailableKwh = usableGridKw * Number(inputs.overnightRechargeWindowDuration || 0);
+  const overnightRechargeAvailableKwh = usableGridKw * rechargeWindowDurationHours(inputs);
   return { residualPowerKw, residualEnergyKwh, overnightRechargeAvailableKwh };
 }
 
@@ -90,8 +90,9 @@ function minimumBatteryForDuty(platform, batteryStrategy, batteryList, inputs, d
   const requiredEnergy = Math.max(0, duty.residualEnergyKwh);
   const rightSized = options.find(b => {
     const powerOk = Number(b.powerKw || 0) + 1e-9 >= requiredPower;
-    const energyOk = Number(b.energyKwh || 0) + 1e-9 >= requiredEnergy;
-    const rechargeOk = duty.overnightRechargeAvailableKwh + 1e-9 >= Math.min(requiredEnergy, Number(b.energyKwh || 0) || requiredEnergy);
+    const usableEnergy = batteryUsableEnergyKwh(Number(b.energyKwh || 0), 1, inputs);
+    const energyOk = usableEnergy + 1e-9 >= requiredEnergy;
+    const rechargeOk = duty.overnightRechargeAvailableKwh + 1e-9 >= Math.min(requiredEnergy, usableEnergy || requiredEnergy);
     return powerOk && energyOk && rechargeOk;
   });
   return (rightSized || options[options.length - 1]).item;
@@ -242,9 +243,14 @@ function evaluateConfig(id, family, config, inputs, demand, horizon) {
     totalCostToServeDemand: financial.totalCostToServeDemand,
     cumulativeCashFlow: financial.cumulativeCashFlow,
     roi: financial.roi,
+    roiOnGrossInitialCapex: financial.roiOnGrossInitialCapex,
     breakEvenYear: financial.breakEvenYear,
+    paybackYears: financial.paybackYears,
     npv: financial.npv,
     irr: financial.irr,
+    securedLeaseNpv: financial.securedLeaseNpv,
+    securedLeaseIrr: financial.securedLeaseIrr,
+    postLeaseCashFlow: financial.postLeaseCashFlow,
     servedDemandPercentage: financial.servedDemandPercentage,
     lostDemand: financial.lostDemandKwh,
     lostRevenue: financial.lostRevenue,
@@ -254,8 +260,8 @@ function evaluateConfig(id, family, config, inputs, demand, horizon) {
     batteryUnitsSelected: batteryEnvelopeUnitCount(config),
     micHeadroomDeficit: config.selectedMicKva - demand.maxRequiredMicNoBatteryKva,
     batteryPowerHeadroomDeficit: yearByYear.derived.batteryPowerKw - Math.max(...demand.years.map(y => Math.max(0, y.peakDemandRequiredKw - config.selectedMicKva * inputs.powerFactor))),
-    batteryEnergyHeadroomDeficit: yearByYear.derived.batteryEnergyKwh - Math.max(...demand.years.map(y => Math.max(0, y.peakWindowKwh - config.selectedMicKva * inputs.powerFactor * 5))),
-    overnightRechargeFeasibility: (config.batterySize === "No battery") ? "N/A — no battery" : (config.selectedMicKva * inputs.powerFactor * inputs.overnightRechargeWindowDuration >= yearByYear.derived.batteryEnergyKwh * inputs.batteryDispatchFractionUsable ? "PASS" : "CHECK"),
+    batteryEnergyHeadroomDeficit: yearByYear.derived.batteryDispatchableEnergyKwh - Math.max(...demand.years.map(y => Math.max(0, y.peakWindowKwh - config.selectedMicKva * inputs.powerFactor * 5))),
+    overnightRechargeFeasibility: (config.batterySize === "No battery") ? "N/A — no battery" : (config.selectedMicKva * inputs.powerFactor * rechargeWindowDurationHours(inputs) >= yearByYear.derived.batteryDispatchableEnergyKwh ? "PASS" : "CHECK"),
     failureReason: technical.failures.join("; ")
   });
 }

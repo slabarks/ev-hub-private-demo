@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
-  <link rel="stylesheet" href="./assets/styles.css?v=21-5-investor-table-20260719-r1" />
+  <link rel="stylesheet" href="./assets/styles.css?v=21-6-audit-20260719-r1" />
 </head>
 <body>
   <header class="app-header">
@@ -21,55 +21,38 @@
     </div>
   </header>
 
-  <div class="app-mode-toggle" id="appModeToggle">
-    <button type="button" data-app-mode="simple" class="active">Simple</button>
-    <button type="button" data-app-mode="expert">Expert</button>
-  </div>
-
-  <div class="view-mode-toggle" id="viewModeToggle">
-    <span>View</span>
-    <button type="button" data-view-mode="investor">Investor view</button>
-    <button type="button" data-view-mode="full" class="active">Full model</button>
-  </div>
-
-  <nav class="tabs" id="tabs">
-    <div class="tab-group" data-group="assess">
-      <span class="tab-group-label">Assess</span>
-      <button type="button" data-tab="site" data-audience="investor" data-long="Site Screening" data-short="Screening" class="active" onclick="window.__evHubGoTab && window.__evHubGoTab('site')">Site Screening</button>
-      <button type="button" data-tab="demand" data-audience="investor" data-long="Demand Forecast" data-short="Demand" onclick="window.__evHubGoTab && window.__evHubGoTab('demand')">Demand Forecast</button>
+  <nav class="tabs" id="tabs" aria-label="Application navigation">
+    <div class="nav-mode-switch" role="group" aria-label="Navigation mode">
+      <button type="button" data-nav-mode="investor" class="active">Investor view</button>
+      <button type="button" data-nav-mode="analyst">Analyst view</button>
     </div>
-    <div class="tab-group-divider"></div>
-    <div class="tab-group" data-group="design">
-      <span class="tab-group-label">Design</span>
-      <button type="button" data-tab="setup" data-audience="builder" data-long="Product Configuration" data-short="Product" onclick="window.__evHubGoTab && window.__evHubGoTab('setup')">Product Configuration</button>
-      <button type="button" data-tab="scenario" data-audience="builder" data-long="Scenario Ranking" data-short="Ranking" onclick="window.__evHubGoTab && window.__evHubGoTab('scenario')">Scenario Ranking</button>
+    <div class="nav-tab-list">
+      <button type="button" data-tab="site" data-audience="investor analyst" data-long="Site Screening" data-short="Screening" class="active">Site Screening</button>
+      <button type="button" data-tab="demand" data-audience="investor analyst" data-long="Demand Forecast" data-short="Demand">Demand Forecast</button>
+      <button type="button" data-tab="setup" data-audience="investor analyst" data-long="Product Configuration" data-short="Product">Product Configuration</button>
+      <button type="button" data-tab="investment" data-audience="investor analyst" data-long="Investment Case" data-short="Investment">Investment Case</button>
+      <button type="button" data-tab="portfolioFinancials" data-audience="investor analyst" data-long="Portfolio Financials" data-short="Portfolio">Portfolio Financials</button>
+      <button type="button" data-tab="report" data-audience="investor analyst" data-long="Investor Report" data-short="Report">Investor Report</button>
+      <button type="button" data-tab="annuals" data-audience="analyst" data-long="Annual Financials" data-short="Annuals">Annual Financials</button>
+      <button type="button" data-tab="scenario" data-audience="analyst" data-long="Scenario Ranking" data-short="Ranking">Scenario Ranking</button>
+      <button type="button" data-tab="portfolio" data-audience="analyst" data-long="Portfolio Calibration" data-short="Calibration">Portfolio Calibration</button>
+      <button type="button" data-tab="advanced" data-audience="analyst" data-long="Advanced Model Settings" data-short="Settings">Advanced Settings</button>
+      <button type="button" id="guideButton" class="guide-tab-button" data-long="ⓘ Guide" data-short="ⓘ Guide">ⓘ Guide</button>
     </div>
-    <div class="tab-group-divider"></div>
-    <div class="tab-group" data-group="invest">
-      <span class="tab-group-label">Invest</span>
-      <button type="button" data-tab="investment" data-audience="investor" data-long="Investment Case" data-short="Investment" onclick="window.__evHubGoTab && window.__evHubGoTab('investment')">Investment Case</button>
-      <button type="button" data-tab="annuals" data-audience="investor" data-long="Annual Financials" data-short="Annuals" onclick="window.__evHubGoTab && window.__evHubGoTab('annuals')">Annual Financials</button>
-      <button type="button" data-tab="portfolioFinancials" data-audience="investor" data-long="Portfolio Financials" data-short="Financials" onclick="window.__evHubGoTab && window.__evHubGoTab('portfolioFinancials')">Portfolio Financials</button>
-      <button type="button" data-tab="report" data-audience="investor" data-long="Investor Report" data-short="Report" onclick="window.__evHubGoTab && window.__evHubGoTab('report')">Investor Report</button>
-    </div>
-    <div class="tab-group-divider"></div>
-    <div class="tab-group" data-group="modelinternals">
-      <span class="tab-group-label">Model internals</span>
-      <button type="button" data-tab="portfolio" data-audience="builder" data-long="Portfolio Calibration" data-short="Calibration" onclick="window.__evHubGoTab && window.__evHubGoTab('portfolio')">Portfolio Calibration</button>
-      <button type="button" data-tab="advanced" data-audience="builder" data-long="Advanced Model Settings" data-short="Settings" onclick="window.__evHubGoTab && window.__evHubGoTab('advanced')">Advanced Model Settings</button>
-    </div>
-    <button type="button" id="guideButton" class="guide-tab-button" data-long="ⓘ Guide" data-short="ⓘ Guide">ⓘ Guide</button>
   </nav>
 
-  <section class="tabs-progress" id="tabsProgress" aria-label="Workflow progress">
-    <span id="tabsProgressText">Step 1 of 10: Site Screening</span>
-    <div class="tabs-progress-track"><div class="tabs-progress-fill" id="tabsProgressFill"></div></div>
+  <section class="readiness-strip" id="workflowStepper" aria-label="Model readiness">
+    <strong id="workflowStatusText">Investor readiness</strong>
+    <span data-readiness="site">Site</span>
+    <span data-readiness="traffic">AADT</span>
+    <span data-readiness="technical">Technical</span>
+    <span data-readiness="finance">Finance</span>
+    <span data-readiness="report">Report</span>
   </section>
 
   <main id="app" class="app"></main>
-  <main id="simpleApp" class="simple-app"></main>
 
   <script src="./assets/vendor/jszip.min.js?v=3.10.1"></script>
-  <script type="module" src="./js/app.js?v=21-5-investor-table-20260719-r1"></script>
+  <script type="module" src="./js/app.js?v=21-6-audit-20260719-r1"></script>
 </body>
 </html>

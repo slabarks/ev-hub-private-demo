@@ -16,18 +16,40 @@ function run(command, args) {
   assert.equal(result.status, 0, `${command} ${args.join(" ")} failed`);
 }
 
-console.log("\n[1/7] Syntax and static production guards");
+console.log("\n[1/8] Syntax and static production guards");
 run(python, ["-m", "py_compile", "server.py"]);
-for (const file of ["js/app.js", "js/liveHistoryLocalParser.js", "js/engines/maturityEngine.js", "js/engines/exportEngine.js"]) run("node", ["--check", file]);
+for (const file of [
+  "js/app.js", "js/liveHistoryLocalParser.js", "js/engines/maturityEngine.js",
+  "js/engines/financialEngine.js", "js/engines/technicalEngine.js",
+  "js/engines/optimizerEngine.js", "js/engines/exportEngine.js",
+  "js/engines/forecastSnapshotEngine.js", "js/data/defaultAssumptions.js", "js/utils.js"
+]) run("node", ["--check", file]);
 run("node", ["tests/upload_route_resilience_test.js"]);
-console.log("\n[2/7] Browser-local ZIP/XLSX live-history parser regression suite");
+console.log("\n[2/8] Browser-local ZIP/XLSX live-history parser regression suite");
 run("node", ["tests/local_history_parser_test.js"]);
 const app = fs.readFileSync(path.join(root, "js", "app.js"), "utf8");
 const server = fs.readFileSync(path.join(root, "server.py"), "utf8");
 const css = fs.readFileSync(path.join(root, "assets", "styles.css"), "utf8");
+const financialEngine = fs.readFileSync(path.join(root, "js", "engines", "financialEngine.js"), "utf8");
+const exportEngine = fs.readFileSync(path.join(root, "js", "engines", "exportEngine.js"), "utf8");
 const bundle = JSON.parse(fs.readFileSync(path.join(root, "data", "tii_counter_locations_bundled_vetted.json"), "utf8"));
+
+const indexHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const manifest = JSON.parse(fs.readFileSync(path.join(root, "DEPLOYMENT_MANIFEST.json"), "utf8"));
+assert.equal((indexHtml.match(/id="workflowStepper"/g) || []).length, 1, "only one readiness/navigation workflow element may be rendered");
+assert.match(indexHtml, /data-nav-mode="investor"/);
+assert.match(indexHtml, /data-nav-mode="analyst"/);
+assert.ok(manifest.requiredRootFiles.includes("js/engines/forecastSnapshotEngine.js"));
+assert.ok(manifest.requiredRootFiles.includes("js/engines/financialEngine.js"));
+assert.match(server, /js\/engines\/forecastSnapshotEngine\.js/);
+assert.match(financialEngine, /cashflowTimingConvention/);
+assert.match(app, /securedLeaseNpv/);
+assert.match(app, /grantCapped/);
+assert.match(app, /assumption-tag/);
+assert.match(app, /savePortfolioForecastSnapshots/);
+assert.match(exportEngine, /postInitialAnnualCashFlow/);
 assert.match(app, /V21 browser provenance-controlled AADT engine/);
-assert.match(server, /V21\.5 AADT audited resolver/);
+assert.match(server, /V21\.6 AADT audited resolver/);
 assert.match(app, /value > 0[\s\S]*cls: "capex-delta-red"/);
 assert.match(app, /value < 0[\s\S]*cls: "capex-delta-green"/);
 assert.match(app, /absolute <= 30000 \? "green" : absolute <= 50000 \? "amber" : "red"/);
@@ -65,15 +87,15 @@ assert.match(css, /portfolio-financial-table th:nth-child\(10\)/);
 assert.match(css, /portfolio-financial-table td:first-child[\s\S]*position: sticky/);
 assert.match(css, /portfolio-financial-table \{[\s\S]*table-layout: fixed/);
 const v213CssMarker = css.lastIndexOf("/* V21.5 — full-width Portfolio Financials");
-assert.ok(v213CssMarker > css.lastIndexOf("width: 1650px"), "V21.5 fluid-width rules must override legacy fixed-width rules");
+assert.ok(v213CssMarker > css.lastIndexOf("width: 1650px"), "V21.6 fluid-width rules must override legacy fixed-width rules");
 const v212Css = css.slice(v213CssMarker);
 assert.match(v212Css, /overflow-x: visible/);
 assert.match(v212Css, /min-width: 0/);
 assert.match(v212Css, /@media \(max-width: 1279px\)[\s\S]*overflow-x: auto/);
 assert.match(server, /"monthlyHistory": monthly_history/);
 assert.match(server, /LIVE_UPLOAD_SCHEMA_VERSION = "v21-live-history-v7"/);
-assert.match(server, /APP_BUILD_ID = "EVHUB-V21.5-20260719-R1"/);
-assert.match(server, /LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21\.5"/);
+assert.match(server, /APP_BUILD_ID = "EVHUB-V21.6-20260719-R1"/);
+assert.match(server, /LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21\.6"/);
 assert.match(server, /"monthlyObservationCount": monthly_observation_count/);
 assert.match(server, /"dailyHistory": daily_history/);
 assert.match(server, /"dailyObservationCount": daily_observation_count/);
@@ -101,7 +123,7 @@ const fundingLibrary = fs.readFileSync(path.join(root, "js", "data", "zeviFundin
 assert.match(fundingLibrary, /"id": "confirmed_supervalu_tipperary"[\s\S]*?"confidence": "confirmed"/);
 assert.match(app, /Funding available EUR/);
 assert.match(app, /PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7"/);
-assert.match(app, /APP_BUILD_ID = "EVHUB-V21.5-20260719-R1"/);
+assert.match(app, /APP_BUILD_ID = "EVHUB-V21.6-20260719-R1"/);
 assert.match(app, /accept="\.xlsx,\.xlsm,\.csv,\.zip"/);
 assert.match(server, /def _expand_calibration_upload_files/);
 assert.match(server, /def _is_primary_daily_calibration_filename/);
@@ -126,9 +148,8 @@ assert.match(css, /portfolio-performance-cell/);
 assert.doesNotMatch(app, /Low \/ missing history/);
 assert.match(app, /History quality/);
 assert.match(app, /does not replace the actual-versus-age-matched-model classification/);
-assert.match(app, /base forecast used in EBITDA/);
+assert.match(app, /P25–P75/);
 assert.doesNotMatch(app, /Revenue downside EUR|Revenue upside EUR|year revenue downside EUR|year revenue upside EUR/);
-const exportEngine = fs.readFileSync(path.join(root, "js", "engines", "exportEngine.js"), "utf8");
 assert.match(exportEngine, /Actual performance vs age-matched model/);
 assert.doesNotMatch(exportEngine, /range \${currency\(r\.next12mRevenue/);
 assert.doesNotMatch(exportEngine, /Low \/ missing history/);
@@ -136,7 +157,7 @@ assert.match(exportEngine, /History quality/);
 assert.match(fs.readFileSync(path.join(root, "js", "engines", "exportEngine.js"), "utf8"), /name: "Portfolio Summary"/);
 assert.match(fs.readFileSync(path.join(root, "js", "engines", "exportEngine.js"), "utf8"), /name: "Definitions"/);
 assert.doesNotMatch(app, /<h3>Maturity forecast summary<\/h3>/);
-assert.match(fs.readFileSync(path.join(root, "index.html"), "utf8"), /21-5-investor-table-20260719-r1/);
+assert.match(fs.readFileSync(path.join(root, "index.html"), "utf8"), /21-6-audit-20260719-r1/);
 assert.doesNotMatch(server, /raise SystemExit\(2\)/);
 const compatibilitySource = app.match(/function portfolioServerCompatibility\(info, options = \{\}\) \{[\s\S]*?\n\}/)?.[0];
 const snapshotValidationSource = app.match(/function portfolioSnapshotValidation\(snapshot\) \{[\s\S]*?\n\}/)?.[0];
@@ -153,8 +174,8 @@ assert.match(app, /PORTFOLIO_UPLOAD_REQUEST_TIMEOUT_MS = 150000/);
 assert.match(app, /responseText \? JSON\.parse/);
 assert.match(app, /api\/import-live-calibration-v1745/);
 const snapshotContext = {};
-vm.runInNewContext(`const APP_RELEASE_VERSION = "V21.5"; const APP_BUILD_ID = "EVHUB-V21.5-20260719-R1"; const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.5"; const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7"; ${compatibilitySource}; ${snapshotValidationSource}; this.validate = portfolioSnapshotValidation;`, snapshotContext);
-const buildMeta = { buildId: "EVHUB-V21.5-20260719-R1", uploadSchemaVersion: "v21-live-history-v7", parserBuildId: "EVHUB-LIVE-PARSER-21.5", monthlyHistorySupported: true, dailyHistorySupported: true, deploymentRootOk: true, packageLayoutVersion: "flat-root-v1", serverFileFingerprint: "testfingerprint" };
+vm.runInNewContext(`const APP_RELEASE_VERSION = "V21.6"; const APP_BUILD_ID = "EVHUB-V21.6-20260719-R1"; const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.6"; const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7"; ${compatibilitySource}; ${snapshotValidationSource}; this.validate = portfolioSnapshotValidation;`, snapshotContext);
+const buildMeta = { buildId: "EVHUB-V21.6-20260719-R1", uploadSchemaVersion: "v21-live-history-v7", parserBuildId: "EVHUB-LIVE-PARSER-21.6", monthlyHistorySupported: true, dailyHistorySupported: true, deploymentRootOk: true, packageLayoutVersion: "flat-root-v1", serverFileFingerprint: "testfingerprint" };
 const missingHistoryResult = snapshotContext.validate({ ...buildMeta, parsedFiles: ["Daily_Charger_kWh.xlsx"], siteActuals: [{ actual: { annualKwh: 1000, monthlyHistory: [], dailyHistory: [] } }] });
 assert.equal(missingHistoryResult.ok, false, "Daily_Charger_kWh must not be activated when the backend omits daily or monthly histories");
 assert.equal(missingHistoryResult.code, "history-missing");
@@ -224,13 +245,13 @@ assert.match(server, /coarse ranking-only coordinate/);
 assert.equal(bundle.locations.filter(x => x.mappable_location).length, 11);
 assert.equal(bundle.locations.filter(x => x.map_coordinate_status === "ranking-only-coarse-coordinate-not-for-map").length, 295);
 
-console.log("\n[3/7] AADT regression suite");
+console.log("\n[3/8] AADT regression suite");
 run(python, ["tests/aadt_regression_test.py"]);
 
-console.log("\n[4/7] Monthly live-data parser regression suite");
+console.log("\n[4/8] Monthly live-data parser regression suite");
 run(python, ["tests/live_financial_maturity_test.py"]);
 
-console.log("\n[5/7] Revenue maturity engine regression suite");
+console.log("\n[5/8] Revenue maturity engine regression suite");
 run("node", ["tests/maturity_regression_test.js"]);
 
 function freePort() {
@@ -257,7 +278,10 @@ async function waitFor(url, timeoutMs = 15000) {
   throw last || new Error(`Timed out waiting for ${url}`);
 }
 
-console.log("\n[6/7] Live local API and static-delivery smoke test");
+console.log("\n[6/8] Financial and technical integrity regression suite");
+run("node", ["tests/financial_integrity_test.js"]);
+
+console.log("\n[7/8] Live local API and static-delivery smoke test");
 const port = await freePort();
 const child = spawn(python, ["server.py"], {
   cwd: root,
@@ -272,9 +296,9 @@ try {
   const version = await versionResp.json();
   assert.equal(version.ok, true);
   assert.match(version.aadt_engine_version, /V21/);
-  assert.equal(version.buildId, "EVHUB-V21.5-20260719-R1");
+  assert.equal(version.buildId, "EVHUB-V21.6-20260719-R1");
   assert.equal(version.uploadSchemaVersion, "v21-live-history-v7");
-  assert.equal(version.parserBuildId, "EVHUB-LIVE-PARSER-21.5");
+  assert.equal(version.parserBuildId, "EVHUB-LIVE-PARSER-21.6");
   assert.equal(version.monthlyHistorySupported, true);
   assert.equal(version.deploymentRootOk, true);
   assert.equal(version.packageLayoutVersion, "flat-root-v1");
@@ -284,13 +308,13 @@ try {
   const prefixedVersionResp = await fetch(`http://127.0.0.1:${port}/embedded/app/api/version`);
   assert.equal(prefixedVersionResp.status, 200);
   const prefixedVersion = await prefixedVersionResp.json();
-  assert.equal(prefixedVersion.buildId, "EVHUB-V21.5-20260719-R1");
+  assert.equal(prefixedVersion.buildId, "EVHUB-V21.6-20260719-R1");
 
   const healthResp = await fetch(`http://127.0.0.1:${port}/api/health`);
   assert.equal(healthResp.status, 200);
   const health = await healthResp.json();
   assert.equal(health.health, "ok");
-  assert.equal(health.buildId, "EVHUB-V21.5-20260719-R1");
+  assert.equal(health.buildId, "EVHUB-V21.6-20260719-R1");
   assert.equal(health.packageLayoutVersion, "flat-root-v1");
 
   const empty = await fetch(`http://127.0.0.1:${port}/api/auto-tii-aadt`);
@@ -324,9 +348,9 @@ try {
   assert.equal(uploadResp.status, 200);
   const upload = await uploadResp.json();
   assert.equal(upload.ok, true);
-  assert.equal(upload.buildId, "EVHUB-V21.5-20260719-R1");
+  assert.equal(upload.buildId, "EVHUB-V21.6-20260719-R1");
   assert.equal(upload.schemaVersion, "v21-live-history-v7");
-  assert.equal(upload.parserBuildId, "EVHUB-LIVE-PARSER-21.5");
+  assert.equal(upload.parserBuildId, "EVHUB-LIVE-PARSER-21.6");
   assert.equal(upload.packageLayoutVersion, "flat-root-v1");
   assert.equal(upload.monthlyHistorySiteCount, 1);
   assert.ok(upload.monthlyObservationCount >= 3);
@@ -336,8 +360,8 @@ try {
   assert.ok(Number(upload.parserTimingsMs?.parserTotal) >= 0);
   assert.ok(Number(upload.requestTimingsMs?.serverBeforeResponse) >= 0);
   assert.match(uploadResp.headers.get("server-timing") || "", /parse;dur=/);
-  assert.equal(uploadResp.headers.get("x-evhub-build"), "EVHUB-V21.5-20260719-R1");
-  assert.equal(uploadResp.headers.get("x-evhub-parser"), "EVHUB-LIVE-PARSER-21.5");
+  assert.equal(uploadResp.headers.get("x-evhub-build"), "EVHUB-V21.6-20260719-R1");
+  assert.equal(uploadResp.headers.get("x-evhub-parser"), "EVHUB-LIVE-PARSER-21.6");
   assert.equal(uploadResp.headers.get("content-encoding"), "gzip");
 
   const prefixedUploadForm = new FormData();
@@ -372,6 +396,6 @@ try {
   });
 }
 
-console.log("\n[7/7] Result");
-console.log("PASS — V21.5 browser-local upload integrity, backend fallback resilience, compact investor table cards, confirmed funding, 1–20-year horizon, exports and API smoke tests completed successfully.");
+console.log("\n[8/8] Result");
+console.log("PASS — V21.6 browser-local upload integrity, backend fallback resilience, compact investor table cards, confirmed funding, 1–20-year horizon, exports and API smoke tests completed successfully.");
 if (logs.trim()) console.log("Server smoke log:\n" + logs.trim());

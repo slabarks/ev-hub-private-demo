@@ -21,32 +21,44 @@
     </div>
   </header>
 
+  <div class="view-mode-toggle" id="viewModeToggle">
+    <span>View</span>
+    <button type="button" data-view-mode="investor">Investor view</button>
+    <button type="button" data-view-mode="full" class="active">Full model</button>
+  </div>
+
   <nav class="tabs" id="tabs">
-    <button type="button" data-tab="site" data-long="1. Site Screening" data-short="1. Screening" class="active" onclick="window.__evHubGoTab && window.__evHubGoTab('site')">1. Site Screening</button>
-    <button type="button" data-tab="demand" data-long="2. Demand Forecast" data-short="2. Demand" onclick="window.__evHubGoTab && window.__evHubGoTab('demand')">2. Demand Forecast</button>
-    <button type="button" data-tab="setup" data-long="3. Product Configuration" data-short="3. Product" onclick="window.__evHubGoTab && window.__evHubGoTab('setup')">3. Product Configuration</button>
-    <button type="button" data-tab="investment" data-long="4. Investment Case" data-short="4. Investment" onclick="window.__evHubGoTab && window.__evHubGoTab('investment')">4. Investment Case</button>
-    <button type="button" data-tab="annuals" data-long="5. Annual Financials" data-short="5. Annuals" onclick="window.__evHubGoTab && window.__evHubGoTab('annuals')">5. Annual Financials</button>
-    <button type="button" data-tab="scenario" data-long="6. Scenario Ranking" data-short="6. Ranking" onclick="window.__evHubGoTab && window.__evHubGoTab('scenario')">6. Scenario Ranking</button>
-    <button type="button" data-tab="portfolio" data-long="7. Portfolio Calibration" data-short="7. Calibration" onclick="window.__evHubGoTab && window.__evHubGoTab('portfolio')">7. Portfolio Calibration</button>
-    <button type="button" data-tab="portfolioFinancials" data-long="8. Portfolio Financials" data-short="8. Financials" onclick="window.__evHubGoTab && window.__evHubGoTab('portfolioFinancials')">8. Portfolio Financials</button>
-    <button type="button" data-tab="advanced" data-long="9. Advanced Model Settings" data-short="9. Settings" onclick="window.__evHubGoTab && window.__evHubGoTab('advanced')">9. Advanced Model Settings</button>
-    <button type="button" data-tab="report" data-long="10. Investor Report" data-short="10. Report" onclick="window.__evHubGoTab && window.__evHubGoTab('report')">10. Investor Report</button>
+    <div class="tab-group" data-group="assess">
+      <span class="tab-group-label">Assess</span>
+      <button type="button" data-tab="site" data-audience="investor" data-long="1. Site Screening" data-short="1. Screening" class="active" onclick="window.__evHubGoTab && window.__evHubGoTab('site')">1. Site Screening</button>
+      <button type="button" data-tab="demand" data-audience="investor" data-long="2. Demand Forecast" data-short="2. Demand" onclick="window.__evHubGoTab && window.__evHubGoTab('demand')">2. Demand Forecast</button>
+    </div>
+    <div class="tab-group-divider"></div>
+    <div class="tab-group" data-group="design">
+      <span class="tab-group-label">Design</span>
+      <button type="button" data-tab="setup" data-audience="builder" data-long="3. Product Configuration" data-short="3. Product" onclick="window.__evHubGoTab && window.__evHubGoTab('setup')">3. Product Configuration</button>
+      <button type="button" data-tab="scenario" data-audience="builder" data-long="6. Scenario Ranking" data-short="6. Ranking" onclick="window.__evHubGoTab && window.__evHubGoTab('scenario')">6. Scenario Ranking</button>
+    </div>
+    <div class="tab-group-divider"></div>
+    <div class="tab-group" data-group="invest">
+      <span class="tab-group-label">Invest</span>
+      <button type="button" data-tab="investment" data-audience="investor" data-long="4. Investment Case" data-short="4. Investment" onclick="window.__evHubGoTab && window.__evHubGoTab('investment')">4. Investment Case</button>
+      <button type="button" data-tab="annuals" data-audience="investor" data-long="5. Annual Financials" data-short="5. Annuals" onclick="window.__evHubGoTab && window.__evHubGoTab('annuals')">5. Annual Financials</button>
+      <button type="button" data-tab="portfolioFinancials" data-audience="investor" data-long="8. Portfolio Financials" data-short="8. Financials" onclick="window.__evHubGoTab && window.__evHubGoTab('portfolioFinancials')">8. Portfolio Financials</button>
+      <button type="button" data-tab="report" data-audience="investor" data-long="10. Investor Report" data-short="10. Report" onclick="window.__evHubGoTab && window.__evHubGoTab('report')">10. Investor Report</button>
+    </div>
+    <div class="tab-group-divider"></div>
+    <div class="tab-group" data-group="modelinternals">
+      <span class="tab-group-label">Model internals</span>
+      <button type="button" data-tab="portfolio" data-audience="builder" data-long="7. Portfolio Calibration" data-short="7. Calibration" onclick="window.__evHubGoTab && window.__evHubGoTab('portfolio')">7. Portfolio Calibration</button>
+      <button type="button" data-tab="advanced" data-audience="builder" data-long="9. Advanced Model Settings" data-short="9. Settings" onclick="window.__evHubGoTab && window.__evHubGoTab('advanced')">9. Advanced Model Settings</button>
+    </div>
     <button type="button" id="guideButton" class="guide-tab-button" data-long="ⓘ Guide" data-short="ⓘ Guide">ⓘ Guide</button>
   </nav>
 
-  <section class="workflow-stepper" id="workflowStepper" aria-label="Workflow progress">
-    <div class="workflow-status"><strong id="workflowStatusText">Step 1 of 10: Site Screening</strong><div class="workflow-progress"><span></span></div></div>
-    <button type="button" data-step-tab="site"><span>1</span><strong>Screen site</strong></button>
-    <button type="button" data-step-tab="demand"><span>2</span><strong>Forecast demand</strong></button>
-    <button type="button" data-step-tab="setup"><span>3</span><strong>Configure product</strong></button>
-    <button type="button" data-step-tab="investment"><span>4</span><strong>Review investment</strong></button>
-    <button type="button" data-step-tab="annuals"><span>5</span><strong>Check annuals</strong></button>
-    <button type="button" data-step-tab="scenario"><span>6</span><strong>Rank scenarios</strong></button>
-    <button type="button" data-step-tab="portfolio"><span>7</span><strong>Calibrate</strong></button>
-    <button type="button" data-step-tab="portfolioFinancials"><span>8</span><strong>Financials</strong></button>
-    <button type="button" data-step-tab="advanced"><span>9</span><strong>Advanced settings</strong></button>
-    <button type="button" data-step-tab="report"><span>10</span><strong>Export report</strong></button>
+  <section class="tabs-progress" id="tabsProgress" aria-label="Workflow progress">
+    <span id="tabsProgressText">Step 1 of 10: Site Screening</span>
+    <div class="tabs-progress-track"><div class="tabs-progress-fill" id="tabsProgressFill"></div></div>
   </section>
 
   <main id="app" class="app"></main>

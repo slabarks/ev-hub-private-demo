@@ -174,6 +174,24 @@ body::before { display: none; }
 .input-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .field label { font-size: 12px; color: #344054; font-weight: 750; display: block; margin-bottom: 6px; }
 .field small { color: var(--muted); display: block; margin-top: 5px; line-height: 1.42; font-size: 12px; }
+.assumption-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .01em; vertical-align: middle; cursor: help; }
+.assumption-tag-calibrated { background: rgba(15,143,79,.12); color: #0f8f4f; border: 1px solid rgba(15,143,79,.28); }
+.assumption-tag-judgment { background: rgba(191,135,7,.13); color: #8a6206; border: 1px solid rgba(191,135,7,.30); }
+
+/* Tab groups + view mode */
+.tabs { flex-wrap: wrap; row-gap: 10px; }
+.tab-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tab-group-label { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); padding: 0 2px; }
+.tab-group-divider { width: 1px; height: 22px; background: var(--line-2); margin: 0 4px; flex: 0 0 auto; }
+.view-mode-toggle { display: flex; align-items: center; gap: 6px; padding: 12px 28px 0; justify-content: center; }
+.view-mode-toggle span { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
+.view-mode-toggle button { border: 1px solid var(--line); background: rgba(255,255,255,.9); padding: 6px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 700; cursor: pointer; color: #344054; }
+.view-mode-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tabs button[data-audience="builder"] { border-style: dashed; }
+body[data-view-mode="investor"] .tabs button[data-audience="builder"] { display: none; }
+.tabs-progress { text-align: center; padding: 6px 28px 12px; font-size: 11.5px; color: var(--muted); font-weight: 650; }
+.tabs-progress-track { max-width: 420px; height: 4px; margin: 6px auto 0; border-radius: 999px; background: var(--line); overflow: hidden; }
+.tabs-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--lime)); border-radius: 999px; transition: width .2s ease; }
 input, select, button { font: inherit; }
 input, select {
   width: 100%;

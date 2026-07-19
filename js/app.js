@@ -270,22 +270,31 @@ function dispenserLimitHelp(config = state.config) {
   const countNote = String(config.platform || "") === "Kempower Distributed" && String(config.cabinetType || "") === "Kempower Triple Cabinet" ? ` (${kempowerTripleCabinetCount(config)} triple cabinet${kempowerTripleCabinetCount(config) === 1 ? "" : "s"})` : "";
   return `${config.cabinetType}${countNote} supports up to ${max} dual dispenser${max === 1 ? "" : "s"} / satellite${max === 1 ? "" : "s"}. Values above this are automatically reduced to the cabinet limit.`;
 }
+const ASSUMPTION_BASIS_BY_KEY = Object.fromEntries(ASSUMPTION_DICTIONARY.map(row => [row[0], row[4] || ""]));
+function assumptionBasisTag(key) {
+  const basis = ASSUMPTION_BASIS_BY_KEY[key];
+  if (!basis) return "";
+  const isAssumption = /planning assumption/i.test(basis);
+  const cls = isAssumption ? "assumption-tag assumption-tag-judgment" : "assumption-tag assumption-tag-calibrated";
+  const label = isAssumption ? "Assumption" : "Calibrated";
+  return `<span class="${cls}" title="${h(basis)}">${label}</span>`;
+}
 function inputField(key, label, opts = {}) {
   const value = state.inputs[key];
   const type = opts.type || "number";
   const unit = opts.unit ? `<span class="input-unit">${h(opts.unit)}</span>` : "";
-  return `<div class="field"><label for="${key}">${label}</label><div class="unit-input-wrap"><input id="${key}" data-input="${key}" type="${type}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
+  return `<div class="field"><label for="${key}">${label}${assumptionBasisTag(key)}</label><div class="unit-input-wrap"><input id="${key}" data-input="${key}" type="${type}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
 }
 function selectField(key, label, options, opts = {}) {
-  return `<div class="field"><label for="${key}">${label}</label><select id="${key}" data-input="${key}">${options.map(o => `<option value="${h(o)}" ${String(state.inputs[key]) === String(o) ? "selected" : ""}>${h(o)}</option>`).join("")}</select><small>${opts.help || ""}</small></div>`;
+  return `<div class="field"><label for="${key}">${label}${assumptionBasisTag(key)}</label><select id="${key}" data-input="${key}">${options.map(o => `<option value="${h(o)}" ${String(state.inputs[key]) === String(o) ? "selected" : ""}>${h(o)}</option>`).join("")}</select><small>${opts.help || ""}</small></div>`;
 }
 function selectFieldConfig(key, label, options, opts = {}) {
-  return `<div class="field"><label for="${key}">${label}</label><select id="${key}" data-config="${key}">${options.map(o => `<option value="${h(o)}" ${String(state.config[key]) === String(o) ? "selected" : ""}>${h(o)}</option>`).join("")}</select><small>${opts.help || ""}</small></div>`;
+  return `<div class="field"><label for="${key}">${label}${assumptionBasisTag(key)}</label><select id="${key}" data-config="${key}">${options.map(o => `<option value="${h(o)}" ${String(state.config[key]) === String(o) ? "selected" : ""}>${h(o)}</option>`).join("")}</select><small>${opts.help || ""}</small></div>`;
 }
 function inputFieldConfig(key, label, opts = {}) {
   const value = state.config[key];
   const unit = opts.unit ? `<span class="input-unit">${h(opts.unit)}</span>` : "";
-  return `<div class="field"><label for="${key}">${label}</label><div class="unit-input-wrap"><input id="${key}" data-config="${key}" type="${opts.type || "number"}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
+  return `<div class="field"><label for="${key}">${label}${assumptionBasisTag(key)}</label><div class="unit-input-wrap"><input id="${key}" data-config="${key}" type="${opts.type || "number"}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
 }
 function kpi(label, value, sub = "") {
   return `<div class="kpi"><div class="label">${h(label)}</div><div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
@@ -1232,16 +1241,27 @@ function renderOrderedSections(tab, sections) {
 }
 function updateWorkflowStepper() {
   const idx = VALID_TABS.indexOf(activeTab);
-  const pct = VALID_TABS.length <= 1 ? 0 : (idx / (VALID_TABS.length - 1)) * 100;
-  const stepper = document.getElementById("workflowStepper");
-  if (stepper) stepper.style.setProperty("--progress", `${Math.max(0, Math.min(100, pct))}%`);
-  const statusText = document.getElementById("workflowStatusText");
+  const pct = VALID_TABS.length <= 1 ? 0 : ((idx + 1) / VALID_TABS.length) * 100;
+  const fill = document.getElementById("tabsProgressFill");
+  if (fill) fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+  const statusText = document.getElementById("tabsProgressText");
   if (statusText) statusText.textContent = `Step ${idx + 1} of ${VALID_TABS.length}: ${TAB_LABELS[activeTab]}`;
-  document.querySelectorAll("#workflowStepper button[data-step-tab]").forEach(btn => {
-    const stepIdx = VALID_TABS.indexOf(btn.dataset.stepTab);
-    btn.classList.toggle("active", btn.dataset.stepTab === activeTab);
-    btn.classList.toggle("complete", stepIdx >= 0 && stepIdx < idx);
+}
+const VIEW_MODE_STORAGE_KEY = "evHub.viewMode.v1";
+const BUILDER_ONLY_TABS = ["setup", "scenario", "portfolio", "advanced"];
+function getViewMode() {
+  try { return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "investor" ? "investor" : "full"; } catch (_) { return "full"; }
+}
+function setViewMode(mode) {
+  try { localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode); } catch (_) {}
+  applyViewMode(mode);
+}
+function applyViewMode(mode = getViewMode()) {
+  document.body.dataset.viewMode = mode;
+  document.querySelectorAll("#viewModeToggle button[data-view-mode]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.viewMode === mode);
   });
+  if (mode === "investor" && BUILDER_ONLY_TABS.includes(activeTab)) goTab("site");
 }
 
 function validationChecklist(r) {
@@ -5642,7 +5662,7 @@ function renderPortfolioFinancialPerformance() {
     ${sectionTitle("Portfolio Financial Performance", "Forward site performance versus the calibrated model, day-one investment accuracy and selectable 1–20-year returns.")}
     ${portfolioLiveCalibrationCard(portfolioMappedSites())}
     ${portfolioFinancialFilterPanel(rows, filteredRows)}
-    <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Every operating metric uses the same forward 12-month period. CAPEX compares actual and complete modelled day-one build cost. The projection horizon can be selected in one-year steps from 1 to 20.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<p class="muted small">${h(projectionNote)}</p></section>
+    <section class="panel portfolio-financial-hero portfolio-financial-dashboard"><div class="portfolio-financial-dashboard-title"><span class="eyebrow">Portfolio dashboard</span><h3>Selected sites together</h3><p>Every operating metric uses the same forward 12-month period. CAPEX compares actual and complete modelled day-one build cost. The projection horizon can be selected in one-year steps from 1 to 20.</p></div>${portfolioFinancialDashboardWindows(rows, filteredRows, summary, projection, horizon)}<details class="forecast-monthly-audit"><summary>How the next 12 months are projected</summary><p class="muted small">${h(projectionNote)}</p></details></section>
     <section class="panel portfolio-financial-performance-panel"><div class="panel-title-row"><div><h3>Actual performance versus model to date</h3><p class="muted small">Real delivered kWh compared with the current calibrated model over the exact same commercial-age period. This is the primary investor model-accuracy view.</p></div></div>${portfolioFinancialPerformanceCards(summary)}${portfolioFinancialHistoryWarning(summary)}${portfolioFinancialInvestmentWarnings(summary)}<p class="muted small">The comparison is historical and age-matched. Forward outlook versus the current benchmark remains available inside each Next 12m kWh audit graph.</p></section>
     <section class="panel portfolio-financial-table-panel"><div class="panel-title-row portfolio-financial-table-heading"><div><h3>Site financial performance</h3><p class="portfolio-financial-section-subtitle">Site-level actual performance, forward outlook, CAPEX accuracy, operating costs and investment returns.</p><p class="muted small">Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Showing ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Day-one CAPEX excludes replacements, later plugs and progressive CAPEX.</p></div>${portfolioCommercialTermsManagerButton(rows)}</div><details class="portfolio-financial-methodology"><summary>Calculation definitions</summary><div><p><strong>Actual & Next 12m kWh:</strong> forecast is compared with trailing-12-month actuals or the annualised actual run-rate. Click any value to inspect full daily history, rolling-30 trend, monthly factors and the controlled forecast.</p><p><strong>Actual vs age-matched model:</strong> realised delivered kWh compared with the current calibrated age-matched model over the exact same historical period. ±15% is in line with model; sites with less than 30 days remain early evidence.</p><p><strong>Forward model:</strong> the current calibrated forward benchmark covers the same next 12 months and remains available inside the forecast audit as a secondary planning comparison.</p><p><strong>CAPEX variance:</strong> actual gross day-one CAPEX minus model day-one CAPEX. Positive overspend is red; negative underspend is green. Funding affects net investment returns only.</p><p><strong>Site EBITDA:</strong> revenue − energy − standing/capacity − other OPEX. <strong>Run-rate payback:</strong> gross or user-selected net CAPEX ÷ next-12-month site EBITDA.</p></div></details>${filteredRows.length ? portfolioFinancialTableMarkup(headers, sorted.map(portfolioFinancialTableRow)) : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioFinancialAdvancedMethodologyPanel(maturityModel, filteredRows)}
@@ -6977,19 +6997,21 @@ function goTab(tab) {
 
 window.__evHubGoTab = goTab;
 
-const stepper = document.getElementById("workflowStepper");
-if (stepper) stepper.addEventListener("click", e => {
-  const button = e.target.closest("button[data-step-tab]");
-  if (button) goTab(button.dataset.stepTab);
-});
-
 document.getElementById("tabs").addEventListener("click", e => {
   const button = e.target.closest("button[data-tab]");
   if (button) goTab(button.dataset.tab);
 });
 
+const viewModeToggle = document.getElementById("viewModeToggle");
+if (viewModeToggle) viewModeToggle.addEventListener("click", e => {
+  const button = e.target.closest("button[data-view-mode]");
+  if (button) setViewMode(button.dataset.viewMode);
+});
+applyViewMode();
+
 window.addEventListener("hashchange", () => {
   activeTab = tabFromHash();
+  if (getViewMode() === "investor" && BUILDER_ONLY_TABS.includes(activeTab)) { activeTab = "site"; window.location.hash = "site"; }
   closePortfolioStatusPopover();
   render();
 });

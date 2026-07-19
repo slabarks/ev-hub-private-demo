@@ -1,18 +1,18 @@
-# Hosted deployment — V21.2
+# Hosted deployment — V21.3
 
-Deploy the complete package with the service start command:
+Deploy the complete package with:
 
 ```bash
 python server.py
 ```
 
-The following must remain together at the deployment root: `server.py`, `index.html`, `js/`, `assets/`, `data/`, `DEPLOYMENT_MANIFEST.json`, `requirements.txt`, `render.yaml` and `Procfile`.
+Keep `server.py`, `index.html`, `js/`, `assets/`, `data/`, `DEPLOYMENT_MANIFEST.json`, `requirements.txt`, `render.yaml` and `Procfile` together at the deployment root.
 
-V21.2 no longer blocks the data upload merely because `/api/version` is unavailable. It discovers relative and root API routes and validates the actual upload response. The hosting platform must still forward POST requests for an `api/import-live-calibration` route to `server.py`; static-only hosting cannot parse Excel/ZIP uploads.
+The calibration upload is parsed in the browser first. Therefore, an older, missing or incompatible upload endpoint no longer prevents `Daily_Charger_kWh.xlsx` or the standard dashboard ZIP from activating daily and monthly histories. The Python service is still required for the full hosted application and its server-backed AADT/location functions.
 
-Expected metadata when the diagnostic route is available:
+Expected diagnostic metadata:
 
-- `appVersion`: `V21.2`
-- `buildId`: `EVHUB-V21.2-20260718-R1`
+- `appVersion`: `V21.3`
+- `buildId`: `EVHUB-V21.3-20260719-R1`
 - `uploadSchemaVersion`: `v21-live-history-v7`
-- `parserBuildId`: `EVHUB-LIVE-PARSER-21.3`
+- `parserBuildId`: `EVHUB-LIVE-PARSER-21.4`

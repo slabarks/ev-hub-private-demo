@@ -1,17 +1,20 @@
 {
-  "appVersion": "V21.2",
-  "buildId": "EVHUB-V21.2-20260718-R1",
+  "appVersion": "V21.3",
+  "buildId": "EVHUB-V21.3-20260719-R1",
   "uploadSchemaVersion": "v21-live-history-v7",
-  "parserBuildId": "EVHUB-LIVE-PARSER-21.3",
+  "parserBuildId": "EVHUB-LIVE-PARSER-21.4",
   "packageLayoutVersion": "flat-root-v1",
   "entrypoint": "python server.py",
   "requiredRootFiles": [
     "server.py",
     "index.html",
     "assets/styles.css",
+    "assets/vendor/jszip.min.js",
     "js/app.js",
+    "js/liveHistoryLocalParser.js",
     "DEPLOYMENT_MANIFEST.json"
   ],
-  "cacheBuster": "21-2-route-discovery-20260718-r1",
-  "releaseDate": "2026-07-18"
+  "cacheBuster": "21-3-local-history-20260719-r1",
+  "releaseDate": "2026-07-19",
+  "localHistoryParser": true
 }

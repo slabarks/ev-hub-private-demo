@@ -4327,7 +4327,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 }
 
 
-/* V21.2 — full-width Portfolio Financials and no desktop horizontal scrollbar */
+/* V21.3 — full-width Portfolio Financials and no desktop horizontal scrollbar */
 body.portfolio-financial-active { overflow-x: hidden; }
 .app.portfolio-financial-wide {
   width: 100%;
@@ -4380,7 +4380,7 @@ body.portfolio-financial-active { overflow-x: hidden; }
   .app.portfolio-financial-wide .portfolio-financial-table-panel { padding: 12px; }
 }
 
-/* V21.2 — upload workflow status remains readable during longer server processing */
+/* V21.3 — upload workflow status remains readable during longer server processing */
 #portfolioCalibrationUploadStatus {
   min-height: 18px;
   font-weight: 650;

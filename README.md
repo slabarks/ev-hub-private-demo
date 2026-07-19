@@ -1,25 +1,25 @@
-# EV Charging Hub Investment Tool — V21.2
+# EV Charging Hub Investment Tool — V21.3
 
-V21.2 fixes the calibration-upload failure where the browser stopped on `/api/version` HTTP 404 even though the user had selected the correct ZIP or Excel data.
+V21.3 removes the calibration upload's dependency on a matching backend response. The selected `Daily_Charger_kWh.xlsx` or dashboard ZIP is now parsed directly in the browser first, including the complete daily and monthly histories required by Portfolio Financial Performance.
 
 ## Build
 
-- Application: `V21.2`
-- Build: `EVHUB-V21.2-20260718-R1`
+- Application: `V21.3`
+- Build: `EVHUB-V21.3-20260719-R1`
 - History schema: `v21-live-history-v7`
-- Parser: `EVHUB-LIVE-PARSER-21.3`
+- Parser: `EVHUB-LIVE-PARSER-21.4`
 
-## Upload behaviour
+## Calibration upload behaviour
 
 The Portfolio Financial Performance upload now:
 
-- treats `/api/version` as an optional diagnostic rather than a mandatory blocker;
-- discovers API routes relative to the application location and at the domain root;
-- tries both current and legacy upload route names with a fresh multipart request each time;
-- validates the returned daily and monthly histories directly before activation;
-- accepts a structurally valid compatible payload even when an older backend does not report build metadata;
-- still rejects an explicitly incompatible history schema or an incomplete history response;
-- supports API routes behind a reverse-proxy subpath;
+- reads the complete ZIP or `Daily_Charger_kWh.xlsx` locally in the user's browser;
+- extracts the canonical daily workbook and skips files inside `Ignore` folders;
+- builds site-level continuous daily history, rolling-30 kWh and monthly history without waiting for the Python upload endpoint;
+- does not send the uploaded operating data to the server when local parsing succeeds;
+- uses the Python upload API only as a fallback for non-standard files or unsupported browser conditions;
+- continues through alternative backend routes when an earlier route returns an incomplete legacy response;
+- validates daily and monthly history before activation;
 - preserves the last valid uploaded dataset after any failed attempt.
 
 ## Local start
@@ -32,11 +32,11 @@ macOS/Linux:
 ./run_local_server.sh
 ```
 
-The browser is opened only after the packaged Python backend has bound successfully. If port 10314 is occupied by a stale instance, the local launcher selects the next available port instead of opening the old application.
+The Python service remains recommended for the complete application, including AADT and location services. The calibration ZIP/XLSX upload itself is now browser-local and no longer depends on the backend version.
 
 ## Recommended upload
 
-Upload the complete dashboard ZIP or `Daily_Charger_kWh.xlsx`. The parser opens the canonical daily charger file and does not unnecessarily parse the supporting Overview/Ignore workbooks.
+Upload the complete dashboard ZIP or `Daily_Charger_kWh.xlsx`. Selecting the complete Overview and Ignore file set together is also supported; only the canonical daily charger workbook is parsed as the primary history source.
 
 ## Tests
 
@@ -44,4 +44,4 @@ Upload the complete dashboard ZIP or `Daily_Charger_kWh.xlsx`. The parser opens 
 node tests/runTests.js
 ```
 
-This runs syntax checks, AADT tests, history-parser tests, maturity-engine tests, root and prefixed API-route tests, upload smoke tests and static-delivery checks.
+The suite covers syntax, browser-local ZIP/XLSX parsing, incomplete-backend route resilience, AADT, Python history parsing, maturity forecasting, API routes and static delivery.

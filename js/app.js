@@ -14,6 +14,7 @@ import { exportDemandCsv, exportYearByYearCsv, exportScenarioCsv, exportAssumpti
 import { PORTFOLIO_CALIBRATION_SITES } from "./data/operatingHubCalibrationLibrary.js";
 import { actualCapexForSite, capexStatusForSite, capexNoteForSite } from "./data/capexCalibrationLibrary.js";
 import { zeviFundingForSite, zeviFundingSuggestionsForSite, zeviFundingShortLabel } from "./data/zeviFundingLibrary.js";
+import { parsePortfolioCalibrationFilesLocally } from "./liveHistoryLocalParser.js";
 
 const VALID_TABS = ["site", "demand", "setup", "investment", "annuals", "scenario", "portfolio", "portfolioFinancials", "advanced", "report"];
 const TAB_ALIASES = { simulation: "setup", yearbyyear: "annuals", export: "report" };
@@ -299,12 +300,13 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const APP_RELEASE_VERSION = "V21.2";
-const APP_BUILD_ID = "EVHUB-V21.2-20260718-R1";
-const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.3";
-const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21_2";
+const APP_RELEASE_VERSION = "V21.3";
+const APP_BUILD_ID = "EVHUB-V21.3-20260719-R1";
+const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.4";
+const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21_3";
 const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7";
 const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
+  "evHub.portfolio.liveActuals.v21_2",
   "evHub.portfolio.liveActuals.v21_1",
   "evHub.portfolio.liveActuals.v1",
   "evHub.portfolio.liveActuals.v35_39",
@@ -470,6 +472,19 @@ async function portfolioUploadCalibrationFiles(files) {
         if (result.response.status === 404 || result.response.status === 405) {
           attempts.push(`${url}: HTTP ${result.response.status}`);
           continue;
+        }
+        if (result.response.ok && result.payload?.ok) {
+          const validation = portfolioSnapshotValidation(result.payload);
+          if (!validation.ok) {
+            attempts.push(`${url}: HTTP ${result.response.status}, unusable response (${validation.code || validation.reason || "history incomplete"})`);
+            lastDefinitiveError = portfolioUploadError(
+              validation.title || "Upload backend response is incomplete.",
+              validation.reason || "The route returned a response that could not be used for live-history forecasting.",
+              validation.what_to_do || [],
+              { code: validation.code || "invalid-upload-response", uploadUrl: url }
+            );
+            continue;
+          }
         }
         return { ...result, uploadUrl: url, attempts };
       } catch (error) {
@@ -865,9 +880,16 @@ function portfolioLiveCalibrationCard(sites = portfolioMappedSites()) {
   const requestMs = Number(portfolioLiveActualsSnapshot?.requestTimingsMs?.serverBeforeResponse || 0);
   const parserMs = Number(portfolioLiveActualsSnapshot?.parserTimingsMs?.parserTotal || 0);
   const processingMs = requestMs || parserMs;
-  const primarySelection = portfolioLiveActualsSnapshot?.primarySourceSelection === "canonical_filename" ? "canonical daily source" : "header-detected daily source";
+  const processedLocally = Boolean(portfolioLiveActualsSnapshot?.localParser || portfolioLiveActualsSnapshot?.source === "browser_local_live_calibration_files");
+  const primaryMode = String(portfolioLiveActualsSnapshot?.primarySourceSelection || "");
+  const primarySelection = primaryMode.includes("browser_local")
+    ? "browser-local canonical daily source"
+    : primaryMode === "canonical_filename"
+      ? "canonical daily source"
+      : "header-detected daily source";
+  const processingLabel = processedLocally ? "in this browser" : "server time";
   const uploadStatusSummary = hasLive
-    ? `Source files: ${h(parsedFiles.join(", ") || "uploaded dashboard export")}${processingMs ? ` · processed in ${(processingMs / 1000).toFixed(1)}s server time` : ""}${portfolioLiveActualsSnapshot?.primarySourceSelection ? ` · ${h(primarySelection)}` : ""}`
+    ? `Source files: ${h(parsedFiles.join(", ") || "uploaded dashboard export")}${processingMs ? ` · processed in ${(processingMs / 1000).toFixed(1)}s ${processingLabel}` : ""}${portfolioLiveActualsSnapshot?.primarySourceSelection ? ` · ${h(primarySelection)}` : ""}`
     : "Choose one or more calibration Excel files. The app validates them automatically and only uses them if they pass.";
   const rawWarnings = portfolioLiveActualsSnapshot?.warnings || [];
   const supportingFiles = [...(portfolioLiveActualsSnapshot?.supportingFiles || []), ...rawWarnings.filter(w => String(w).includes("supporting file"))];
@@ -6163,23 +6185,34 @@ function wirePage(r) {
     portfolioLiveUploadError = null;
     const stageTimers = [];
     try {
-      portfolioUploadStatusText("Step 1 of 5 — Discovering the available upload service…");
-      const preflight = await portfolioVerifyUploadBackend();
-      portfolioUploadStatusText(preflight.available
-        ? `Step 2 of 5 — Uploading ${files.length} file${files.length === 1 ? "" : "s"} and reading Daily_Charger_kWh…`
-        : `Step 2 of 5 — Version route unavailable; trying compatible upload routes automatically…`);
-      stageTimers.push(setTimeout(() => portfolioUploadStatusText("Step 3 of 5 — Aggregating daily rows into site histories…"), 8000));
-      stageTimers.push(setTimeout(() => portfolioUploadStatusText("Step 3 of 5 — Still processing; the request will cancel automatically if no upload service responds."), 30000));
-      const result = await portfolioUploadCalibrationFiles(files);
-      const { response, payload } = result;
-      if (!response.ok || !payload?.ok) throw portfolioNormaliseUploadError(payload || { message: `Upload returned HTTP ${response.status}.` });
+      let payload = null;
+      let sourceLabel = "browser-local parser";
+      let localError = null;
+      portfolioUploadStatusText("Step 1 of 5 — Reading the selected file locally in this browser…");
+      try {
+        payload = await parsePortfolioCalibrationFilesLocally(files, message => portfolioUploadStatusText(`Step 2 of 5 — ${message}`));
+      } catch (error) {
+        localError = error;
+      }
+      if (!payload) {
+        portfolioUploadStatusText("Step 2 of 5 — Local reading was unavailable; trying the packaged upload service…");
+        const preflight = await portfolioVerifyUploadBackend();
+        stageTimers.push(setTimeout(() => portfolioUploadStatusText("Step 3 of 5 — Waiting for the upload service; the request will cancel automatically if it does not respond."), 30000));
+        const result = await portfolioUploadCalibrationFiles(files);
+        const { response, payload: backendPayload } = result;
+        if (!response.ok || !backendPayload?.ok) throw portfolioNormaliseUploadError(backendPayload || { message: `Upload returned HTTP ${response.status}.` });
+        payload = backendPayload;
+        sourceLabel = result.uploadUrl ? `backend ${new URL(result.uploadUrl).pathname}` : "backend";
+        if (localError) payload.warnings = [...(payload.warnings || []), `Browser-local parser fallback reason: ${localError?.message || localError}`];
+        if (!preflight.available) payload.warnings = [...(payload.warnings || []), "The optional backend version route was unavailable, but the returned history payload passed validation."];
+      }
       portfolioUploadStatusText("Step 4 of 5 — Validating daily and monthly site histories…");
       if (!savePortfolioLiveActuals(payload)) {
         render();
         return;
       }
-      const parseMs = Number(payload?.requestTimingsMs?.serverBeforeResponse || payload?.parserTimingsMs?.parserTotal || 0);
-      portfolioUploadStatusText(`Step 5 of 5 — Complete${parseMs ? ` in ${(parseMs / 1000).toFixed(1)} seconds server time` : ""}. Activating forecasts${result.uploadUrl ? ` via ${new URL(result.uploadUrl).pathname}` : ""}…`);
+      const parseMs = Number(payload?.parserTimingsMs?.parserTotal || payload?.requestTimingsMs?.serverBeforeResponse || 0);
+      portfolioUploadStatusText(`Step 5 of 5 — Complete${parseMs ? ` in ${(parseMs / 1000).toFixed(1)} seconds` : ""} using the ${sourceLabel}. Activating forecasts…`);
       render();
     } catch (err) {
       portfolioLiveUploadError = portfolioNormaliseUploadError(err);

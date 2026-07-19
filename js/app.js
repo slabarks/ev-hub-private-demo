@@ -15,6 +15,7 @@ import { PORTFOLIO_CALIBRATION_SITES } from "./data/operatingHubCalibrationLibra
 import { actualCapexForSite, capexStatusForSite, capexNoteForSite } from "./data/capexCalibrationLibrary.js";
 import { zeviFundingForSite, zeviFundingSuggestionsForSite, zeviFundingShortLabel } from "./data/zeviFundingLibrary.js";
 import { parsePortfolioCalibrationFilesLocally } from "./liveHistoryLocalParser.js";
+import { EXCEL_SIX_SCENARIOS } from "./data/scenarioLibrary.js";
 
 const VALID_TABS = ["site", "demand", "setup", "investment", "annuals", "scenario", "portfolio", "portfolioFinancials", "advanced", "report"];
 const TAB_ALIASES = { simulation: "setup", yearbyyear: "annuals", export: "report" };
@@ -42,6 +43,250 @@ function results() {
   const financialSummary = summariseFinancials(state.inputs, state.config, demand, yearByYear, state.inputs.investmentHorizon);
   const compare = compareExcelScenarios(state.inputs, demand, state.inputs.investmentHorizon);
   return { demand, yearByYear, financialSummary, compare };
+}
+
+// ---------------------------------------------------------------------------
+// Simple Mode — a linear, plain-language front door onto the existing engine.
+// No engine files are called differently here than Expert Mode already calls
+// them; this only orchestrates the same pure functions with different inputs
+// and presents a filtered subset of the same outputs. Nothing here invents a
+// number the engine doesn't already produce.
+// ---------------------------------------------------------------------------
+const APP_MODE_STORAGE_KEY = "evHub.appMode.v1";
+function getAppMode() {
+  try { return localStorage.getItem(APP_MODE_STORAGE_KEY) === "expert" ? "expert" : "simple"; } catch (_) { return "simple"; }
+}
+function setAppMode(mode) {
+  try { localStorage.setItem(APP_MODE_STORAGE_KEY, mode); } catch (_) {}
+  applyAppMode(mode);
+  render();
+}
+function applyAppMode(mode = getAppMode()) {
+  document.body.dataset.appMode = mode;
+  document.querySelectorAll("#appModeToggle button[data-app-mode]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.appMode === mode);
+  });
+}
+
+const SIMPLE_STEP_IDS = ["site", "traffic", "product", "result", "report"];
+let simpleStep = 0;
+
+const TRAFFIC_BUCKETS = [
+  { max: 8000, label: "Quiet", detail: "A quieter road — fewer passing drivers to convert into charging customers." },
+  { max: 20000, label: "Steady", detail: "A steady, moderate flow of daily traffic." },
+  { max: 40000, label: "Busy", detail: "A busy road — a strong number of daily drivers pass this site." },
+  { max: 65000, label: "Very busy", detail: "A very busy route — one of the stronger traffic profiles for a charging site." },
+  { max: Infinity, label: "Major route", detail: "A major route with very high daily traffic." }
+];
+function trafficBucket(aadt) {
+  const value = Number(aadt) || 0;
+  return TRAFFIC_BUCKETS.find(b => value <= b.max) || TRAFFIC_BUCKETS.at(-1);
+}
+
+const SIMPLE_PRODUCT_CARDS = [
+  { scenario: EXCEL_SIX_SCENARIOS[0], icon: "⚡", title: "2 fast chargers", detail: "Straightforward setup. Needs a larger grid connection." },
+  { scenario: EXCEL_SIX_SCENARIOS[1], icon: "🔋", title: "2 fast chargers + battery", detail: "Smaller grid connection needed — the battery covers peak demand." },
+  { scenario: EXCEL_SIX_SCENARIOS[2], icon: "⚡⚡", title: "4 fast chargers", detail: "More charging points for a busier site." }
+];
+function simpleProductIndex() {
+  const idx = SIMPLE_PRODUCT_CARDS.findIndex(card => card.scenario.name === state.config.__simpleProductName);
+  return idx >= 0 ? idx : 0;
+}
+function applySimpleProduct(index) {
+  const card = SIMPLE_PRODUCT_CARDS[Math.max(0, Math.min(SIMPLE_PRODUCT_CARDS.length - 1, index))];
+  Object.entries(card.scenario).forEach(([key, value]) => { if (key !== "name") setConfig(key, value); });
+  setConfig("__simpleProductName", card.scenario.name);
+}
+
+// Runs the real, unmodified engine three times against copies of the current
+// inputs with the site-relevance factor and traffic count adjusted ±15% — the
+// two assumptions our own audit flagged as least-validated for a new site.
+// This is a disclosed sensitivity check, not a statistical confidence interval.
+function simpleRangeMetrics() {
+  const config = state.config;
+  const run = multiplier => {
+    const inputs = {
+      ...state.inputs,
+      siteRelevanceFactor: state.inputs.siteRelevanceFactor * multiplier,
+      rawCorridorTrafficAadt: state.inputs.rawCorridorTrafficAadt * multiplier
+    };
+    const demand = calculateDemand(inputs);
+    const yearByYear = calculateYearByYear(inputs, config, demand);
+    const summary = summariseFinancials(inputs, config, demand, yearByYear, inputs.investmentHorizon);
+    return { summary, technical: yearByYear.technical };
+  };
+  return { low: run(0.85), mid: run(1), high: run(1.15) };
+}
+
+function simpleHasRealSite() {
+  return state.siteContext?.site?.confidence !== "demo";
+}
+
+function renderSimpleSearchFirstNudge() {
+  return `
+    <div class="simple-card">
+      <div class="simple-icon">📍</div>
+      <h2>Search for your site first</h2>
+      <p class="simple-sub">We need a real address before we can estimate anything — this avoids showing you a number that isn't actually about your site.</p>
+      <button type="button" class="simple-primary-btn" id="simpleGoToSiteStep">Go to site search</button>
+    </div>`;
+}
+
+function simpleStepDots() {
+  return `<div class="simple-dots">${SIMPLE_STEP_IDS.map((_, i) => `<span class="simple-dot ${i === simpleStep ? "active" : ""}"></span>`).join("")}</div>`;
+}
+
+function renderSimpleSite() {
+  const site = state.siteContext?.site;
+  const hasSite = simpleHasRealSite();
+  return `
+    <div class="simple-card">
+      <div class="simple-icon">📍</div>
+      <h2>Where's your site?</h2>
+      <p class="simple-sub">Type an address to get started.</p>
+      <input type="text" id="simpleAddressInput" placeholder="123 Main Street, Cork" value="${h(state.inputs.siteAddress || "")}" />
+      <button type="button" id="simpleSearchBtn" class="simple-primary-btn">Find this site</button>
+      <p class="simple-status" id="simpleSearchStatus">${hasSite ? `Found: ${h(site?.name || state.inputs.siteAddress)}` : ""}</p>
+    </div>`;
+}
+
+function renderSimpleTraffic() {
+  const aadt = Number(state.inputs.rawCorridorTrafficAadt || 0);
+  const bucket = trafficBucket(aadt);
+  return `
+    <div class="simple-card">
+      <div class="simple-icon">🚗</div>
+      <h2>How busy is this road?</h2>
+      <p class="simple-traffic-label">${h(bucket.label)}</p>
+      <p class="simple-sub">${h(bucket.detail)}</p>
+      <button type="button" class="simple-link-btn" id="simpleEditTraffic">Not confident in this number? Adjust it manually</button>
+    </div>`;
+}
+
+function renderSimpleProduct() {
+  const selected = simpleProductIndex();
+  return `
+    <div class="simple-card simple-card-wide">
+      <h2>What are you building?</h2>
+      <div class="simple-product-grid">
+        ${SIMPLE_PRODUCT_CARDS.map((card, i) => `
+          <button type="button" class="simple-product-card ${i === selected ? "active" : ""}" data-simple-product="${i}">
+            <div class="simple-product-icon">${card.icon}</div>
+            <div class="simple-product-title">${h(card.title)}</div>
+            <div class="simple-product-detail">${h(card.detail)}</div>
+          </button>`).join("")}
+      </div>
+    </div>`;
+}
+
+function renderSimpleResult(range) {
+  const midFeasible = range.mid.technical.feasible;
+  if (!midFeasible) {
+    const reason = range.mid.technical.failures[0] || "This configuration needs adjustment.";
+    return `
+      <div class="simple-card">
+        <div class="simple-icon">⚠️</div>
+        <h2>This setup needs one change</h2>
+        <p class="simple-sub">${h(reason)}. Try a different option on the previous step, or switch to Expert mode to adjust the technical detail directly.</p>
+      </div>`;
+  }
+  const low = range.low.summary.cumulativeCashFlow;
+  const mid = range.mid.summary.cumulativeCashFlow;
+  const high = range.high.summary.cumulativeCashFlow;
+  const capex = range.mid.summary.initialInvestment;
+  const paybackYear = range.mid.summary.simplePayback;
+  const spreadRatio = mid !== 0 ? Math.abs(high - low) / Math.abs(mid) : 1;
+  const confidence = spreadRatio > 0.6
+    ? { label: "Early estimate — treat as a rough guide", cls: "simple-badge-amber" }
+    : spreadRatio > 0.3
+      ? { label: "This is our best estimate", cls: "simple-badge-blue" }
+      : { label: "We're confident in this range", cls: "simple-badge-green" };
+  return `
+    <div class="simple-card">
+      <p class="simple-sub" style="margin-bottom:2px;">Estimated cash generated</p>
+      <div class="simple-hero">${currency(mid, 0)}</div>
+      <div class="simple-badge ${confidence.cls}">${confidence.label}</div>
+      <p class="simple-range">Likely range: ${currency(low, 0)} to ${currency(high, 0)} over ${number(state.inputs.investmentHorizon, 0)} years</p>
+      <div class="simple-support-row">
+        <div><span>Upfront cost</span><strong>${currency(capex, 0)}</strong></div>
+        <div><span>Pays back in</span><strong>${paybackYear ? `${paybackYear} years` : "Not within horizon"}</strong></div>
+      </div>
+      <p class="simple-footnote">Range calculated by re-running the model with the site traffic and demand-capture assumptions 15% lower and 15% higher — the two assumptions least validated by real site data for a new location. This is not a discounted (time-adjusted) value. <button type="button" class="simple-link-btn" id="simpleSeeDetail">See the full calculation</button></p>
+    </div>`;
+}
+
+function renderSimpleReport() {
+  return `
+    <div class="simple-card">
+      <div class="simple-icon">📄</div>
+      <h2>Your report is ready</h2>
+      <p class="simple-sub">One page, plain language, ready to share.</p>
+      <button type="button" class="simple-primary-btn" id="simpleExportPdf">Download investor report</button>
+      <button type="button" class="simple-link-btn" id="simpleGoExpert">Switch to expert mode for full detail</button>
+    </div>`;
+}
+
+const SIMPLE_STEP_RENDERERS = [renderSimpleSite, renderSimpleTraffic, renderSimpleProduct, null, renderSimpleReport];
+
+function renderSimpleMode() {
+  const container = el("simpleApp");
+  if (!container) return;
+  const hasSite = simpleHasRealSite();
+  const range = hasSite ? simpleRangeMetrics() : null;
+  const liveNumber = hasSite ? currency(range.mid.summary.cumulativeCashFlow, 0) : "—";
+  const blockedAtSiteStep = !hasSite && simpleStep === 0;
+  const stepContent = !hasSite && simpleStep > 0
+    ? renderSimpleSearchFirstNudge()
+    : simpleStep === 3 ? renderSimpleResult(range) : SIMPLE_STEP_RENDERERS[simpleStep]();
+  container.innerHTML = `
+    ${simpleStepDots()}
+    <div class="simple-live-strip">
+      <span>Estimated cash generated</span>
+      <strong id="simpleLiveNumber">${liveNumber}</strong>
+    </div>
+    <div class="simple-panel">${stepContent}</div>
+    <div class="simple-nav">
+      <button type="button" id="simpleBack" ${simpleStep === 0 ? "style=\"visibility:hidden\"" : ""}>Back</button>
+      <button type="button" id="simpleNext" class="simple-primary-btn" ${blockedAtSiteStep ? "disabled" : ""}>${simpleStep === SIMPLE_STEP_IDS.length - 1 ? "Start over" : "Next"}</button>
+    </div>`;
+  wireSimpleMode();
+}
+
+function wireSimpleMode() {
+  const nextBtn = el("simpleNext");
+  if (nextBtn) nextBtn.addEventListener("click", () => {
+    simpleStep = simpleStep === SIMPLE_STEP_IDS.length - 1 ? 0 : simpleStep + 1;
+    renderSimpleMode();
+  });
+  const backBtn = el("simpleBack");
+  if (backBtn) backBtn.addEventListener("click", () => {
+    if (simpleStep > 0) { simpleStep -= 1; renderSimpleMode(); }
+  });
+  const searchBtn = el("simpleSearchBtn");
+  if (searchBtn) searchBtn.addEventListener("click", async () => {
+    const addressInput = el("simpleAddressInput");
+    const address = addressInput?.value?.trim() || "";
+    if (!address) return;
+    searchBtn.textContent = "Searching…";
+    searchBtn.disabled = true;
+    if (window.__evHubRunSiteSearch) await window.__evHubRunSiteSearch({ address });
+    searchBtn.textContent = "Find this site";
+    searchBtn.disabled = false;
+    renderSimpleMode();
+  });
+  const editTraffic = el("simpleEditTraffic");
+  if (editTraffic) editTraffic.addEventListener("click", () => { setAppMode("expert"); goTab("site"); });
+  const goToSiteStep = el("simpleGoToSiteStep");
+  if (goToSiteStep) goToSiteStep.addEventListener("click", () => { simpleStep = 0; renderSimpleMode(); });
+  document.querySelectorAll("[data-simple-product]").forEach(btn => {
+    btn.addEventListener("click", () => { applySimpleProduct(Number(btn.dataset.simpleProduct)); renderSimpleMode(); });
+  });
+  const seeDetail = el("simpleSeeDetail");
+  if (seeDetail) seeDetail.addEventListener("click", () => { setAppMode("expert"); goTab("investment"); });
+  const goExpert = el("simpleGoExpert");
+  if (goExpert) goExpert.addEventListener("click", () => setAppMode("expert"));
+  const exportBtn = el("simpleExportPdf");
+  if (exportBtn) exportBtn.addEventListener("click", () => exportInvestorPdf(state, results()));
 }
 
 function el(id) { return document.getElementById(id); }
@@ -5960,6 +6205,7 @@ function render() {
     r = results();
     el("app").innerHTML = `${firstUseBanner()}${pages[activeTab]()}${guidePanelHtml()}`;
     wirePage(r);
+    if (el("simpleApp")) renderSimpleMode();
     if (activeTab === "site") setTimeout(() => {
       try { updateMap(); } catch (err) { showMapStatus(`Map could not be rendered: ${err?.message || err}`, true); console.warn("Map could not be rendered", err); }
     }, 100);
@@ -6519,6 +6765,7 @@ function wirePage(r) {
     }
   };
   if (searchBtn) searchBtn.addEventListener("click", () => runSiteSearch());
+  window.__evHubRunSiteSearch = runSiteSearch;
   if (pendingPortfolioSiteSearch && activeTab === "site") {
     const pending = pendingPortfolioSiteSearch;
     pendingPortfolioSiteSearch = null;
@@ -7008,6 +7255,13 @@ if (viewModeToggle) viewModeToggle.addEventListener("click", e => {
   if (button) setViewMode(button.dataset.viewMode);
 });
 applyViewMode();
+
+const appModeToggle = document.getElementById("appModeToggle");
+if (appModeToggle) appModeToggle.addEventListener("click", e => {
+  const button = e.target.closest("button[data-app-mode]");
+  if (button) setAppMode(button.dataset.appMode);
+});
+applyAppMode();
 
 window.addEventListener("hashchange", () => {
   activeTab = tabFromHash();

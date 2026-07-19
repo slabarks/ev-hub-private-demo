@@ -1,18 +1,33 @@
-# Hosted deployment — V21.3
+# Hosted deployment — V21.4
 
-Deploy the complete package with:
+Deploy the complete extracted V21.4 package as one application. Do not merge selected frontend files into an older release.
+
+## Start command
 
 ```bash
 python server.py
 ```
 
-Keep `server.py`, `index.html`, `js/`, `assets/`, `data/`, `DEPLOYMENT_MANIFEST.json`, `requirements.txt`, `render.yaml` and `Procfile` together at the deployment root.
+The package includes the browser-local calibration parser, so the standard dashboard ZIP and `Daily_Charger_kWh.xlsx` upload remain available even if a hosting proxy cannot reach the upload API. The Python backend is still required for the complete location and AADT workflow.
 
-The calibration upload is parsed in the browser first. Therefore, an older, missing or incompatible upload endpoint no longer prevents `Daily_Charger_kWh.xlsx` or the standard dashboard ZIP from activating daily and monthly histories. The Python service is still required for the full hosted application and its server-backed AADT/location functions.
+## Required root layout
 
-Expected diagnostic metadata:
+Keep these at the same deployment root:
 
-- `appVersion`: `V21.3`
-- `buildId`: `EVHUB-V21.3-20260719-R1`
-- `uploadSchemaVersion`: `v21-live-history-v7`
-- `parserBuildId`: `EVHUB-LIVE-PARSER-21.4`
+- `server.py`
+- `index.html`
+- `DEPLOYMENT_MANIFEST.json`
+- `assets/`
+- `data/`
+- `js/`
+
+## Deployment verification
+
+Open `/api/version` on the deployed domain. It should report:
+
+- `appVersion`: `V21.4`
+- `buildId`: `EVHUB-V21.4-20260719-R1`
+- `parserBuildId`: `EVHUB-LIVE-PARSER-21.5`
+- `deploymentRootOk`: `true`
+
+After deployment, hard-refresh the browser once to replace cached assets from the previous release.

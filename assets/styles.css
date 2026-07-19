@@ -3770,9 +3770,9 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 
 /* V17.43 investor performance benchmark, flexible horizon and directional CAPEX deltas */
 .portfolio-financial-dashboard-metric.capex-direction-negative strong,
-.capex-direction-negative { color: #b42318 !important; }
+.capex-direction-negative { color: #087443 !important; }
 .portfolio-financial-dashboard-metric.capex-direction-positive strong,
-.capex-direction-positive { color: #087443 !important; }
+.capex-direction-positive { color: #b42318 !important; }
 .portfolio-financial-dashboard-metric.capex-direction-neutral strong,
 .capex-direction-neutral { color: inherit; }
 .portfolio-financial-metric small .capex-direction-negative,
@@ -4327,7 +4327,7 @@ img, svg, canvas, video { max-width: 100%; height: auto; }
 }
 
 
-/* V21.3 — full-width Portfolio Financials and no desktop horizontal scrollbar */
+/* V21.4 — full-width Portfolio Financials and no desktop horizontal scrollbar */
 body.portfolio-financial-active { overflow-x: hidden; }
 .app.portfolio-financial-wide {
   width: 100%;
@@ -4380,10 +4380,137 @@ body.portfolio-financial-active { overflow-x: hidden; }
   .app.portfolio-financial-wide .portfolio-financial-table-panel { padding: 12px; }
 }
 
-/* V21.3 — upload workflow status remains readable during longer server processing */
+/* V21.4 — upload workflow status remains readable during longer server processing */
 #portfolioCalibrationUploadStatus {
   min-height: 18px;
   font-weight: 650;
   color: #315b4d;
 }
 .live-calibration-card .notice.bad { overflow-wrap: anywhere; }
+
+
+/* V21.4 — board-facing Portfolio Financial Performance controls and model-accuracy hierarchy */
+.portfolio-financial-table-heading {
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 12px;
+}
+.portfolio-financial-table-heading > div:first-child { min-width: 0; }
+.portfolio-financial-table-heading h3 {
+  margin: 0 0 5px;
+  color: #082f24;
+  font-size: clamp(23px, 1.75vw, 29px);
+  line-height: 1.1;
+  font-weight: 850;
+  letter-spacing: -.025em;
+}
+.portfolio-financial-section-subtitle {
+  margin: 0 0 5px;
+  color: #425f55;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.portfolio-terms-manager {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  min-width: 245px;
+}
+.portfolio-terms-manager small {
+  color: #62756e;
+  font-size: 10.5px;
+  text-align: right;
+}
+.portfolio-terms-manager-button {
+  min-height: 40px;
+  padding-inline: 18px;
+  border-color: rgba(0,112,74,.22);
+  background: #f5faf7;
+  color: #123f31;
+  font-weight: 800;
+}
+.portfolio-terms-modal { width: min(1180px, 96vw); }
+.portfolio-terms-section {
+  margin-top: 14px;
+  padding: 15px;
+  border: 1px solid rgba(0,112,74,.14);
+  border-radius: 14px;
+  background: #fbfdfc;
+}
+.portfolio-terms-section-head h4 { margin: 0 0 3px; color: #153d31; font-size: 17px; }
+.portfolio-terms-section-head p { margin: 0 0 12px; color: #60736c; }
+.portfolio-terms-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 9px;
+}
+.portfolio-terms-summary-grid > div {
+  padding: 10px 11px;
+  border: 1px solid rgba(0,112,74,.12);
+  border-radius: 11px;
+  background: #fff;
+}
+.portfolio-terms-summary-grid span,
+.portfolio-terms-summary-grid small { display:block; color:#697a74; font-size:10.5px; }
+.portfolio-terms-summary-grid strong { display:block; margin:3px 0; color:#143c30; font-size:17px; }
+.funding-bulk-actions { flex-wrap: wrap; }
+.portfolio-terms-close-row { border-top: 0; padding-top: 4px; }
+.forecast-change-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  font-size: 9.6px;
+  font-style: normal;
+  line-height: 1.2;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+.forecast-change-badge.good { color:#087443; background:#e7f7ef; }
+.forecast-change-badge.bad { color:#b42318; background:#fdebea; }
+.forecast-change-badge.neutral { color:#52645e; background:#edf2f0; }
+.forecast-view-link { color:#006a47; font-weight:850; }
+.historical-model-basis {
+  display:block;
+  margin-top:4px;
+  color:#60716b;
+  font-size:9.7px;
+  line-height:1.25;
+}
+.portfolio-financial-table th:nth-child(1),
+.portfolio-financial-table td:nth-child(1) { width: 18%; }
+.portfolio-financial-table th:nth-child(2),
+.portfolio-financial-table td:nth-child(2) { width: 5%; }
+.portfolio-financial-table th:nth-child(3),
+.portfolio-financial-table td:nth-child(3) { width: 13%; }
+.portfolio-financial-table th:nth-child(4),
+.portfolio-financial-table td:nth-child(4) { width: 13%; }
+.portfolio-financial-table th:nth-child(5),
+.portfolio-financial-table td:nth-child(5) { width: 10%; }
+.portfolio-financial-table th:nth-child(6),
+.portfolio-financial-table td:nth-child(6) { width: 8%; }
+.portfolio-financial-table th:nth-child(7),
+.portfolio-financial-table td:nth-child(7) { width: 12%; }
+.portfolio-financial-table th:nth-child(8),
+.portfolio-financial-table td:nth-child(8) { width: 7%; }
+.portfolio-financial-table th:nth-child(9),
+.portfolio-financial-table td:nth-child(9) { width: 7%; }
+.portfolio-financial-table th:nth-child(10),
+.portfolio-financial-table td:nth-child(10) { width: 7%; }
+.portfolio-cost-breakdown small { overflow-wrap: anywhere; }
+.portfolio-financial-metric.capex-delta-red { border-color:#efb0aa; background:#fff1f0; }
+.portfolio-financial-metric.capex-delta-red strong { color:#a61b13; }
+.portfolio-financial-metric.capex-delta-red small { color:#7d312b; }
+.portfolio-financial-metric.capex-delta-green { border-color:#a8d8c2; background:#eef9f3; }
+.portfolio-financial-metric.capex-delta-green strong { color:#087443; }
+.portfolio-financial-metric.capex-delta-green small { color:#286d53; }
+@media (max-width: 900px) {
+  .portfolio-financial-table-heading { flex-direction: column; }
+  .portfolio-terms-manager { min-width: 0; justify-items: start; }
+  .portfolio-terms-manager small { text-align:left; }
+  .portfolio-terms-summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 620px) {
+  .portfolio-terms-summary-grid { grid-template-columns: 1fr; }
+}

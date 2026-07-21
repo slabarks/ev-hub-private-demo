@@ -10,7 +10,7 @@
 
 const LOCAL_SCHEMA_VERSION = "v21-live-history-v7";
 const LOCAL_APP_VERSION = "V21.6";
-const LOCAL_BUILD_ID = "EVHUB-V21.6-20260719-R1";
+const LOCAL_BUILD_ID = "EVHUB-V21.6-20260721-R1";
 const LOCAL_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.6";
 const DAY_MS = 86400000;
 const EXCEL_EPOCH_DAY = Math.floor(Date.UTC(1899, 11, 30) / DAY_MS);
@@ -389,7 +389,9 @@ function buildDailyHistory(daily, firstActive, latestDay) {
       sessions: round(sessions, 3),
       netRevenue: round(net, 2),
       rolling30Kwh: round(rollingTotal, 3),
-      sourcePresent: Boolean(values)
+      sourcePresent: Boolean(values),
+      reportingChargerCount: values?.chargers instanceof Set ? values.chargers.size : 0,
+      activeChargerCount: values?.activeChargers instanceof Set ? values.activeChargers.size : 0
     });
   }
   return rows;
@@ -586,11 +588,17 @@ export async function parsePortfolioCalibrationFilesLocally(files, progress) {
       const site = siteDays.get(siteKey);
       site.chargerNames.add(String(rawName));
       site.sourceFiles.add(source.name);
-      if (!site.daily.has(day)) site.daily.set(day, { kwh: 0, net: 0, sessions: 0 });
+      if (!site.daily.has(day)) site.daily.set(day, { kwh: 0, net: 0, sessions: 0, chargers: new Set(), activeChargers: new Set() });
       const values = site.daily.get(day);
-      values.kwh += liveNumber(row[kwhIndex]);
-      values.net += liveNumber(netIndex == null ? 0 : row[netIndex]);
-      values.sessions += liveNumber(sessionsIndex == null ? 0 : row[sessionsIndex]);
+      const chargerName = String(rawName);
+      const rowKwh = liveNumber(row[kwhIndex]);
+      const rowNet = liveNumber(netIndex == null ? 0 : row[netIndex]);
+      const rowSessions = liveNumber(sessionsIndex == null ? 0 : row[sessionsIndex]);
+      values.chargers.add(chargerName);
+      if (rowKwh >= 1 || rowSessions >= 1) values.activeChargers.add(chargerName);
+      values.kwh += rowKwh;
+      values.net += rowNet;
+      values.sessions += rowSessions;
     };
     if (/\.csv$/i.test(source.name)) {
       parseCsvRows(new TextDecoder("utf-8").decode(source.bytes), consumeRow);

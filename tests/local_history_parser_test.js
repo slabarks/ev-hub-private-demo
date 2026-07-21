@@ -70,7 +70,7 @@ const payload = await parsePortfolioCalibrationFilesLocally([upload], message =>
 assert.equal(payload.ok, true);
 assert.equal(payload.localParser, true);
 assert.equal(payload.schemaVersion, "v21-live-history-v7");
-assert.equal(payload.buildId, "EVHUB-V21.6-20260719-R1");
+assert.equal(payload.buildId, "EVHUB-V21.6-20260721-R1");
 assert.equal(payload.parserBuildId, "EVHUB-LIVE-PARSER-21.6");
 assert.equal(payload.siteCount, 2);
 assert.equal(payload.rowCount, 92);
@@ -89,5 +89,7 @@ assert.equal(alpha.actual.firstCommercialSessionDate, "2026-01-03");
 assert.equal(beta.actual.firstCommercialSessionDate, "2026-01-10");
 assert.equal(alpha.actual.dailyHistory[0].date, "2026-01-03");
 assert.equal(alpha.actual.dailyHistory.at(-1).date, "2026-02-15");
+assert.equal(alpha.actual.dailyHistory[0].reportingChargerCount, 1);
+assert.equal(alpha.actual.dailyHistory[0].activeChargerCount, 1);
 assert.ok(alpha.actual.monthlyHistory.every(row => Number.isFinite(row.kwhPerCalendarDay)));
 console.log("PASS — browser-local ZIP/XLSX parser produced complete daily and monthly histories without a backend.");

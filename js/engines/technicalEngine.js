@@ -5,30 +5,6 @@ import { deriveCivilElectricalCost } from "../data/civilElectricalCostLibrary.js
 import { estimateEsbConnectionCostExVat } from "../data/esbConnectionCostLibrary.js";
 import { asNum } from "../utils.js";
 
-function clamp01(value) {
-  return Math.max(0, Math.min(1, Number(value || 0)));
-}
-
-export function batteryUsableFraction(inputs = {}) {
-  const dispatchable = clamp01(inputs.batteryDispatchFractionUsable ?? 1);
-  const reserve = clamp01(inputs.batteryReserve ?? 0);
-  return dispatchable * (1 - reserve);
-}
-
-export function batteryUsableEnergyKwh(nominalEnergyKwh, soh = 1, inputs = {}) {
-  return Math.max(0, Number(nominalEnergyKwh || 0)) * clamp01(soh) * batteryUsableFraction(inputs);
-}
-
-export function rechargeWindowDurationHours(inputs = {}) {
-  const start = Number(inputs.overnightRechargeWindowStart);
-  const end = Number(inputs.overnightRechargeWindowEnd);
-  if (Number.isFinite(start) && Number.isFinite(end) && start >= 0 && start <= 24 && end >= 0 && end <= 24 && start !== end) {
-    const derived = (end - start + 24) % 24;
-    if (derived > 0) return derived;
-  }
-  return Math.max(0, Number(inputs.overnightRechargeWindowDuration || 0));
-}
-
 export function validateConfiguration(config) {
   const reasons = [];
   if (!["Autel Standalone", "Autel Distributed", "Kempower Distributed"].includes(config.platform)) {
@@ -83,7 +59,6 @@ export function deriveConfiguration(config, inputs) {
 
   const batteryPowerKw = battery.powerKw || 0;
   const batteryEnergyKwh = battery.energyKwh || 0;
-  const batteryDispatchableEnergyKwh = batteryUsableEnergyKwh(batteryEnergyKwh, 1, inputs);
   const totalAvailableSitePowerKw = config.selectedMicKva * inputs.powerFactor + batteryPowerKw;
 
   const chargerSlaPpmCost = config.platform === "Kempower Distributed"
@@ -135,8 +110,6 @@ export function deriveConfiguration(config, inputs) {
     installedOutputs,
     batteryPowerKw,
     batteryEnergyKwh,
-    batteryDispatchableEnergyKwh,
-    batteryUsableFraction: batteryUsableFraction(inputs),
     totalAvailableSitePowerKw,
     chargerSlaPpmCost,
     managedService,
@@ -190,8 +163,7 @@ export function initialCapexDetail(config, inputs) {
     ? (charger ? charger.commissioning || 0 : 0) * chargerCount
     : effectiveCabinetCommissioning(config, cabinet);
 
-  const esbConnectionApplicationFee = Math.max(0, Number(inputs.esbConnectionApplicationFee || 0));
-  const calculatedTotal = cabinetHw + dispenserHw + standaloneHw + batteryHw + batteryInstall + batteryUnitInstall + install + gridConnection + esbConnectionApplicationFee + substation + batteryLogistics + batteryInstallCommissioning + commissioning;
+  const calculatedTotal = cabinetHw + dispenserHw + standaloneHw + batteryHw + batteryInstall + batteryUnitInstall + install + gridConnection + substation + batteryLogistics + batteryInstallCommissioning + commissioning;
   const overrideTotal = actualInitialCapexOverride(config);
   const total = overrideTotal || calculatedTotal;
   return {
@@ -207,7 +179,6 @@ export function initialCapexDetail(config, inputs) {
     batteryUnitInstall,
     civilElectricalInstall: install,
     gridConnection,
-    esbConnectionApplicationFee: overrideTotal ? 0 : esbConnectionApplicationFee,
     esbConnectionCostEstimate: esbEstimate,
     substation,
     batteryLogistics,
@@ -236,8 +207,6 @@ export function technicalChecks(config, inputs, demand) {
   const validity = validateConfiguration(config);
   const derived = deriveConfiguration(config, inputs);
   const peakWindowHours = Number(inputs.peakWindowEndHour ?? inputs.peakWindowHours ?? 5) || 5;
-  const rechargeHours = rechargeWindowDurationHours(inputs);
-  const usableBatteryEnergyKwh = derived.batteryDispatchableEnergyKwh;
   const rows = demand.years.map((y, idx) => {
     const powerCoverageRatio = Math.min(1, Math.min(derived.installedChargerPowerKw, derived.totalAvailableSitePowerKw) / Math.max(1, y.peakDemandRequiredKw));
     const batteryPowerRequiredKw = Math.max(0, y.peakDemandRequiredKw - config.selectedMicKva * inputs.powerFactor);
@@ -263,9 +232,9 @@ export function technicalChecks(config, inputs, demand) {
   } else {
     if (derived.totalAvailableSitePowerKw < demand.maxPeakDemandKw) failures.push("Power constrained");
     if (derived.batteryPowerKw < maxResidualPower) failures.push("Battery power constrained");
-    if (usableBatteryEnergyKwh < maxResidualEnergy) failures.push("Battery usable energy constrained");
-    const overnightRechargeAvailable = config.selectedMicKva * inputs.powerFactor * rechargeHours;
-    if (overnightRechargeAvailable < Math.min(maxResidualEnergy, usableBatteryEnergyKwh || maxResidualEnergy)) failures.push("Overnight recharge constrained");
+    if (derived.batteryEnergyKwh < maxResidualEnergy) failures.push("Battery energy constrained");
+    const overnightRechargeAvailable = config.selectedMicKva * inputs.powerFactor * inputs.overnightRechargeWindowDuration;
+    if (overnightRechargeAvailable < Math.min(maxResidualEnergy, derived.batteryEnergyKwh || maxResidualEnergy)) failures.push("Overnight recharge constrained");
   }
 
   return {

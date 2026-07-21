@@ -91,8 +91,7 @@ export const DEFAULT_SELECTED_CONFIG = {
   serviceLevel: "Premium",
   selectedMicKva: 200,
   chargerWarrantyYears: 0,
-  batteryWarrantyYears: 0,
-  batteryDeploymentMode: "Staged as required"
+  batteryWarrantyYears: 0
 };
 
 export const EXCEL_REFERENCE = {
@@ -117,76 +116,3 @@ export const ASSUMPTION_DICTIONARY = [
   ["selectedMicKva", "Selected MIC", "kVA", "Summary!B12", "Must be one of the Excel MIC values only."],
   ["esbConnectionCostEscalationRate", "ESB connection cost escalation", "%", "Model", "Escalates historical ex-VAT ESB quotation medians from the quote base year to the model start year."]
 ];
-
-
-const ASSUMPTION_METADATA_OVERRIDES = {
-  siteAddress: { basisType: "Measured", source: "User-selected site", status: "active" },
-  rawCorridorTrafficAadt: { basisType: "Measured", source: "TII counter or manual override", status: "active" },
-  trafficSourceYear: { basisType: "Measured", source: "TII source year", status: "active" },
-  benchmarkProfile: { basisType: "Portfolio calibrated", source: "Operating hub segment benchmarks", status: "active" },
-  effectiveAadtCap: { basisType: "Portfolio calibrated", source: "Site-type benchmark", status: "active" },
-  siteRelevanceFactor: { basisType: "Portfolio calibrated", source: "Operating hub calibration", status: "active" },
-  siteCaptureRate: { basisType: "Portfolio calibrated", source: "Operating hub calibration", status: "active" },
-  averageSessionEnergy: { basisType: "Portfolio calibrated", source: "Operating hub sessions", status: "active" },
-  netSellingPriceExVat: { basisType: "Commercial assumption", source: "Operator tariff", status: "active" },
-  grossSellingPriceInclVat: { basisType: "Commercial assumption", source: "Displayed tariff", status: "reference" },
-  electricityCost: { basisType: "Commercial assumption", source: "Energy procurement", status: "active" },
-  grantSupport: { basisType: "Measured", source: "Confirmed grant or manual input", status: "active" },
-  groundRentPerEvSpace: { basisType: "Commercial assumption", source: "Lease terms", status: "active" },
-  landlordGpShare: { basisType: "Commercial assumption", source: "Lease terms", status: "active" },
-  landlordGrossSalesShare: { basisType: "Commercial assumption", source: "Lease terms", status: "active" },
-  leaseTerm: { basisType: "Commercial assumption", source: "Secured lease", status: "active" },
-  discountRate: { basisType: "Investor assumption", source: "Required return", status: "active" },
-  esbConnectionApplicationFee: { basisType: "Measured", source: "ESB application/connection quote", status: "active" },
-  esbConnectionCostEscalationRate: { basisType: "Planning assumption", source: "Historical quotation escalation", status: "active" },
-  powerFactor: { basisType: "Engineering assumption", source: "Electrical design", status: "active" },
-  batteryReserve: { basisType: "Engineering assumption", source: "BESS operating policy", status: "active" },
-  batteryDispatchFractionUsable: { basisType: "Engineering assumption", source: "BESS operating policy", status: "active" },
-  batteryReplacementThresholdSoh: { basisType: "Engineering assumption", source: "Asset lifecycle policy", status: "active" },
-  batteryBaseDegradationRate: { basisType: "Engineering assumption", source: "Battery lifecycle model", status: "active" },
-  batteryCyclingDegradationFactor: { basisType: "Engineering assumption", source: "Battery lifecycle model", status: "active" },
-  overnightRechargeWindowStart: { basisType: "Engineering assumption", source: "Site operating schedule", status: "active" },
-  overnightRechargeWindowEnd: { basisType: "Engineering assumption", source: "Site operating schedule", status: "active" },
-  overnightRechargeWindowDuration: { basisType: "Derived", source: "Start/end hours when available", status: "derived" },
-  annualFailureRateStarting: { basisType: "Engineering assumption", source: "Reliability planning", status: "active" },
-  downtimeImpactFactor: { basisType: "Engineering assumption", source: "Reliability planning", status: "active" },
-  operatingHoursPerDay: { basisType: "Reference only", source: "Requires intraday demand profile", status: "reference" },
-  batteryAugmentationTriggerDeficitKw: { basisType: "Reference only", source: "Commercial augmentation policy not activated", status: "reference" },
-  benchmarkTargetSessionsPer1000Aadt: { basisType: "Diagnostic", source: "Portfolio comparison only", status: "diagnostic" },
-  investmentHorizon: { basisType: "Investor assumption", source: "Selected analysis horizon", status: "active" },
-  modelHorizon: { basisType: "Model control", source: "Forecast engine", status: "active" },
-  modelStartYear: { basisType: "Model control", source: "Selected COD/start year", status: "active" },
-  codYear: { basisType: "Derived", source: "Model start year", status: "derived" }
-};
-
-export const ASSUMPTION_METADATA = Object.fromEntries(
-  Object.keys(DEFAULT_INPUTS).map(key => [key, {
-    basisType: "Planning assumption",
-    source: "Model default",
-    status: "active",
-    ...(ASSUMPTION_METADATA_OVERRIDES[key] || {})
-  }])
-);
-
-export const CONFIG_ASSUMPTION_METADATA = Object.fromEntries(
-  Object.keys(DEFAULT_SELECTED_CONFIG).map(key => [key, {
-    basisType: "Engineering selection",
-    source: "Product configuration",
-    status: "active",
-    ...({
-      platform: { source: "Product platform library" },
-      batteryStrategy: { source: "Grid/BESS architecture" },
-      chargerModel: { source: "Product library" },
-      chargerCount: { source: "Product configuration" },
-      cabinetType: { source: "Product library" },
-      dispenserCount: { source: "Product configuration" },
-      kempowerTripleCabinetCount: { source: "Product configuration" },
-      batterySize: { source: "Battery library" },
-      batteryDeploymentMode: { basisType: "Commercial policy", source: "Installed at COD or staged" },
-      selectedMicKva: { source: "Grid connection" },
-      serviceLevel: { basisType: "Commercial assumption", source: "Service contract" },
-      chargerWarrantyYears: { basisType: "Commercial assumption", source: "Warranty contract" },
-      batteryWarrantyYears: { basisType: "Commercial assumption", source: "Warranty contract" }
-    }[key] || {})
-  }])
-);

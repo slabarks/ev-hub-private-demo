@@ -1,4 +1,4 @@
-import { deriveConfiguration, technicalChecks, validateConfiguration, batteryUsableEnergyKwh, batteryUsableFraction, rechargeWindowDurationHours } from "./technicalEngine.js";
+import { deriveConfiguration, technicalChecks, validateConfiguration } from "./technicalEngine.js";
 import { batteryItem, batteryDeploymentCostProfile } from "../data/batteryLibrary.js";
 import { sum, npv, irr } from "../utils.js";
 
@@ -20,35 +20,20 @@ function batteryEnvelope(config) {
   return { unitsMax, unitPowerKw, unitEnergyKwh, firstUnitDeploymentCapex: profile.firstUnitDeploymentCapex, additionalUnitDeploymentCapex: profile.additionalUnitDeploymentCapex, unitReplacementCapex: profile.unitReplacementCapex, unitServiceCost, totalDeploymentCapexExcludingCivils: profile.totalDeploymentCapexExcludingCivils, battery };
 }
 
-function activeBatteryTotals(cohorts, inputs = {}) {
+function activeBatteryTotals(cohorts) {
   return cohorts.reduce((acc, c) => {
     acc.units += c.units;
     acc.powerKw += c.units * c.unitPowerKw;
     acc.nominalEnergyKwh += c.units * c.unitEnergyKwh;
     acc.sohAdjustedEnergyKwh += c.units * c.unitEnergyKwh * c.soh;
-    acc.dispatchableEnergyKwh += batteryUsableEnergyKwh(c.units * c.unitEnergyKwh, c.soh, inputs);
     return acc;
-  }, { units: 0, powerKw: 0, nominalEnergyKwh: 0, sohAdjustedEnergyKwh: 0, dispatchableEnergyKwh: 0 });
+  }, { units: 0, powerKw: 0, nominalEnergyKwh: 0, sohAdjustedEnergyKwh: 0 });
 }
 
-function weightedAverageSoh(cohorts, inputs = {}) {
-  const totals = activeBatteryTotals(cohorts, inputs);
+function weightedAverageSoh(cohorts) {
+  const totals = activeBatteryTotals(cohorts);
   if (!totals.units) return 0;
   return cohorts.reduce((acc, c) => acc + c.soh * c.units, 0) / totals.units;
-}
-
-function resolvedBatteryDeploymentMode(config, envelope) {
-  if (!envelope.unitsMax) return "grid-only";
-  const explicit = String(config.batteryDeploymentMode || "").toLowerCase();
-  if (explicit.includes("installed") || explicit.includes("day one") || explicit.includes("day-one")) return "installed-day-one";
-  if (Number(config.actualInitialCapexOverride || 0) > 0) return "installed-day-one";
-  return "staged-envelope";
-}
-
-function reliabilityAvailabilityFactor(inputs = {}) {
-  const failureRate = Math.max(0, Math.min(1, Number(inputs.annualFailureRateStarting || 0)));
-  const downtimeImpact = Math.max(0, Math.min(1, Number(inputs.downtimeImpactFactor || 0)));
-  return Math.max(0, Math.min(1, 1 - failureRate * downtimeImpact));
 }
 
 export function calculateYearByYear(inputs, config, demand) {
@@ -79,31 +64,9 @@ export function calculateYearByYear(inputs, config, demand) {
     : 0;
   const rows = [];
   const batteryCohorts = [];
-  const batteryDeploymentMode = resolvedBatteryDeploymentMode(config, envelope);
-  if (batteryDeploymentMode === "installed-day-one" && envelope.unitsMax > 0) {
-    batteryCohorts.push({
-      installYear: Number(inputs.modelStartYear || inputs.codYear),
-      units: envelope.unitsMax,
-      unitPowerKw: envelope.unitPowerKw,
-      unitEnergyKwh: envelope.unitEnergyKwh,
-      unitDeploymentCapex: 0,
-      unitReplacementCapex: envelope.unitReplacementCapex,
-      soh: 1,
-      sohStart: 1,
-      annualSohDegradation: 0,
-      replacedThisYear: false,
-      installedAtCod: true
-    });
-  }
   let cumulativeCashFlow = 0;
   const peakWindowDurationHrs = Number(inputs.peakWindowEndHour ?? inputs.peakWindowHours ?? 5) || 5;
-  const rechargeWindowHours = rechargeWindowDurationHours(inputs);
   const nonBatteryInitialCapex = noBatteryDerived.initialInvestmentCapex;
-  const grossBaseInitialCapex = batteryDeploymentMode === "installed-day-one" ? derived.initialInvestmentCapex : nonBatteryInitialCapex;
-  const requestedGrantSupport = Math.max(0, Number(inputs.grantSupport || 0));
-  const availabilityFactor = reliabilityAvailabilityFactor(inputs);
-  let appliedGrantSupport = 0;
-  let grossInitialInvestmentBeforeGrant = 0;
   let gridOnlyCapacityPlateauKwh = 0;
 
   demand.years.forEach((d, idx) => {
@@ -138,13 +101,12 @@ export function calculateYearByYear(inputs, config, demand) {
     });
 
     // 2) Check active deployed fleet; add minimum additional units if required, capped by the selected battery envelope.
-    let before = activeBatteryTotals(batteryCohorts, inputs);
+    let before = activeBatteryTotals(batteryCohorts);
     const powerUnitsNeeded = envelope.unitPowerKw > 0 ? Math.ceil(Math.max(0, batteryPowerRequiredKw - before.powerKw) / envelope.unitPowerKw) : 0;
-    const unitDispatchableEnergyKwh = batteryUsableEnergyKwh(envelope.unitEnergyKwh, 1, inputs);
-    const energyUnitsNeeded = unitDispatchableEnergyKwh > 0 ? Math.ceil(Math.max(0, residualPeakWindowKwh - before.dispatchableEnergyKwh) / unitDispatchableEnergyKwh) : 0;
+    const energyUnitsNeeded = envelope.unitEnergyKwh > 0 ? Math.ceil(Math.max(0, residualPeakWindowKwh - before.sohAdjustedEnergyKwh) / envelope.unitEnergyKwh) : 0;
     const desiredAdditionalUnits = Math.max(powerUnitsNeeded, energyUnitsNeeded);
     const remainingEnvelopeUnits = Math.max(0, envelope.unitsMax - before.units);
-    const newBatteryUnitsInstalled = batteryDeploymentMode === "installed-day-one" ? 0 : Math.min(remainingEnvelopeUnits, desiredAdditionalUnits);
+    const newBatteryUnitsInstalled = Math.min(remainingEnvelopeUnits, desiredAdditionalUnits);
     const augmentationFlag = newBatteryUnitsInstalled > 0 ? "AUGMENT" : "";
     const firstBatteryDeploymentThisYear = newBatteryUnitsInstalled > 0 && before.units === 0;
     const augmentationCapex = newBatteryUnitsInstalled > 0
@@ -169,20 +131,19 @@ export function calculateYearByYear(inputs, config, demand) {
       });
     }
 
-    const totals = activeBatteryTotals(batteryCohorts, inputs);
+    const totals = activeBatteryTotals(batteryCohorts);
     const batteryInverterPowerKw = totals.powerKw;
-    const batteryNominalEnergyKwh = totals.nominalEnergyKwh;
+    const batteryUsableEnergyKwh = totals.nominalEnergyKwh;
     const batteryEnergyAvailableKwhSohAdjusted = totals.sohAdjustedEnergyKwh;
-    const batteryDispatchableEnergyKwh = totals.dispatchableEnergyKwh;
     const batterySohStart = batteryCohorts.length ? batteryCohorts.reduce((acc, c) => acc + (c.sohStart ?? c.soh) * c.units, 0) / Math.max(1, totals.units) : 0;
-    const batterySohEnd = weightedAverageSoh(batteryCohorts, inputs);
+    const batterySohEnd = weightedAverageSoh(batteryCohorts);
     const annualSohDegradation = batterySohStart > 0 ? Math.max(0, batterySohStart - batterySohEnd) : 0;
     const batteryReplacementTrigger = batteryReplacementUnits > 0 ? 1 : 0;
     const batteryPowerDeficitKw = Math.max(0, batteryPowerRequiredKw - batteryInverterPowerKw);
-    const batteryEnergyDeficitKwh = Math.max(0, residualPeakWindowKwh - batteryDispatchableEnergyKwh);
+    const batteryEnergyDeficitKwh = Math.max(0, residualPeakWindowKwh - batteryEnergyAvailableKwhSohAdjusted);
 
     const installedChargerPowerKw = derived.installedChargerPowerKw;
-    const batteryPeakResidualCoverageRatio = residualPeakWindowKwh > 0 ? Math.min(1, batteryDispatchableEnergyKwh / Math.max(1, residualPeakWindowKwh)) : 1;
+    const batteryPeakResidualCoverageRatio = residualPeakWindowKwh > 0 ? Math.min(1, batteryEnergyAvailableKwhSohAdjusted / Math.max(1, residualPeakWindowKwh)) : 1;
     const peakWindowShare = Math.max(0, Math.min(1, Number(inputs.peakWindowShare || 0)));
     // Grid-only sites should continue serving all physically deliverable energy from their existing MIC/chargers.
     // A missing battery must not force delivered energy to zero once peak-window demand exceeds grid-only capacity.
@@ -190,10 +151,10 @@ export function calculateYearByYear(inputs, config, demand) {
     const batteryEnergyCoverageRatio = (config.batteryStrategy === "Grid only" || envelope.unitsMax === 0)
       ? 1
       : Math.min(1, (1 - peakWindowShare) + peakWindowShare * batteryPeakResidualCoverageRatio);
-    const batterySustainDurationAtFullOutputHrs = batteryInverterPowerKw > 0 ? batteryDispatchableEnergyKwh / Math.max(1, batteryInverterPowerKw) : 0;
+    const batterySustainDurationAtFullOutputHrs = batteryInverterPowerKw > 0 ? batteryEnergyAvailableKwhSohAdjusted / Math.max(1, batteryInverterPowerKw) : 0;
     const gridPowerAvailableForRechargeKw = gridPowerKw;
-    const batteryEnergyToRechargeKwh = Math.min(residualPeakWindowKwh, batteryDispatchableEnergyKwh);
-    const overnightRechargeDeliverableKwh = gridPowerAvailableForRechargeKw * rechargeWindowHours;
+    const batteryEnergyToRechargeKwh = Math.min(residualPeakWindowKwh, batteryEnergyAvailableKwhSohAdjusted);
+    const overnightRechargeDeliverableKwh = gridPowerAvailableForRechargeKw * inputs.overnightRechargeWindowDuration;
     const totalAvailableSitePowerKw = gridPowerKw + batteryInverterPowerKw;
     const requiredMicNoBatteryKva = d.requiredMicNoBatteryKva;
     const batteryPowerSurplusDeficitKw = batteryInverterPowerKw - batteryPowerRequiredKw;
@@ -201,7 +162,7 @@ export function calculateYearByYear(inputs, config, demand) {
     const plugCoverageRatio = Math.min(1, installedOutputs / Math.max(1, Number(d.peakConcurrentSessions || d.requiredPlugs || 0)));
     const powerCoverageRatio = Math.min(1, Math.min(installedChargerPowerKw, totalAvailableSitePowerKw) / Math.max(1, peakDemandRequiredKw));
     const rawServedDemandCoverageRatio = Math.max(0, Math.min(1, powerCoverageRatio, plugCoverageRatio, batteryEnergyCoverageRatio));
-    let deliveredEnergyServedKwh = d.annualEnergyDemandedKwh * rawServedDemandCoverageRatio * availabilityFactor;
+    let deliveredEnergyServedKwh = d.annualEnergyDemandedKwh * rawServedDemandCoverageRatio;
     const gridOnlyPlateauEligible = (config.batteryStrategy === "Grid only" || envelope.unitsMax === 0);
     const capacityConstrainedThisYear = rawServedDemandCoverageRatio < 0.999 && d.annualEnergyDemandedKwh > 0;
     if (gridOnlyPlateauEligible) {
@@ -224,7 +185,7 @@ export function calculateYearByYear(inputs, config, demand) {
 
     const chargerSlaPpmSupport = derived.chargerSlaPpmCost;
     const managedService = derived.managedService;
-    const batteryAnnualService = totals.units > 0 ? derived.batteryAnnualService : 0;
+    const batteryAnnualService = totals.units * envelope.unitServiceCost;
     const duosStandingCharge = 1320.36;
     const duosCapacityCharge = selectedMicKva * 49.28;
     const groundRent = derived.groundRent;
@@ -239,22 +200,12 @@ export function calculateYearByYear(inputs, config, demand) {
     const totalOperatingCosts = chargerSlaPpmSupport + managedService + batteryAnnualService + duosStandingCharge + duosCapacityCharge + groundRent + transactionProcessingFee + flatTransactionFee + landlordGpShare + landlordGrossSalesShare + extendedChargerWarranty + extendedBatteryWarranty;
 
     const initialBatteryProvisionCapex = 0;
-    const augmentationCapexAtCod = idx === 0 && batteryDeploymentMode === "staged-envelope" ? augmentationCapex : 0;
-    if (idx === 0) {
-      grossInitialInvestmentBeforeGrant = grossBaseInitialCapex + augmentationCapexAtCod;
-      appliedGrantSupport = Math.min(requestedGrantSupport, grossInitialInvestmentBeforeGrant);
-    }
-    const grossInitialInvestmentCapex = idx === 0 ? grossInitialInvestmentBeforeGrant : 0;
-    const initialInvestmentCapex = idx === 0 ? Math.max(0, grossInitialInvestmentBeforeGrant - appliedGrantSupport) : 0;
+    const initialInvestmentCapex = idx === 0 ? nonBatteryInitialCapex - inputs.grantSupport : 0;
     const validChargerReplacementCapex = isValidConfiguration && Number.isFinite(Number(derived.chargerReplacementCapex)) && derived.chargerReplacementCapex > 0;
-    const replacementCycleYears = Math.max(1, Number(inputs.chargerEquipmentReplacementCycleYears || 10));
-    const chargerReplacementTrigger = (validChargerReplacementCapex && (yearNumber % replacementCycleYears === 0)) ? 1 : 0;
+    const chargerReplacementTrigger = (validChargerReplacementCapex && (yearNumber % inputs.chargerEquipmentReplacementCycleYears === 0)) ? 1 : 0;
     const chargerReplacementCapex = chargerReplacementTrigger === 1 ? derived.chargerReplacementCapex : 0;
-    const postCodAugmentationCapex = idx === 0 ? 0 : augmentationCapex;
-    const totalCapex = initialInvestmentCapex + batteryReplacementCapex + chargerReplacementCapex + postCodAugmentationCapex;
-    const grossTotalCapex = grossInitialInvestmentCapex + batteryReplacementCapex + chargerReplacementCapex + postCodAugmentationCapex;
+    const totalCapex = initialInvestmentCapex + batteryReplacementCapex + chargerReplacementCapex + augmentationCapex;
     const operatingProfit = grossProfit - totalOperatingCosts;
-    const postInitialAnnualCashFlow = operatingProfit - batteryReplacementCapex - chargerReplacementCapex - postCodAugmentationCapex;
     const annualCashFlow = operatingProfit - totalCapex;
     cumulativeCashFlow += annualCashFlow;
     const breakEvenMarker = cumulativeCashFlow >= 0 && (idx === 0 || rows[idx - 1].cumulativeCashFlow < 0) ? "★ BREAKEVEN" : "";
@@ -271,9 +222,8 @@ export function calculateYearByYear(inputs, config, demand) {
       batteryReplacementUnits,
       newAugmentationCabinets: newBatteryUnitsInstalled,
       augmentationNote: newBatteryUnitsInstalled > 0 ? `INSTALL ${newBatteryUnitsInstalled} BATTERY UNIT(S)` : "",
-      augmentationCapex, augmentationCapexAtCod, postCodAugmentationCapex,
-      installedChargerPowerKw, selectedMicKva, batteryInverterPowerKw, batteryNominalEnergyKwh, batteryUsableEnergyKwh: batteryDispatchableEnergyKwh,
-      batteryUsableFraction: batteryUsableFraction(inputs), availabilityFactor,
+      augmentationCapex,
+      installedChargerPowerKw, selectedMicKva, batteryInverterPowerKw, batteryUsableEnergyKwh,
       peakWindowEnergyDemandKwh, batteryEnergyAvailableKwhSohAdjusted, batteryEnergyCoverageRatio,
       batterySustainDurationAtFullOutputHrs, peakWindowDurationHrs, gridPowerAvailableForRechargeKw,
       batteryEnergyToRechargeKwh, overnightRechargeDeliverableKwh, totalAvailableSitePowerKw,
@@ -283,8 +233,8 @@ export function calculateYearByYear(inputs, config, demand) {
       energyRevenue, totalRevenue, electricityCost, grossProfit, chargerSlaPpmSupport, managedService,
       batteryAnnualService, duosStandingCharge, duosCapacityCharge, groundRent, transactionProcessingFee,
       flatTransactionFee, landlordGpShare, landlordGrossSalesShare, extendedChargerWarranty,
-      extendedBatteryWarranty, totalOperatingCosts, grossInitialInvestmentCapex, initialInvestmentCapex, grantApplied: idx === 0 ? appliedGrantSupport : 0, initialBatteryProvisionCapex, batteryReplacementCapex,
-      chargerReplacementTrigger, chargerReplacementCapex, totalCapex, grossTotalCapex, operatingProfit, postInitialAnnualCashFlow, annualCashFlow,
+      extendedBatteryWarranty, totalOperatingCosts, initialInvestmentCapex, initialBatteryProvisionCapex, batteryReplacementCapex,
+      chargerReplacementTrigger, chargerReplacementCapex, totalCapex, operatingProfit, annualCashFlow,
       cumulativeCashFlow, breakEvenMarker, helperChargerReplacementYear, helperBatteryReplacementYear,
       helperBreakEvenYear, demandedSessions: d.annualSessionsDemanded, demandedEnergyKwh: d.annualEnergyDemandedKwh,
       requiredPlugs: d.peakConcurrentSessions, bevShare: d.bevShare, relevantTraffic: d.relevantTraffic
@@ -293,104 +243,46 @@ export function calculateYearByYear(inputs, config, demand) {
     rows.push(row);
   });
 
-  return {
-    rows,
-    derived,
-    technical: technicalChecks(config, inputs, demand),
-    batteryDeploymentMode,
-    grantRequested: requestedGrantSupport,
-    grantApplied: appliedGrantSupport,
-    grantUnapplied: Math.max(0, requestedGrantSupport - appliedGrantSupport),
-    grossInitialInvestmentBeforeGrant,
-    reliabilityAvailabilityFactor: availabilityFactor,
-    rechargeWindowHours
-  };
+  return { rows, derived, technical: technicalChecks(config, inputs, demand), batteryDeploymentMode: "staged-envelope" };
 }
 
 export function summariseFinancials(inputs, config, demand, yearByYear, horizon = inputs.investmentHorizon) {
-  const rows = yearByYear.rows.slice(0, Math.max(1, Number(horizon || 1)));
-  const initialInvestment = Math.max(0, Number(rows[0]?.initialInvestmentCapex || 0));
-  const grossInitialInvestmentBeforeGrant = Math.max(0, Number(rows[0]?.grossInitialInvestmentCapex || yearByYear.grossInitialInvestmentBeforeGrant || 0));
-  const grantRequested = Math.max(0, Number(yearByYear.grantRequested ?? inputs.grantSupport ?? 0));
-  const grantApplied = Math.max(0, Number(yearByYear.grantApplied ?? rows[0]?.grantApplied ?? 0));
-  const grantUnapplied = Math.max(0, grantRequested - grantApplied);
-
-  // Project-finance timing convention: construction funding is period 0;
-  // operating cash flow is received at each year end. Later replacement and
-  // augmentation capex remains in the year in which it is incurred.
-  const operatingCashflows = rows.map((r, idx) => Number(r.operatingProfit || 0) - (idx === 0 ? 0 : Number(r.totalCapex || 0)));
-  const projectCashflows = [-initialInvestment, ...operatingCashflows];
-  const discountRate = Number(inputs.discountRate || 0);
-  const npvValue = npv(projectCashflows, discountRate);
-  const irrValue = irr(projectCashflows);
-
-  const cumulativeByYear = [];
-  let running = -initialInvestment;
-  rows.forEach((r, idx) => {
-    running += operatingCashflows[idx];
-    cumulativeByYear.push(running);
-  });
-  const paybackIndex = cumulativeByYear.findIndex(v => v >= 0);
-  let paybackYears = null;
-  if (paybackIndex >= 0) {
-    const previous = paybackIndex === 0 ? -initialInvestment : cumulativeByYear[paybackIndex - 1];
-    const currentYearCashflow = operatingCashflows[paybackIndex];
-    paybackYears = paybackIndex + (currentYearCashflow > 0 ? Math.max(0, Math.min(1, -previous / currentYearCashflow)) : 1);
-  }
-
+  const rows = yearByYear.rows.slice(0, horizon);
+  const cashflows = rows.map(r => r.annualCashFlow);
   const batteryReplacementYears = rows.filter(r => r.batteryReplacementTrigger === 1).map(r => r.year);
   const chargerReplacementYears = rows.filter(r => r.chargerReplacementTrigger === 1).map(r => r.year);
-  const capexEvents = rows.filter(r => Number(r.grossTotalCapex || 0) > 0).map(r => ({
+  const capexEvents = rows.filter(r => r.totalCapex > 0).map(r => ({
     year: r.year,
-    amount: Number(r.grossTotalCapex || 0),
-    operatorFundedAmount: Number(r.totalCapex || 0),
-    grantApplied: Number(r.grantApplied || 0),
+    amount: r.totalCapex,
     reason: [
-      r.grossInitialInvestmentCapex > 0 ? "initial investment" : "",
+      r.initialInvestmentCapex > 0 ? "initial investment" : "",
       r.batteryReplacementCapex > 0 ? "battery replacement" : "",
       r.chargerReplacementCapex > 0 ? "charger replacement" : "",
-      r.postCodAugmentationCapex > 0 ? "battery augmentation" : "",
-      r.augmentationCapexAtCod > 0 ? "battery deployment at COD" : ""
+      r.augmentationCapex > 0 ? ((r.installedBatteryUnits || 0) === (r.newBatteryUnitsInstalled || 0) ? "battery deployment" : "battery augmentation") : ""
     ].filter(Boolean).join(", ")
   }));
 
-  const grossTotalCapex = sum(rows.map(r => Number(r.grossTotalCapex || 0)));
-  const operatorFundedTotalCapex = sum(rows.map(r => Number(r.totalCapex || 0)));
+  const totalCapex = sum(rows.map(r => r.totalCapex));
   const totalOpex = sum(rows.map(r => r.totalOperatingCosts));
   const totalRevenue = sum(rows.map(r => r.totalRevenue));
   const totalGrossProfit = sum(rows.map(r => r.grossProfit));
-  const cumulativeCashFlow = projectCashflows.reduce((acc, value) => acc + value, 0);
+  const cumulativeCashFlow = rows.at(-1)?.cumulativeCashFlow ?? 0;
+  const breakEvenRow = rows.find(r => r.cumulativeCashFlow >= 0);
   const totalDeliveredKwh = sum(rows.map(r => r.deliveredEnergyServedKwh));
   const totalDemandedKwh = sum(rows.map(r => r.demandedEnergyKwh));
-  const roi = initialInvestment > 0 ? cumulativeCashFlow / initialInvestment : null;
-  const roiOnGrossInitialCapex = grossInitialInvestmentBeforeGrant > 0 ? cumulativeCashFlow / grossInitialInvestmentBeforeGrant : null;
-
-  const leaseTerm = Math.max(0, Math.floor(Number(inputs.leaseTerm || 0)));
-  const securedLeaseHorizon = leaseTerm > 0 ? Math.min(rows.length, leaseTerm) : 0;
-  const securedLeaseCashflows = securedLeaseHorizon > 0 ? projectCashflows.slice(0, securedLeaseHorizon + 1) : [];
-  const securedLeaseCumulativeCashFlow = securedLeaseCashflows.length ? sum(securedLeaseCashflows) : null;
-  const securedLeaseNpv = securedLeaseCashflows.length ? npv(securedLeaseCashflows, discountRate) : null;
-  const securedLeaseIrr = securedLeaseCashflows.length ? irr(securedLeaseCashflows) : null;
-  const postLeaseCashFlow = securedLeaseHorizon > 0 && securedLeaseHorizon < rows.length
-    ? sum(projectCashflows.slice(securedLeaseHorizon + 1))
-    : 0;
+  const simplePayback = breakEvenRow ? breakEvenRow.yearNumber : null;
+  const npvValue = npv(cashflows, inputs.discountRate || 0);
+  const irrValue = irr(cashflows);
+  const netInitialInvestment = rows[0]?.initialInvestmentCapex ?? 0;
+  const roi = netInitialInvestment > 0 ? cumulativeCashFlow / netInitialInvestment : null;
 
   return {
-    horizon: rows.length,
-    cashflowTimingConvention: "Period 0 construction; operating cash flow at year end",
-    projectCashflows,
-    initialInvestment,
+    horizon,
+    initialInvestment: rows[0]?.initialInvestmentCapex ?? 0,
     roi,
-    roiOnGrossInitialCapex,
-    grantSupport: grantApplied,
-    grantRequested,
-    grantApplied,
-    grantUnapplied,
-    grantCapped: grantUnapplied > 0,
-    grossInitialInvestmentBeforeGrant,
-    totalCapex: grossTotalCapex,
-    grossTotalCapex,
-    operatorFundedTotalCapex,
+    grantSupport: inputs.grantSupport,
+    grossInitialInvestmentBeforeGrant: (rows[0]?.initialInvestmentCapex ?? 0) + inputs.grantSupport,
+    totalCapex,
     totalOpex,
     totalRevenue,
     totalGrossProfit,
@@ -398,11 +290,10 @@ export function summariseFinancials(inputs, config, demand, yearByYear, horizon 
     year1Revenue: rows[0]?.totalRevenue ?? 0,
     year1GrossProfit: rows[0]?.grossProfit ?? 0,
     year1OperatingCost: rows[0]?.totalOperatingCosts ?? 0,
-    year1AnnualCashFlow: operatingCashflows[0] ?? 0,
+    year1AnnualCashFlow: rows[0]?.annualCashFlow ?? 0,
     cumulativeCashFlow,
-    breakEvenYear: paybackIndex >= 0 ? rows[paybackIndex]?.year ?? null : null,
-    simplePayback: paybackYears,
-    paybackYears,
+    breakEvenYear: breakEvenRow ? breakEvenRow.year : null,
+    simplePayback,
     firstBatteryReplacementYear: batteryReplacementYears[0] || null,
     batteryReplacementCount: batteryReplacementYears.length,
     chargerReplacementCount: chargerReplacementYears.length,
@@ -410,27 +301,15 @@ export function summariseFinancials(inputs, config, demand, yearByYear, horizon 
     capexEvents,
     npv: npvValue,
     irr: irrValue,
-    discountRate,
-    npvIsUndiscounted: discountRate === 0,
     ebitda: sum(rows.map(r => r.operatingProfit)),
-    totalReplacementCapex: sum(rows.map(r => r.batteryReplacementCapex + r.chargerReplacementCapex + r.postCodAugmentationCapex)),
+    totalReplacementCapex: sum(rows.map(r => r.batteryReplacementCapex + r.chargerReplacementCapex + r.augmentationCapex)),
     lifetimeKwhDelivered: totalDeliveredKwh,
     servedDemandPercentage: totalDemandedKwh > 0 ? totalDeliveredKwh / totalDemandedKwh : 1,
     lostDemandKwh: sum(rows.map(r => r.lostEnergyKwh)),
     lostRevenue: sum(rows.map(r => r.lostEnergyKwh * inputs.netSellingPriceExVat)),
-    capexPerPlug: yearByYear.derived.installedOutputs > 0 ? grossTotalCapex / yearByYear.derived.installedOutputs : 0,
-    capexPerAnnualKwhDelivered: rows[0]?.deliveredEnergyServedKwh ? grossTotalCapex / rows[0].deliveredEnergyServedKwh : 0,
-    averageUtilisation: totalDeliveredKwh / Math.max(1, yearByYear.derived.installedChargerPowerKw * 8760 * rows.length),
-    totalCostToServeDemand: operatorFundedTotalCapex + totalOpex,
-    leaseTerm,
-    securedLeaseHorizon,
-    securedLeaseCumulativeCashFlow,
-    securedLeaseNpv,
-    securedLeaseIrr,
-    postLeaseCashFlow,
-    leaseCoversHorizon: leaseTerm >= rows.length,
-    batteryDeploymentMode: yearByYear.batteryDeploymentMode,
-    reliabilityAvailabilityFactor: yearByYear.reliabilityAvailabilityFactor,
-    rechargeWindowHours: yearByYear.rechargeWindowHours
+    capexPerPlug: yearByYear.derived.installedOutputs > 0 ? totalCapex / yearByYear.derived.installedOutputs : 0,
+    capexPerAnnualKwhDelivered: rows[0]?.deliveredEnergyServedKwh ? totalCapex / rows[0].deliveredEnergyServedKwh : 0,
+    averageUtilisation: totalDeliveredKwh / Math.max(1, yearByYear.derived.installedChargerPowerKw * 8760 * horizon),
+    totalCostToServeDemand: totalCapex + totalOpex - inputs.grantSupport
   };
 }

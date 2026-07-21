@@ -1,51 +1,99 @@
-# EVHub V21.6 Release Notes
+# V21.6 release notes — Prediction Enhanced
 
-**Release date:** 19 July 2026  
-**Build:** `EVHUB-V21.6-20260719-R1`
+## Release basis
 
-## Purpose
+V21.6 was developed from the user-supplied **V21.5 Baseline Frozen Release**. The approved interface remains the visual baseline.
 
-V21.6 converts the audited V21.5 codebase into a more defensible investor model without changing the approved central demand assumptions or scenario-ranking policy.
+### UI scope
 
-## Corrected calculations
+No broad UI redesign was made. Existing navigation, cards, tables, filters and Portfolio Financial Performance presentation were retained. The only approved visible addition is in **Portfolio Calibration**:
 
-1. NPV now uses period-zero construction CAPEX and year-end operating cashflows.
-2. IRR returns `null` for all-positive, all-negative and no-root cashflow profiles instead of displaying a plausible but invalid percentage.
-3. Payback is calculated to a fraction of a year.
-4. Grants are capped at gross initial CAPEX and cannot make net investment negative.
-5. Gross initial CAPEX, grant applied, unapplied grant and operator-funded CAPEX are retained separately.
-6. Full-project and lease-secured returns are shown separately.
-7. Battery dispatchable energy consistently applies SOH, reserve and dispatch fraction.
-8. Reliability/downtime assumptions now affect delivered energy.
-9. Recharge feasibility uses configured overnight start/end times.
-10. Actual installed configurations initialise their battery cohorts at COD, preventing duplicate staged purchases.
-11. Battery annual service is reconciled to the technical-engine cost source.
-12. ESB application fees are included in model-calculated initial CAPEX.
+- compact maturity/repeatability labels;
+- evidence and explanation in the existing site detail window.
 
-## Added investor outputs
+## Forecasting improvements
 
-- P25/P50/P75 next-12-month operating-site kWh.
-- P25/P50/P75 next-12-month revenue.
-- P25/P50/P75 next-12-month operating cashflow.
-- Gross and operator-funded lifecycle CAPEX.
-- Gross/net ROI, valid IRR, fractional payback and secured-lease metrics.
-- Warnings for 0% discounting, capped grants, infeasible configurations and lease exposure.
-- Forecast snapshot ledger with model/data/assumption/configuration provenance.
+### Explainable ensemble
 
-## UI and workflow
+The Next 12m engine now combines transparent candidate forecasts:
 
-- One navigation system replaces the duplicate tab and workflow-stepper pattern.
-- Investor and Analyst views group outputs by audience.
-- Readiness indicators are based on resolved data and feasibility conditions.
-- Assumption provenance pills are shown beside relevant inputs.
+- annual actual basis;
+- recent 30-day run-rate;
+- recent 90-day run-rate;
+- seasonal-naive persistence;
+- controlled trend;
+- empirical maturity-ramp trajectory.
 
-## Compatibility
+The final weights are selected from historical performance for the closest available horizon, age and category evidence. Bias correction is shrunk toward zero and capped to avoid unstable over-adjustment.
 
-- Existing point-estimate fields remain available where practical.
-- Saved-state and tab alias handling are retained.
-- The approved central demand forecast and feasibility-first/ROI ranking order are not retuned.
-- The existing local-first calibration upload and fallback API behaviour remain in place.
+### Rolling-origin, no-lookahead backtesting
 
-## Validation
+- Historical forecasts are recreated at multiple prior dates.
+- Each recreation uses only data available at that date.
+- Model selection and confidence evaluation are performed leave-one-site-out.
+- Three-, six- and twelve-month performance is retained separately.
 
-The production suite contains eight stages, including 400 deterministic randomized financial/technical invariant scenarios. Full results are in `V21.6_PRODUCTION_VALIDATION.md`.
+### Empirical uncertainty
+
+- Forecast bands use observed historical errors when sufficient independent evidence exists.
+- Conservative age-based uncertainty floors remain in place.
+- Ranges can be asymmetric where historical under- and overforecast errors are asymmetric.
+- Limited evidence is explicitly preserved as limited evidence rather than presented as false precision.
+
+## Maturity and repeatability
+
+### New classification framework
+
+- Early evidence
+- Ramping
+- Stabilising
+- Repeatable / mature
+- Late-ramping
+- Declining / disrupted
+- Capacity-constrained
+
+Classification incorporates:
+
+- operating history and complete months;
+- data coverage;
+- seasonally adjusted recent-block stability;
+- robust monthly volatility;
+- repeated stability checks across assessment dates;
+- possible disruption or charger-reporting changes;
+- installed technical capacity.
+
+### Mature run-rate and curve
+
+- P25, P50 and P75 current-condition mature run-rates are estimated.
+- The empirical maturity curve converges naturally.
+- The previous artificial month-24 jump to 100% has been removed.
+- Commercial demand potential and technical delivery capacity are calculated separately.
+
+## Data-quality improvements
+
+Daily histories now retain:
+
+- reporting charger count;
+- active charger count.
+
+These support detection of:
+
+- missing source-date coverage;
+- prolonged zero-delivery periods;
+- material session-energy anomalies;
+- persistent charger-count increases or decreases.
+
+Possible disruptions reduce confidence and are exposed in the Portfolio Calibration evidence rather than silently becoming a demand trend.
+
+## Model governance
+
+The application can preserve the model version, assumptions and first-available forecast baseline for future performance review. It does not claim a baseline captured after approval was the original board-approved investment case.
+
+## Unchanged
+
+- V21.5 visual design and information density.
+- Portfolio Financial Performance cards and columns.
+- Funding, CAPEX, OPEX and technical-engine presentation.
+- Browser-local dashboard ZIP/XLSX upload.
+- Phased 1% traffic-growth treatment, applied once.
+- Existing detailed forecast graph and audit controls.

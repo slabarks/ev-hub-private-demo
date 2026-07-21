@@ -39,7 +39,7 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         ])
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["schemaVersion"], "v21-live-history-v7")
-        self.assertEqual(payload["buildId"], "EVHUB-V21.6-20260719-R1")
+        self.assertEqual(payload["buildId"], "EVHUB-V21.6-20260721-R1")
         self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-21.6")
         self.assertTrue(payload["monthlyHistorySupported"])
         self.assertTrue(payload["dailyHistorySupported"])
@@ -59,6 +59,8 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         self.assertEqual(len(daily_history), 400)
         self.assertEqual(daily_history[-1]["date"], latest.isoformat())
         self.assertGreater(daily_history[-1]["rolling30Kwh"], 0)
+        self.assertEqual(daily_history[-1]["reportingChargerCount"], 1)
+        self.assertEqual(daily_history[-1]["activeChargerCount"], 1)
         history = mature["actual"]["monthlyHistory"]
         self.assertGreaterEqual(len(history), 13)
         self.assertEqual([row["monthIndex"] for row in history], list(range(1, len(history) + 1)))

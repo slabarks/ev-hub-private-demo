@@ -43,14 +43,12 @@ DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESS
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
 APP_VERSION = "V21.6"
-APP_BUILD_ID = "EVHUB-V21.6-20260719-R1"
+APP_BUILD_ID = "EVHUB-V21.6-20260721-R1"
 LIVE_UPLOAD_SCHEMA_VERSION = "v21-live-history-v7"
 LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.6"
 AADT_ENGINE_VERSION = "V21.6 AADT audited resolver + browser-local live-history upload"
 DEPLOYMENT_REQUIRED_FILES = (
-    "index.html", "js/app.js", "js/liveHistoryLocalParser.js",
-    "js/engines/maturityEngine.js", "js/engines/financialEngine.js",
-    "js/engines/technicalEngine.js", "js/engines/forecastSnapshotEngine.js",
+    "index.html", "js/app.js", "js/liveHistoryLocalParser.js", "js/engines/maturityEngine.js",
     "assets/styles.css", "assets/vendor/jszip.min.js", "DEPLOYMENT_MANIFEST.json"
 )
 SERVER_FILE_FINGERPRINT = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
@@ -88,7 +86,7 @@ def _deployment_integrity() -> dict:
     if index_path.exists():
         try:
             index_text = index_path.read_text(encoding="utf-8")
-            if "21-6-audit-20260719-r1" not in index_text:
+            if "21-6-prediction-engine-20260721-r1" not in index_text:
                 problems.append("index.html cache-buster is not the V21.6 deployment build")
         except Exception as exc:
             problems.append(f"index.html could not be verified: {exc}")
@@ -4106,6 +4104,8 @@ def _build_daily_live_history(daily: dict, first_active: dt.date | None, latest_
             "netRevenue": round(net, 2),
             "rolling30Kwh": round(rolling_total, 3),
             "sourcePresent": source_present,
+            "reportingChargerCount": len((values or {}).get("chargers", set())),
+            "activeChargerCount": len((values or {}).get("activeChargers", set())),
         })
         cursor += dt.timedelta(days=1)
     return rows
@@ -4226,10 +4226,17 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
             site = site_days.setdefault(site_key, {"siteName": site_name, "siteKey": site_key, "daily": {}, "chargerNames": set(), "sourceFiles": set()})
             site["chargerNames"].add(str(raw_name))
             site["sourceFiles"].add(filename)
-            day = site["daily"].setdefault(date, {"kwh": 0.0, "net": 0.0, "sessions": 0.0})
-            day["kwh"] += _live_number(row[kwh_idx] if kwh_idx is not None and kwh_idx < len(row) else 0)
-            day["net"] += _live_number(row[net_idx] if net_idx is not None and net_idx < len(row) else 0)
-            day["sessions"] += _live_number(row[sessions_idx] if sessions_idx is not None and sessions_idx < len(row) else 0)
+            day = site["daily"].setdefault(date, {"kwh": 0.0, "net": 0.0, "sessions": 0.0, "chargers": set(), "activeChargers": set()})
+            charger_name = str(raw_name)
+            row_kwh = _live_number(row[kwh_idx] if kwh_idx is not None and kwh_idx < len(row) else 0)
+            row_net = _live_number(row[net_idx] if net_idx is not None and net_idx < len(row) else 0)
+            row_sessions = _live_number(row[sessions_idx] if sessions_idx is not None and sessions_idx < len(row) else 0)
+            day["chargers"].add(charger_name)
+            if row_kwh >= 1.0 or row_sessions >= 1.0:
+                day["activeChargers"].add(charger_name)
+            day["kwh"] += row_kwh
+            day["net"] += row_net
+            day["sessions"] += row_sessions
 
     parsed_at = time.perf_counter()
     if not parsed_sources:

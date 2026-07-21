@@ -1,11 +1,11 @@
 import { state, setInput, setConfig, setSiteContext, resetState } from "./state.js";
-import { MIC_VALUES, DEFAULT_INPUTS, DEFAULT_SELECTED_CONFIG, ASSUMPTION_DICTIONARY, ASSUMPTION_METADATA, CONFIG_ASSUMPTION_METADATA } from "./data/defaultAssumptions.js";
+import { MIC_VALUES, DEFAULT_INPUTS, DEFAULT_SELECTED_CONFIG, ASSUMPTION_DICTIONARY } from "./data/defaultAssumptions.js";
 import { PLATFORM_LIBRARY, cabinetOptions, standaloneChargerOptions, effectiveCabinetMaxDualDisp, kempowerTripleCabinetCount } from "./data/platformLibrary.js";
 import { batteryOptionsFor } from "./data/batteryLibrary.js";
 import { calculateDemand } from "./engines/demandEngine.js";
 import { calculateYearByYear, summariseFinancials } from "./engines/financialEngine.js";
 import { compareExcelScenarios } from "./engines/optimizerEngine.js";
-import { buildMaturityModel, dailyHistoryForSite, forecastSiteForward12M, forecastSiteMaturity } from "./engines/maturityEngine.js";
+import { buildMaturityModel, classifySiteRepeatability, dailyHistoryForSite, forecastSiteForward12M, forecastSiteMaturity } from "./engines/maturityEngine.js";
 import { searchLocation, searchCoordinates, filterChargers, maxConnectorPower, totalConnectors, categoryForPower } from "./providers/addressProviders.js";
 import { MOCK_LOCATION } from "./providers/mockProviders.js";
 import { lineChart, stackedBarChart, financeComboChart } from "./ui/charts.js";
@@ -15,7 +15,6 @@ import { PORTFOLIO_CALIBRATION_SITES } from "./data/operatingHubCalibrationLibra
 import { actualCapexForSite, capexStatusForSite, capexNoteForSite } from "./data/capexCalibrationLibrary.js";
 import { zeviFundingForSite, zeviFundingSuggestionsForSite, zeviFundingShortLabel } from "./data/zeviFundingLibrary.js";
 import { parsePortfolioCalibrationFilesLocally } from "./liveHistoryLocalParser.js";
-import { saveForecastSnapshot, savePortfolioForecastSnapshots, forecastSnapshotCount, exportForecastSnapshotLedger, clearForecastSnapshots } from "./engines/forecastSnapshotEngine.js";
 
 const VALID_TABS = ["site", "demand", "setup", "investment", "annuals", "scenario", "portfolio", "portfolioFinancials", "advanced", "report"];
 const TAB_ALIASES = { simulation: "setup", yearbyyear: "annuals", export: "report" };
@@ -27,11 +26,6 @@ function tabFromHash() {
 }
 
 let activeTab = tabFromHash();
-const INVESTOR_TABS = new Set(["site", "demand", "setup", "investment", "portfolioFinancials", "report"]);
-let navigationMode = (() => {
-  try { return localStorage.getItem("evHub.navigationMode.v21_6") === "analyst" ? "analyst" : "investor"; } catch (_) { return "investor"; }
-})();
-if (!INVESTOR_TABS.has(activeTab)) navigationMode = "analyst";
 let map = null;
 let mapLoaded = false;
 let siteMarker = null;
@@ -257,11 +251,9 @@ function applyPortfolioSiteModelConfig(site) {
   if (actualCapex > 0) {
     state.config.actualInitialCapexOverride = actualCapex;
     state.config.capexSourceLabel = "Actual project CAPEX loaded from Portfolio Calibration";
-    state.config.batteryDeploymentMode = state.config.batterySize && state.config.batterySize !== "No battery" ? "Installed day one" : "Staged as required";
   } else {
     delete state.config.actualInitialCapexOverride;
     state.config.capexSourceLabel = "Calibrated/model CAPEX estimate — actual project CAPEX not provided";
-    if (!state.config.batteryDeploymentMode) state.config.batteryDeploymentMode = "Staged as required";
   }
   autoApplyZeviFundingForContext(grantFundingContextFromSite(site), { force: true });
   return true;
@@ -278,32 +270,22 @@ function dispenserLimitHelp(config = state.config) {
   const countNote = String(config.platform || "") === "Kempower Distributed" && String(config.cabinetType || "") === "Kempower Triple Cabinet" ? ` (${kempowerTripleCabinetCount(config)} triple cabinet${kempowerTripleCabinetCount(config) === 1 ? "" : "s"})` : "";
   return `${config.cabinetType}${countNote} supports up to ${max} dual dispenser${max === 1 ? "" : "s"} / satellite${max === 1 ? "" : "s"}. Values above this are automatically reduced to the cabinet limit.`;
 }
-function assumptionTagHtml(key, isConfig = false) {
-  const meta = (isConfig ? CONFIG_ASSUMPTION_METADATA : ASSUMPTION_METADATA)[key];
-  if (!meta) return "";
-  const tone = meta.status === "reference" ? "reference" : meta.status === "diagnostic" ? "diagnostic" : meta.status === "derived" ? "derived" : "active";
-  return `<span class="assumption-tag ${tone}" title="${h(meta.source || "")}">${h(meta.basisType || "Assumption")}</span>`;
-}
-function fieldLabel(key, label, isConfig = false) {
-  return `${h(label)}${assumptionTagHtml(key, isConfig)}`;
-}
-
 function inputField(key, label, opts = {}) {
   const value = state.inputs[key];
   const type = opts.type || "number";
   const unit = opts.unit ? `<span class="input-unit">${h(opts.unit)}</span>` : "";
-  return `<div class="field"><label for="${key}">${fieldLabel(key, label)}</label><div class="unit-input-wrap"><input id="${key}" data-input="${key}" type="${type}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
+  return `<div class="field"><label for="${key}">${label}</label><div class="unit-input-wrap"><input id="${key}" data-input="${key}" type="${type}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
 }
 function selectField(key, label, options, opts = {}) {
-  return `<div class="field"><label for="${key}">${fieldLabel(key, label)}</label><select id="${key}" data-input="${key}">${options.map(o => `<option value="${h(o)}" ${String(state.inputs[key]) === String(o) ? "selected" : ""}>${h(o)}</option>`).join("")}</select><small>${opts.help || ""}</small></div>`;
+  return `<div class="field"><label for="${key}">${label}</label><select id="${key}" data-input="${key}">${options.map(o => `<option value="${h(o)}" ${String(state.inputs[key]) === String(o) ? "selected" : ""}>${h(o)}</option>`).join("")}</select><small>${opts.help || ""}</small></div>`;
 }
 function selectFieldConfig(key, label, options, opts = {}) {
-  return `<div class="field"><label for="${key}">${fieldLabel(key, label, true)}</label><select id="${key}" data-config="${key}">${options.map(o => `<option value="${h(o)}" ${String(state.config[key]) === String(o) ? "selected" : ""}>${h(o)}</option>`).join("")}</select><small>${opts.help || ""}</small></div>`;
+  return `<div class="field"><label for="${key}">${label}</label><select id="${key}" data-config="${key}">${options.map(o => `<option value="${h(o)}" ${String(state.config[key]) === String(o) ? "selected" : ""}>${h(o)}</option>`).join("")}</select><small>${opts.help || ""}</small></div>`;
 }
 function inputFieldConfig(key, label, opts = {}) {
   const value = state.config[key];
   const unit = opts.unit ? `<span class="input-unit">${h(opts.unit)}</span>` : "";
-  return `<div class="field"><label for="${key}">${fieldLabel(key, label, true)}</label><div class="unit-input-wrap"><input id="${key}" data-config="${key}" type="${opts.type || "number"}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
+  return `<div class="field"><label for="${key}">${label}</label><div class="unit-input-wrap"><input id="${key}" data-config="${key}" type="${opts.type || "number"}" step="${opts.step ?? "any"}" value="${h(value)}" ${opts.min != null ? `min="${opts.min}"` : ""} ${opts.max != null ? `max="${opts.max}"` : ""}/>${unit}</div><small>${opts.help || ""}</small></div>`;
 }
 function kpi(label, value, sub = "") {
   return `<div class="kpi"><div class="label">${h(label)}</div><div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
@@ -319,7 +301,7 @@ function aadtHelpText() {
 }
 
 const APP_RELEASE_VERSION = "V21.6";
-const APP_BUILD_ID = "EVHUB-V21.6-20260719-R1";
+const APP_BUILD_ID = "EVHUB-V21.6-20260721-R1";
 const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.6";
 const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21_3";
 const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7";
@@ -1248,41 +1230,18 @@ function renderOrderedSections(tab, sections) {
   const map = Object.fromEntries(sections.map(s => [s.id, s]));
   return getSectionOrder(tab).map(id => map[id]).filter(Boolean).map(s => orderableSection(tab, s.id, s.title, s.html, s.cls || "")).join("");
 }
-function applyNavigationMode() {
-  document.body.dataset.navMode = navigationMode;
-  document.querySelectorAll("[data-nav-mode]").forEach(btn => btn.classList.toggle("active", btn.dataset.navMode === navigationMode));
-  try { localStorage.setItem("evHub.navigationMode.v21_6", navigationMode); } catch (_) {}
-}
-
-function setReadinessState(key, status, label, title) {
-  const item = document.querySelector(`[data-readiness="${key}"]`);
-  if (!item) return;
-  item.classList.remove("good", "warn", "bad");
-  item.classList.add(status);
-  item.textContent = label;
-  item.title = title || label;
-}
-
-function updateWorkflowStepper(r = null) {
-  applyNavigationMode();
+function updateWorkflowStepper() {
+  const idx = VALID_TABS.indexOf(activeTab);
+  const pct = VALID_TABS.length <= 1 ? 0 : (idx / (VALID_TABS.length - 1)) * 100;
+  const stepper = document.getElementById("workflowStepper");
+  if (stepper) stepper.style.setProperty("--progress", `${Math.max(0, Math.min(100, pct))}%`);
   const statusText = document.getElementById("workflowStatusText");
-  if (statusText) statusText.textContent = `${navigationMode === "analyst" ? "Analyst" : "Investor"} view · ${TAB_LABELS[activeTab]}`;
-  if (!r) return;
-  const siteResolved = Boolean(state.siteContext?.site && Number.isFinite(Number(state.siteContext.site.lat)) && Number.isFinite(Number(state.siteContext.site.lon)));
-  const hasAadt = Number(state.inputs.rawCorridorTrafficAadt || 0) > 0;
-  const aadtConfidenceText = String(state.siteContext?.traffic?.confidence || state.siteContext?.traffic?.location_confidence || "").toLowerCase();
-  const aadtNeedsReview = /review|low|coarse|proxy/.test(aadtConfidenceText);
-  const aadtReady = hasAadt && !aadtNeedsReview;
-  const technicalReady = Boolean(r.yearByYear?.technical?.feasible);
-  const financeHasRate = Number(state.inputs.discountRate || 0) > 0;
-  const leaseCovers = Number(state.inputs.leaseTerm || 0) >= Number(state.inputs.investmentHorizon || 0);
-  const financeReady = financeHasRate && !r.financialSummary?.grantCapped;
-  const reportReady = siteResolved && aadtReady && technicalReady && financeReady && leaseCovers;
-  setReadinessState("site", siteResolved ? "good" : "warn", siteResolved ? "Site resolved" : "Site needs review", siteResolved ? "Coordinates are available." : "Resolve the site location before investor use.");
-  setReadinessState("traffic", aadtReady ? "good" : hasAadt ? "warn" : "bad", aadtReady ? "AADT ready" : hasAadt ? "AADT review" : "AADT missing", aadtReady ? "A traffic input with acceptable confidence is available." : hasAadt ? `Traffic input exists but confidence requires review${aadtConfidenceText ? ` (${aadtConfidenceText})` : ""}.` : "No valid AADT is available.");
-  setReadinessState("technical", technicalReady ? "good" : "bad", technicalReady ? "Technical pass" : "Technical action", technicalReady ? "Configuration passes technical checks." : (r.yearByYear?.technical?.failures || []).join(", "));
-  setReadinessState("finance", financeReady && leaseCovers ? "good" : "warn", financeReady && leaseCovers ? "Finance ready" : "Finance review", !financeHasRate ? "Set a non-zero investor discount rate." : !leaseCovers ? "Investment horizon extends beyond the secured lease." : r.financialSummary?.grantCapped ? "Grant exceeds eligible initial CAPEX." : "Financial inputs require review.");
-  setReadinessState("report", reportReady ? "good" : "warn", reportReady ? "Report ready" : "Report not ready", reportReady ? "Core investor checks pass." : "Resolve warning and failure items before exporting an investor recommendation.");
+  if (statusText) statusText.textContent = `Step ${idx + 1} of ${VALID_TABS.length}: ${TAB_LABELS[activeTab]}`;
+  document.querySelectorAll("#workflowStepper button[data-step-tab]").forEach(btn => {
+    const stepIdx = VALID_TABS.indexOf(btn.dataset.stepTab);
+    btn.classList.toggle("active", btn.dataset.stepTab === activeTab);
+    btn.classList.toggle("complete", stepIdx >= 0 && stepIdx < idx);
+  });
 }
 
 function validationChecklist(r) {
@@ -2058,16 +2017,15 @@ function configValidatorItems(r) {
   const chargerPowerOk = yd.installedChargerPowerKw >= requiredPeakKw;
   const plugOk = yd.installedOutputs >= demand.maxConcurrentSessions;
   const batteryPowerOk = gridOnly || yd.batteryPowerKw >= maxResidualPower;
-  const usableBatteryEnergy = Number(yd.batteryDispatchableEnergyKwh ?? yd.batteryEnergyKwh ?? 0);
-  const batteryEnergyOk = gridOnly || usableBatteryEnergy >= maxResidualEnergy;
-  const rechargeRequired = Math.min(usableBatteryEnergy || maxResidualEnergy, maxResidualEnergy);
-  const rechargeAvailable = c.selectedMicKva * state.inputs.powerFactor * Number(r.yearByYear.rechargeWindowHours || state.inputs.overnightRechargeWindowDuration || 0);
+  const batteryEnergyOk = gridOnly || yd.batteryEnergyKwh >= maxResidualEnergy;
+  const rechargeRequired = Math.min(yd.batteryEnergyKwh || maxResidualEnergy, maxResidualEnergy);
+  const rechargeAvailable = c.selectedMicKva * state.inputs.powerFactor * state.inputs.overnightRechargeWindowDuration;
   const rechargeOk = gridOnly || rechargeAvailable >= rechargeRequired;
   const nextMic = nextApprovedMic(demand.maxRequiredMicNoBatteryKva);
   const micPowerDeficit = Math.max(0, requiredPeakKw - c.selectedMicKva * state.inputs.powerFactor);
   const chargerOutputDeficit = Math.max(0, requiredPeakKw - yd.installedChargerPowerKw);
   const batteryPowerDeficit = Math.max(0, maxResidualPower - yd.batteryPowerKw);
-  const batteryEnergyDeficit = Math.max(0, maxResidualEnergy - usableBatteryEnergy);
+  const batteryEnergyDeficit = Math.max(0, maxResidualEnergy - yd.batteryEnergyKwh);
   const dualNeeded = Math.max(1, Math.ceil(plugDeficit / 2));
   const unit = dualUnitLabel();
   return [
@@ -2076,7 +2034,7 @@ function configValidatorItems(r) {
     { title: "Charger output capacity", value: kw(yd.installedChargerPowerKw,0), sub: "installed charger hardware output", ok: chargerPowerOk, guidance: chargerPowerOk ? "Installed charger output is sufficient for forecast peak demand." : `Required charging output is ${kw(requiredPeakKw,0)}. Add ${kw(chargerOutputDeficit,0)} charger output or select a higher-power charger model.` },
     { title: "Installed plugs", value: number(yd.installedOutputs,0), sub: "hardware outputs", ok: plugOk, guidance: plugOk ? "Plug capacity is sufficient." : `Required plugs: ${requiredPlugs}. Installed: ${number(yd.installedOutputs,0)}. Add ${dualNeeded} ${unit}${dualNeeded === 1 ? "" : "s"} to reach ${requiredPlugs} plugs.` },
     { title: "Battery inverter power", value: kw(yd.batteryPowerKw,0), sub: gridOnly ? "not used in grid-only strategy" : "selected battery", ok: gridOnly || batteryPowerOk, neutral: gridOnly, guidance: gridOnly ? "Not required for grid-only." : batteryPowerOk ? "Battery inverter power is sufficient." : `Residual peak power is ${kw(maxResidualPower,0)}. Increase battery inverter by ${kw(batteryPowerDeficit,0)} or increase MIC.` },
-    { title: "Battery usable energy", value: kwh(usableBatteryEnergy,0), sub: gridOnly ? "not used in grid-only strategy" : `after reserve and dispatch limits`, ok: gridOnly || batteryEnergyOk, neutral: gridOnly, guidance: gridOnly ? "Not required for grid-only." : batteryEnergyOk ? "Battery energy coverage is sufficient." : `Required usable energy is ${kwh(maxResidualEnergy,0)}. Add at least ${kwh(batteryEnergyDeficit,0)} usable battery capacity.` },
+    { title: "Battery energy capacity", value: kwh(yd.batteryEnergyKwh,0), sub: gridOnly ? "not used in grid-only strategy" : "selected battery", ok: gridOnly || batteryEnergyOk, neutral: gridOnly, guidance: gridOnly ? "Not required for grid-only." : batteryEnergyOk ? "Battery energy coverage is sufficient." : `Required usable energy is ${kwh(maxResidualEnergy,0)}. Add at least ${kwh(batteryEnergyDeficit,0)} usable battery capacity.` },
     { title: "Overnight recharge", value: rechargeOk ? "OK" : "LIMITED", sub: "recharge check", ok: rechargeOk, neutral: gridOnly, guidance: gridOnly ? "No battery recharge needed." : rechargeOk ? "Recharge margin is sufficient." : `Recharge needs ${kwh(rechargeRequired,0)} but available overnight is ${kwh(rechargeAvailable,0)}. Increase MIC or reduce residual duty.` },
     { title: "Substation requirement", value: yd.substationRequired ? "YES" : "NO", sub: yd.substationRequired ? "higher-capacity connection" : "low-voltage connection", ok: true, guidance: yd.substationRequired ? "Substation capex is included in the investment model." : "No substation upgrade needed." }
   ];
@@ -2148,7 +2106,6 @@ function renderScenarioSetup(r) {
             ${selectFieldConfig("batteryStrategy", "Power strategy", ["Grid only", "Grid + battery"])}
             ${selectFieldConfig("selectedMicKva", "Selected grid MIC (kVA)", MIC_VALUES.map(String), { help: "Approved model values only: 50, 100, 200, 400, 800, 1000, 1500 kVA." })}
             ${selectFieldConfig("batterySize", "Battery size", o.batteries)}
-            ${selectFieldConfig("batteryDeploymentMode", "Battery deployment", ["Staged as required", "Installed day one"], { help: "Use Installed day one for built/contracted BESS sites. Staged as required deploys the selected envelope only when forecast duty requires it." })}
             ${inputField("batteryReplacementThresholdSoh", "Battery SOH replacement threshold", { step: 0.01, unit: "% SOH", help: "Battery replacement is based on state of health, not state of charge." })}
           </div>
         </section>
@@ -2187,17 +2144,14 @@ function renderInvestmentDashboard(r) {
   const rows = r.yearByYear.rows.slice(0, state.inputs.investmentHorizon);
   const tech = r.yearByYear.technical || {};
   const invalidInvestmentNotice = tech.feasible ? "" : `<div class="notice bad"><strong>Technical configuration requires action.</strong> Investment outputs are shown for modelling context only and should not be treated as a recommendable case until the Product Configuration validator passes. Issue: ${h((tech.failures || ["Technical feasibility"]).join(", "))}</div>`;
-  const grantWarning = f.grantCapped ? `<div class="notice warn"><strong>Grant capped at eligible initial CAPEX.</strong> ${h(currency(f.grantRequested,0))} was entered, but only ${h(currency(f.grantApplied,0))} is applied. The remaining ${h(currency(f.grantUnapplied,0))} is excluded from returns.</div>` : "";
-  const discountWarning = f.npvIsUndiscounted ? `<div class="notice warn"><strong>Discount rate is 0%.</strong> NPV is therefore undiscounted cumulative value. Set an investor hurdle rate in Advanced Settings before relying on NPV.</div>` : "";
   const sections = [
     { id: "horizon", title: "Investment horizon", html: `<div class="panel investment-horizon-panel"><h3>Model timeline</h3><p>Set the first operating year and the horizon used for ROI, cash flow, replacement events and exports.</p><div class="input-grid"><div class="field"><label>Model start year</label><input data-input="modelStartYear" type="number" min="2020" max="2100" step="1" value="${state.inputs.modelStartYear ?? state.inputs.codYear}" /><small>Defaults to the current calendar year. This replaces the older COD year wording.</small></div><div class="field"><label>Investment horizon: ${state.inputs.investmentHorizon} years</label><input data-input="investmentHorizon" type="range" min="1" max="20" step="1" value="${state.inputs.investmentHorizon}" /><small>Controls all investment totals and charts.</small></div></div></div>` },
     { id: "leaseRisk", title: "Lease term risk", html: leaseRiskCard(f) },
     { id: "investmentFunding", title: "Investment & funding", html: kpiWindow("Investment & Funding", "tone-blue", [
       kpi("Initial investment", currency(f.grossInitialInvestmentBeforeGrant,0), "before grant"),
-      kpi("Grant applied", currency(f.grantApplied,0), f.grantCapped ? "capped at eligible CAPEX" : "one-off support"),
-      kpi("Net initial investment", currency(f.initialInvestment,0), "operator-funded at period 0"),
-      kpi("Gross lifecycle capex", currency(f.grossTotalCapex,0), `Years 1–${f.horizon}`),
-      kpi("Operator-funded lifecycle capex", currency(f.operatorFundedTotalCapex,0), "after grant"),
+      kpi("Grant support", currency(f.grantSupport,0), "one-off support"),
+      kpi("Net initial investment", currency(f.initialInvestment,0), "after grant"),
+      kpi("Total capex", currency(f.totalCapex,0), `Years 1–${f.horizon}`),
       kpi("Replacement / augmentation capex", currency(f.totalReplacementCapex,0))
     ]) },
     { id: "trading", title: "Year 1 trading performance", html: kpiWindow("Year 1 Trading Performance", "tone-green", [
@@ -2209,41 +2163,29 @@ function renderInvestmentDashboard(r) {
     ]) },
     { id: "returns", title: "Return metrics", html: kpiWindow("Return Metrics", "tone-amber", [
       kpi("Cumulative cash flow", currency(f.cumulativeCashFlow,0), `over ${f.horizon} years`),
-      kpi("ROI on net initial investment", safePct(f.roi,1), "grant-adjusted"),
-      kpi("ROI on gross initial CAPEX", safePct(f.roiOnGrossInitialCapex,1), "before grant"),
+      kpi("ROI", safePct(f.roi,1), "over selected horizon"),
       kpi("Break-even year", f.breakEvenYear || "No break-even", "within horizon"),
-      kpi("Payback", Number.isFinite(f.paybackYears) ? `${number(f.paybackYears,1)} years` : "No payback", "fractional-year calculation"),
-      kpi("NPV", f.npv == null ? "n/a" : currency(f.npv,0), f.npvIsUndiscounted ? "0% discount rate — undiscounted" : `discounted at ${pct(f.discountRate,1)}`),
-      kpi("IRR", Number.isFinite(f.irr) ? pct(f.irr,1) : "No valid IRR", "requires positive and negative cash flows")
-    ]) },
-    { id: "securedLeaseReturns", title: "Secured lease returns", html: kpiWindow("Returns Within Secured Lease", "tone-green", [
-      kpi("Secured lease horizon", f.securedLeaseHorizon ? `${f.securedLeaseHorizon} years` : "Not set"),
-      kpi("Lease-period cumulative cash flow", f.securedLeaseCumulativeCashFlow == null ? "n/a" : currency(f.securedLeaseCumulativeCashFlow,0)),
-      kpi("Lease-period NPV", f.securedLeaseNpv == null ? "n/a" : currency(f.securedLeaseNpv,0)),
-      kpi("Lease-period IRR", Number.isFinite(f.securedLeaseIrr) ? pct(f.securedLeaseIrr,1) : "No valid IRR"),
-      kpi("Post-lease cash flow", currency(f.postLeaseCashFlow,0), f.leaseCoversHorizon ? "none outside secured term" : "not contractually secured")
+      kpi("Simple payback", f.simplePayback ? `${f.simplePayback} years` : "No payback"),
+      kpi("NPV", currency(f.npv,0), "supporting metric"),
+      kpi("IRR", Number.isFinite(f.irr) ? pct(f.irr,1) : "n/a", "supporting metric")
     ]) },
     { id: "lifecycle", title: "Asset lifecycle & deployment", html: kpiWindow("Asset Lifecycle & Deployment", "tone-purple", [
       kpi("First battery replacement", f.firstBatteryReplacementYear || "No replacement"),
       kpi("Battery replacements", number(f.batteryReplacementCount,0)),
       kpi("Charger replacements", number(f.chargerReplacementCount,0)),
       kpi("Lifetime kWh delivered", kwh(f.lifetimeKwhDelivered,0)),
-      kpi("Total cost to serve demand", currency(f.totalCostToServeDemand,0), "operator-funded CAPEX + OPEX"),
-      kpi("Battery deployment", h(f.batteryDeploymentMode === "installed-day-one" ? "Installed day one" : f.batteryDeploymentMode === "staged-envelope" ? "Staged as required" : "Grid only")),
-      kpi("Reliability availability", pct(f.reliabilityAvailabilityFactor,1), "failure × downtime derating")
+      kpi("Total cost to serve demand", currency(f.totalCostToServeDemand,0))
     ]) },
-    { id: "cashflow", title: "Cash flow chart", html: financeComboChart("cashflowBreakEvenChart", rows, { title: "Cash flow and break-even over the selected horizon", xLabel: "Year", yLabel: "€ cash flow", yPrefix: "€", bars: [{ key: "postInitialAnnualCashFlow", label: "Operating cash flow after later capex", color: "var(--chart-amber)" }], lines: [{ key: "cumulativeCashFlow", label: "Cumulative cash flow", color: "var(--chart-slate)" }] }) },
+    { id: "cashflow", title: "Cash flow chart", html: financeComboChart("cashflowBreakEvenChart", rows, { title: "Cash flow and break-even over the selected horizon", xLabel: "Year", yLabel: "€ cash flow", yPrefix: "€", bars: [{ key: "annualCashFlow", label: "Annual cash flow", color: "var(--chart-amber)" }], lines: [{ key: "cumulativeCashFlow", label: "Cumulative cash flow", color: "var(--chart-slate)" }] }) },
     { id: "capex", title: "Capex deployment years", html: `<div class="panel">
       <h3>Capex deployment years</h3>
-      ${table(["Year", "Gross CAPEX", "Grant", "Operator funded", "Reason"], f.capexEvents.map(e => [e.year, currency(e.amount,0), currency(e.grantApplied || 0,0), currency(e.operatorFundedAmount || 0,0), h(e.reason)]))}
+      ${table(["Year", "Amount", "Reason"], f.capexEvents.map(e => [e.year, currency(e.amount,0), h(e.reason)]))}
     </div>` }
   ];
   return `
     ${sectionTitle("Investment Case", "Review investment return, capex, ROI, break-even and cash generation over the selected horizon.")}
     ${resetControl("investment")}
     ${invalidInvestmentNotice}
-    ${grantWarning}
-    ${discountWarning}
     ${renderOrderedSections("investment", sections)}`;
 }
 
@@ -2270,9 +2212,9 @@ function renderAnnualFinancials(r) {
       ${kpi("Total revenue", currency(f.totalRevenue,0), "over selected horizon")}
       ${kpi("Cumulative cash flow", currency(f.cumulativeCashFlow,0), "at horizon end")}
     </div>` },
-    { id: "performance", title: "Annual performance trend", cls: "annual-chart-section", html: financeComboChart("annualPerformanceTrend", chartRows, { title: "Annual performance trend", xLabel: "Year", yLabel: "€", yPrefix: "€", bars: [{ key: "postInitialAnnualCashFlow", label: "Operating cash flow after later capex", color: "var(--chart-amber)" }], lines: [{ key: "totalRevenue", label: "Revenue", color: "var(--chart-blue)" }, { key: "grossProfit", label: "Gross profit", color: "var(--chart-green)" }, { key: "cumulativeCashFlow", label: "Cumulative cash flow", color: "var(--chart-slate)" }] }) },
+    { id: "performance", title: "Annual performance trend", cls: "annual-chart-section", html: financeComboChart("annualPerformanceTrend", chartRows, { title: "Annual performance trend", xLabel: "Year", yLabel: "€", yPrefix: "€", bars: [{ key: "annualCashFlow", label: "Annual cash flow", color: "var(--chart-amber)" }], lines: [{ key: "totalRevenue", label: "Revenue", color: "var(--chart-blue)" }, { key: "grossProfit", label: "Gross profit", color: "var(--chart-green)" }, { key: "cumulativeCashFlow", label: "Cumulative cash flow", color: "var(--chart-slate)" }] }) },
     { id: "costs", title: "Annual cost breakdown", cls: "annual-chart-section", html: stackedBarChart("annualCostBreakdown", chartRows, "year", [{ key: "electricityCost", label: "Electricity cost", color: "var(--chart-coral)" }, { key: "totalOperatingCosts", label: "Operating costs", color: "var(--chart-purple)" }, { key: "additionalCapex", label: "Replacement / augmentation capex", color: "var(--chart-orange)" }], { title: "Annual cost breakdown", xLabel: "Year", yLabel: "€ cost", yPrefix: "€" }) },
-    { id: "table", title: "Annual table", html: `<div class="panel"><h3>Annual table</h3>${table(["Year", "Sessions served", "Delivered kWh", "Revenue", "Electricity cost", "Gross profit", "Total opex", "Operating cash flow after later capex", "Cumulative cash flow"], rows.map(y => [
+    { id: "table", title: "Annual table", html: `<div class="panel"><h3>Annual table</h3>${table(["Year", "Sessions served", "Delivered kWh", "Revenue", "Electricity cost", "Gross profit", "Total opex", "Annual cash flow", "Cumulative cash flow"], rows.map(y => [
         y.year,
         number(y.sessionsServed,0),
         number(y.deliveredEnergyServedKwh,0),
@@ -2280,7 +2222,7 @@ function renderAnnualFinancials(r) {
         currency(y.electricityCost,0),
         currency(y.grossProfit,0),
         currency(y.totalOperatingCosts,0),
-        currency(y.postInitialAnnualCashFlow,0),
+        currency(y.annualCashFlow,0),
         currency(y.cumulativeCashFlow,0)
       ]))}</div>` },
     { id: "technical", title: "Technical detail", html: `<details open><summary>Technical detail</summary><div style="margin-top:12px">${table(["Year", "Required peak kW", "Selected MIC", "Installed battery units", "Battery SOH", "SOH-adjusted kWh", "Power deficit", "Energy deficit", "Battery replacement", "Charger replacement", "Battery deployment", "Replacement / deployment capex"], rows.map(y => [
@@ -2374,10 +2316,8 @@ function scenarioCard(s, tone = "good", index = 0, total = 0) {
         ${scenarioMetric("Hardware", h(scenarioHardwareSummary(s)))}
         ${scenarioMetric("Charger output", kw(s.derived?.installedChargerPowerKw || 0,0))}
         ${scenarioMetric("ROI", safePct(s.roi,1))}
-        ${scenarioMetric("NPV", s.npv == null ? "n/a" : currency(s.npv,0))}
-        ${scenarioMetric("Lease NPV", s.securedLeaseNpv == null ? "n/a" : currency(s.securedLeaseNpv,0))}
         ${scenarioMetric("Cumulative cash flow", currency(s.cumulativeCashFlow,0))}
-        ${scenarioMetric("Payback", Number.isFinite(s.paybackYears) ? `${number(s.paybackYears,1)} yrs` : "No payback")}
+        ${scenarioMetric("Break-even", s.breakEvenYear || "No break-even")}
       </div>` : `<div class="scenario-fix-layout">
         <div class="scenario-fix-copy"><strong>Failure</strong><span>${h(s.failureReason || s.scenarioStatus || "Technical constraint")}</span></div>
         <div class="scenario-fix-copy"><strong>Suggested fix</strong><span>${h(s.suggestedFix || "Increase MIC, battery support, charger output or installed plugs.")}</span></div>
@@ -2399,7 +2339,7 @@ function renderScenarioRanking(r) {
   return `
     ${sectionTitle("Scenario Ranking", "Compare scenario families, review feasibility first, and then rank feasible options by ROI.")}
     <div class="scenario-rule-note"><span>ⓘ</span><strong>Scenarios are ranked by technical feasibility first, then ROI within each group.</strong></div>
-    ${rec ? `<section class="recommend-card scenario-recommend"><div class="recommend-copy"><span class="eyebrow">Recommended technically feasible configuration</span><h3>${h(friendlyScenarioName(rec))}</h3><p>${h(comp.explanation)}</p></div><div class="recommend-metrics">${kpi("MIC", kva(rec.config.selectedMicKva,0))}${kpi("Battery", h(cleanBatteryLabel(rec.config.batterySize)))}${kpi("Hardware", h(scenarioHardwareSummary(rec)))}${kpi("Charger output", kw(rec.derived?.installedChargerPowerKw || 0,0))}${kpi("ROI", safePct(rec.roi,1))}${kpi("NPV", rec.npv == null ? "n/a" : currency(rec.npv,0))}${kpi("Lease NPV", rec.securedLeaseNpv == null ? "n/a" : currency(rec.securedLeaseNpv,0))}${kpi("Payback", Number.isFinite(rec.paybackYears) ? `${number(rec.paybackYears,1)} years` : "No payback")}${kpi("Status", `<span class='badge good'>Feasible</span>`)}</div></section>` : `<section class="recommend-card no-rec"><div class="recommend-copy"><span class="eyebrow">No feasible configuration in current library</span><h3>No model scenario can be recommended yet</h3><p>The comparison tested auto-sized scenario families, but none passed every technical check. The app will not recommend an infeasible configuration. Review the failed options below and increase MIC, installed plugs, charger output, battery power or battery energy, or reduce demand assumptions.</p></div><div class="recommend-metrics">${kpi("Feasible scenarios", number(comp.technicallyFeasibleCombinations || 0,0))}${kpi("Most common issue", h(comp.commonIssue || "Technical feasibility"))}${kpi("Next action", "Adjust Product Configuration", "then re-run comparison")}</div></section>`}
+    ${rec ? `<section class="recommend-card scenario-recommend"><div class="recommend-copy"><span class="eyebrow">Recommended technically feasible configuration</span><h3>${h(friendlyScenarioName(rec))}</h3><p>${h(comp.explanation)}</p></div><div class="recommend-metrics">${kpi("MIC", kva(rec.config.selectedMicKva,0))}${kpi("Battery", h(cleanBatteryLabel(rec.config.batterySize)))}${kpi("Hardware", h(scenarioHardwareSummary(rec)))}${kpi("Charger output", kw(rec.derived?.installedChargerPowerKw || 0,0))}${kpi("ROI", safePct(rec.roi,1))}${kpi("Cumulative CF", currency(rec.cumulativeCashFlow,0))}${kpi("Break-even", rec.breakEvenYear || "No break-even")}${kpi("Status", `<span class='badge good'>Feasible</span>`)}</div></section>` : `<section class="recommend-card no-rec"><div class="recommend-copy"><span class="eyebrow">No feasible configuration in current library</span><h3>No model scenario can be recommended yet</h3><p>The comparison tested auto-sized scenario families, but none passed every technical check. The app will not recommend an infeasible configuration. Review the failed options below and increase MIC, installed plugs, charger output, battery power or battery energy, or reduce demand assumptions.</p></div><div class="recommend-metrics">${kpi("Feasible scenarios", number(comp.technicallyFeasibleCombinations || 0,0))}${kpi("Most common issue", h(comp.commonIssue || "Technical feasibility"))}${kpi("Next action", "Adjust Product Configuration", "then re-run comparison")}</div></section>`}
     <div class="scenario-summary-strip">
       ${kpi("Feasible scenarios", number(feasible.length,0))}
       ${kpi("Infeasible scenarios", number(infeasible.length,0))}
@@ -2554,47 +2494,71 @@ function portfolioCategoryKey(site) {
   if (/(afc|community|gaa|sports)/.test(n)) return "local_community";
   return "review";
 }
-function portfolioMaturityLabel(tier) {
-  return tier === "mature" ? "Mature" : tier === "near" ? "Near-mature" : tier === "early" ? "Early" : "Review";
-}
-function portfolioMaturityDescription(tier) {
+function portfolioMaturityDescription(value) {
+  if (value && typeof value === "object" && value.key) {
+    return {
+      key: value.key,
+      label: value.label || value.shortLabel || "Review",
+      compact: value.shortLabel || value.label || "Review",
+      title: value.label || "Maturity status",
+      body: value.description || "Maturity classification is based on operating history, stability, volatility, data coverage and technical headroom.",
+      cls: value.cls || "neutral",
+      score: Number.isFinite(Number(value.score)) ? Number(value.score) : null,
+      confidence: value.confidence || "",
+      evidence: Array.isArray(value.evidence) ? value.evidence : [],
+      disruptionSuspected: Boolean(value.disruptionSuspected),
+      capacityConstrained: Boolean(value.capacityConstrained)
+    };
+  }
+  const tier = String(value || "review");
   const map = {
     mature: {
-      label: "Mature",
-      title: "Mature site",
-      body: "This site has at least 12 months of operating history. Annual kWh is based on trailing 365-day actuals and can be used for headline back-testing.",
+      key: "repeatable",
+      label: "Repeatable / mature",
+      compact: "Repeatable",
+      title: "Repeatable / mature site",
+      body: "At least one seasonal year is available and recent seasonally adjusted performance is sufficiently stable for repeatable forecasting.",
       cls: "good"
     },
     near: {
-      label: "Near-mature",
-      title: "Near-mature site",
-      body: "This site has around 10–12 months of operating history. Results are useful for validation, but should not be treated as full-year mature evidence yet.",
+      key: "stabilising",
+      label: "Stabilising",
+      compact: "Stabilising",
+      title: "Stabilising site",
+      body: "The site is approaching a repeatable run-rate, but history or recent stability is not yet sufficient for mature classification.",
       cls: "warn"
     },
     early: {
-      label: "Early",
-      title: "Early site",
-      body: "This site has less than 10 months of operating history. Annual kWh is annualised from recent run-rate and should be treated as directional only.",
+      key: "early_evidence",
+      label: "Early evidence",
+      compact: "Early",
+      title: "Early evidence",
+      body: "Limited operating history means the run-rate is directional and not yet repeatable.",
       cls: "neutral"
     },
     review: {
+      key: "review",
       label: "Review",
+      compact: "Review",
       title: "Review site",
-      body: "This site has incomplete or lower-confidence setup data. It is shown for reference, but should not be used for automatic model conclusions.",
+      body: "This site has incomplete or lower-confidence setup data and should not be used for automatic model conclusions.",
       cls: "neutral"
     }
   };
   return map[tier] || map.review;
 }
-function portfolioMaturityBadge(tier) {
-  const info = portfolioMaturityDescription(tier);
-  return `<button type="button" class="portfolio-maturity-trigger" aria-label="Explain ${h(info.label)} maturity" data-portfolio-maturity-trigger="1" data-maturity="${h(tier || "review")}" data-title="${h(info.title)}" data-label="${h(info.label)}" data-description="${h(info.body)}"><span class="badge ${h(info.cls)}">${h(info.label)}</span></button>`;
+function portfolioMaturityLabel(value) {
+  return portfolioMaturityDescription(value).label;
 }
-function portfolioMaturityBadgeCompact(tier) {
-  const info = portfolioMaturityDescription(tier);
-  const compact = tier === "near" ? "Near" : info.label;
-  return `<button type="button" class="portfolio-maturity-trigger" aria-label="Explain ${h(info.label)} maturity" data-portfolio-maturity-trigger="1" data-maturity="${h(tier || "review")}" data-title="${h(info.title)}" data-label="${h(info.label)}" data-description="${h(info.body)}"><span class="badge ${h(info.cls)}" title="${h(info.label)}">${h(compact)}</span></button>`;
+function portfolioMaturityBadge(value) {
+  const info = portfolioMaturityDescription(value);
+  return `<button type="button" class="portfolio-maturity-trigger" aria-label="Explain ${h(info.label)} maturity" data-portfolio-maturity-trigger="1" data-maturity="${h(info.key || "review")}" data-title="${h(info.title)}" data-label="${h(info.label)}" data-description="${h(info.body)}" data-score="${Number.isFinite(info.score) ? h(String(info.score)) : ""}" data-confidence="${h(info.confidence || "")}" data-evidence="${h((info.evidence || []).join(" | "))}" data-disruption="${info.disruptionSuspected ? "1" : "0"}" data-capacity-constrained="${info.capacityConstrained ? "1" : "0"}"><span class="badge ${h(info.cls)}">${h(info.label)}</span></button>`;
 }
+function portfolioMaturityBadgeCompact(value) {
+  const info = portfolioMaturityDescription(value);
+  return `<button type="button" class="portfolio-maturity-trigger" aria-label="Explain ${h(info.label)} maturity" data-portfolio-maturity-trigger="1" data-maturity="${h(info.key || "review")}" data-title="${h(info.title)}" data-label="${h(info.label)}" data-description="${h(info.body)}" data-score="${Number.isFinite(info.score) ? h(String(info.score)) : ""}" data-confidence="${h(info.confidence || "")}" data-evidence="${h((info.evidence || []).join(" | "))}" data-disruption="${info.disruptionSuspected ? "1" : "0"}" data-capacity-constrained="${info.capacityConstrained ? "1" : "0"}"><span class="badge ${h(info.cls)}" title="${h(info.label)}">${h(info.compact || info.label)}</span></button>`;
+}
+
 const PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE = 0.15;
 const PORTFOLIO_MATERIAL_VARIANCE_TOLERANCE = 0.30;
 function portfolioVarianceBadge(v, options = {}) {
@@ -3102,18 +3066,21 @@ function portfolioCompareMetric(value, stats, tolerance = 0.10) {
 }
 function portfolioBenchmarksByCategory(sites = portfolioSites()) {
   const benchmarkPool = sites.filter(site => site.benchmarkEligible !== false);
+  const maturityModel = portfolioFinancialMaturityModel(benchmarkPool);
+  const repeatability = new Map(benchmarkPool.map(site => [site.id || site.name, classifySiteRepeatability({ site, model: maturityModel })]));
+  const isBenchmarkGrade = site => ["repeatable", "stabilising"].includes(repeatability.get(site.id || site.name)?.key);
   const benchmarks = {};
   Object.keys(PORTFOLIO_CATEGORY_FACTORS).forEach(categoryKey => {
     const sameCategory = benchmarkPool.filter(site => portfolioCategoryKey(site) === categoryKey);
-    let sample = sameCategory.filter(site => ["mature", "near"].includes(site.maturity?.tier));
-    let sampleBasis = "mature + near peers";
+    let sample = sameCategory.filter(isBenchmarkGrade);
+    let sampleBasis = "repeatable + stabilising peers";
     if (sample.length < 2) {
       sample = sameCategory;
       sampleBasis = sample.length ? "all available peers" : "portfolio fallback";
     }
     if (sample.length < 2) {
-      sample = benchmarkPool.filter(site => ["mature", "near"].includes(site.maturity?.tier));
-      sampleBasis = "all mature + near benchmark sites fallback";
+      sample = benchmarkPool.filter(isBenchmarkGrade);
+      sampleBasis = "all repeatable + stabilising benchmark sites fallback";
     }
     const metrics = sample.map(portfolioOperatingMetrics);
     benchmarks[categoryKey] = {
@@ -3212,10 +3179,15 @@ function portfolioDoNothingPath(site, metrics, derived, inputs) {
     if (!firstPlugYear && plugPlanningTrigger) firstPlugYear = startYear + t;
     if (!firstMicYear && micPlanningTrigger) firstMicYear = startYear + t;
     if (!firstChargerYear && chargerPlanningTrigger) firstChargerYear = startYear + t;
-    const plugRatio = installedOutputs > 0 ? Math.min(1, installedOutputs / Math.max(1, peakConcurrentSessions)) : 0;
-    const micRatio = gridPowerKw > 0 ? Math.min(1, gridPowerKw / Math.max(1, peakDemandKw)) : 0;
-    const chargerRatio = installedPowerKw > 0 ? Math.min(1, installedPowerKw / Math.max(1, peakDemandKw)) : 0;
-    const capacityRatio = Math.min(1, plugRatio, micRatio, chargerRatio);
+    const rawPlugRatio = installedOutputs > 0 ? installedOutputs / Math.max(1, peakConcurrentSessions) : 0;
+    const rawMicRatio = gridPowerKw > 0 ? gridPowerKw / Math.max(1, peakDemandKw) : 0;
+    const rawChargerRatio = installedPowerKw > 0 ? installedPowerKw / Math.max(1, peakDemandKw) : 0;
+    const technicalCapacityMultiple = Math.max(0, Math.min(rawPlugRatio, rawMicRatio, rawChargerRatio));
+    const plugRatio = Math.min(1, rawPlugRatio);
+    const micRatio = Math.min(1, rawMicRatio);
+    const chargerRatio = Math.min(1, rawChargerRatio);
+    const capacityRatio = Math.min(1, technicalCapacityMultiple);
+    const technicalCapacityAnnualKwh = annualKwhDemand * technicalCapacityMultiple;
     const lostKwh = Math.max(0, annualKwhDemand * (1 - capacityRatio));
     if (!firstConstraintYear && (capacityRatio < 0.98 || plugPlanningTrigger || micPlanningTrigger || chargerPlanningTrigger)) firstConstraintYear = startYear + t;
     lostKwh20yr += lostKwh;
@@ -3228,6 +3200,11 @@ function portfolioDoNothingPath(site, metrics, derived, inputs) {
       peakDemandKw,
       requiredMicKva,
       capacityRatio,
+      technicalCapacityMultiple,
+      technicalCapacityAnnualKwh,
+      rawPlugRatio,
+      rawMicRatio,
+      rawChargerRatio,
       lostKwh,
       plugPlanningTrigger,
       micPlanningTrigger,
@@ -3532,7 +3509,10 @@ function portfolioFilterValue(key, fallback = "all") {
 function portfolioFilterValues(key) {
   const raw = portfolioFilterValue(key);
   if (!raw || raw === "all") return [];
-  return raw.split(",").map(v => v.trim()).filter(Boolean);
+  const values = raw.split(",").map(v => v.trim()).filter(Boolean);
+  if (key !== "maturity") return values;
+  const legacyMap = { mature: "repeatable", near: "stabilising", early: "early_evidence", review: "declining_disrupted" };
+  return [...new Set(values.map(value => legacyMap[value] || value))];
 }
 function portfolioFilterMatches(key, value) {
   const selected = portfolioFilterValues(key);
@@ -3553,7 +3533,7 @@ function portfolioSortableNumber(value, missing = Number.POSITIVE_INFINITY) {
 }
 function portfolioApplyFilters(results) {
   return results.filter(r => {
-    if (!portfolioFilterMatches("maturity", r.site.maturity?.tier || "review")) return false;
+    if (!portfolioFilterMatches("maturity", r.predictionMaturity?.key || r.site.maturity?.tier || "review")) return false;
     if (!portfolioFilterMatches("category", r.categoryKey)) return false;
     if (!portfolioFilterMatches("confidence", portfolioToken(r.site.aadtConfidence))) return false;
     const mic = Number(r.site.realMicKva || 0);
@@ -3568,7 +3548,7 @@ function portfolioSortResults(results) {
   const dir = portfolioFilterValue("sortDir", "asc") === "desc" ? -1 : 1;
   const getters = {
     site: r => r.site.name,
-    maturity: r => portfolioMaturityLabel(r.site.maturity?.tier),
+    maturity: r => portfolioMaturityLabel(r.predictionMaturity || r.site.maturity?.tier),
     category: r => r.category.label,
     performance: r => r.assessment?.band || "review",
     investmentPriority: r => Number(r.assessment?.priority || 9) * 10000 + portfolioSortableNumber(r.doNothing?.firstActionYear, 9999),
@@ -3765,7 +3745,11 @@ function showPortfolioMaturityPopover(button) {
     </div>
     <div class="portfolio-status-popover-body">
       <p>${h(button.dataset.description || "Maturity definition unavailable.")}</p>
-      <p class="muted small">Maturity affects how strongly the app should rely on the annualised actuals and status recommendation. Early sites should be reviewed as directional ramp-up evidence, not final performance proof.</p>
+      ${button.dataset.score ? `<div class="portfolio-status-popover-kpis"><span><small>Repeatability score</small><b>${h(button.dataset.score)}/100</b></span><span><small>Confidence</small><b>${h(button.dataset.confidence || "—")}</b></span></div>` : ""}
+      ${button.dataset.evidence ? `<p><strong>Evidence:</strong> ${h(button.dataset.evidence).replace(/ \| /g, " · ")}</p>` : ""}
+      ${button.dataset.disruption === "1" ? `<p class="notice small"><strong>Review:</strong> A possible operational or source-data disruption was detected. The forecast confidence is widened until the period is confirmed.</p>` : ""}
+      ${button.dataset.capacityConstrained === "1" ? `<p class="notice small"><strong>Capacity:</strong> The installed system may be limiting delivered energy. Commercial potential and technical delivery capacity are treated separately.</p>` : ""}
+      <p class="muted small">The classification uses operating history, complete months, data coverage, seasonally adjusted trend stability, robust volatility and technical headroom. It does not treat one strong month as proof of maturity.</p>
     </div>`;
   document.body.appendChild(pop);
   button.setAttribute("aria-expanded", "true");
@@ -3807,14 +3791,23 @@ function renderPortfolioCalibration() {
   const selectedId = localStorage.getItem("evHub.portfolio.selectedSite") || selectorSiteList[0]?.id;
   const selected = selectorSiteList.find(s => s.id === selectedId) || selectorSiteList[0];
   const benchmarks = portfolioBenchmarksByCategory(mappedPortfolioSiteList);
-  const results = mappedPortfolioSiteList.map(site => portfolioSiteResults(site, benchmarks));
-  const selectedResult = portfolioSiteResults(selected, benchmarks);
+  const predictionMaturityModel = portfolioFinancialMaturityModel(mappedPortfolioSiteList);
+  const results = mappedPortfolioSiteList.map(site => {
+    const result = portfolioSiteResults(site, benchmarks);
+    result.predictionMaturity = portfolioPredictionMaturity(site, result, predictionMaturityModel);
+    return result;
+  });
+  const selectedResult = results.find(result => result.site?.id === selected?.id) || (() => {
+    const result = portfolioSiteResults(selected, benchmarks);
+    result.predictionMaturity = portfolioPredictionMaturity(selected, result, predictionMaturityModel);
+    return result;
+  })();
   const selectedProfile = selectedResult.calibratedProfile || portfolioCalibrationProfile(selected);
   const filtered = portfolioApplyFilters(results);
   const sorted = portfolioSortResults(filtered);
   const benchmarkEligibleCount = mappedPortfolioSiteList.filter(site => site.benchmarkEligible !== false).length;
-  const mature = results.filter(r => r.site.maturity?.tier === "mature" && r.site.benchmarkEligible !== false);
-  const near = results.filter(r => r.site.maturity?.tier === "near" && r.site.benchmarkEligible !== false);
+  const mature = results.filter(r => r.predictionMaturity?.key === "repeatable" && r.site.benchmarkEligible !== false);
+  const near = results.filter(r => r.predictionMaturity?.key === "stabilising" && r.site.benchmarkEligible !== false);
   const capacityCount = filtered.filter(r => r.assessment?.band === "capacity_pressure").length;
   const underCaptureCount = filtered.filter(r => r.assessment?.band === "under_capture").length;
   const normalCount = filtered.filter(r => portfolioIsModelInBenchmark(r)).length;
@@ -3823,7 +3816,7 @@ function renderPortfolioCalibration() {
   const siteOptions = portfolioSiteSelectOptions(mappedPortfolioSiteList, additionalPortfolioSites, selected?.id);
   const row = r => [
     `<div class="portfolio-site-cell"><strong>${h(r.site.name)}</strong></div>`,
-    portfolioMaturityBadgeCompact(r.site.maturity?.tier),
+    portfolioMaturityBadgeCompact(r.predictionMaturity || r.site.maturity?.tier),
     portfolioCategoryCell(r),
     number(r.site.realMicKva,0) + " kVA",
     number(r.site.aadt,0),
@@ -3841,7 +3834,15 @@ function renderPortfolioCalibration() {
     portfolioSortHeader("modelledAnnualKwh", "Matched model kWh/yr"),
     portfolioSortHeader("annualVariance", "Variance")
   ];
-  const maturityOptions = [{value:"mature",label:"Mature"},{value:"near",label:"Near-mature"},{value:"early",label:"Early"},{value:"review",label:"Review"}];
+  const maturityOptions = [
+    {value:"early_evidence",label:"Early evidence"},
+    {value:"ramping",label:"Ramping"},
+    {value:"stabilising",label:"Stabilising"},
+    {value:"repeatable",label:"Repeatable / mature"},
+    {value:"late_ramping",label:"Late-ramping"},
+    {value:"declining_disrupted",label:"Declining / disrupted"},
+    {value:"capacity_constrained",label:"Capacity-constrained"}
+  ];
   const categoryOptions = Object.entries(PORTFOLIO_CATEGORY_FACTORS).map(([value, cfg]) => ({ value, label: cfg.label }));
   const confidenceOptions = [{value:"high",label:"High"},{value:"medium-high",label:"Medium-high"},{value:"medium",label:"Medium"},{value:"medium-low",label:"Medium-low"},{value:"review",label:"Review"}];
   const micBandOptions = [{value:"low",label:"≤199 kVA"},{value:"mid",label:"200–400 kVA"},{value:"high",label:"700+ kVA"},{value:"other",label:"Other MIC"}];
@@ -3870,11 +3871,11 @@ function renderPortfolioCalibration() {
     : `${kpi("CAPEX estimate", selected?.uploadedNeedsSetup ? "Setup required" : currency(selectedCapex.model,0), selected?.uploadedNeedsSetup ? "confirm setup first" : "actual CAPEX not provided")}`;
   return `
     ${sectionTitle("Portfolio Calibration", "Compare live actuals against the matched model year using MIC, AADT, maturity and site category.")}
-    <section class="portfolio-hero panel"><div><span class="eyebrow">Operating intelligence layer</span><h3>Matched actual vs modelled performance</h3><p>The main table matches actual performance to the relevant model year/basis before calculating variance. Variance is the model-fit signal. The previous Status column has been removed so the calibration view stays focused on model accuracy.</p></div><div class="portfolio-summary-grid mature-only-summary">${kpi("Clean benchmark sites", number(benchmarkEligibleCount,0), `${number(results.length,0)} mapped sites shown`)}${kpi("Benchmark basis", `${number(mature.length + near.length,0)} sites`, "mature + near where possible")}${kpi("In benchmark", number(results.filter(r => portfolioIsModelInBenchmark(r)).length,0), "inside ±15%")}${kpi("Curator active", number(results.filter(r => r.curator?.active).length,0), "reviewed site modifiers")}</div></section>
+    <section class="portfolio-hero panel"><div><span class="eyebrow">Operating intelligence layer</span><h3>Matched actual vs modelled performance</h3><p>The main table matches actual performance to the relevant model year/basis before calculating variance. Variance is the model-fit signal. The previous Status column has been removed so the calibration view stays focused on model accuracy.</p></div><div class="portfolio-summary-grid mature-only-summary">${kpi("Clean benchmark sites", number(benchmarkEligibleCount,0), `${number(results.length,0)} mapped sites shown`)}${kpi("Benchmark basis", `${number(mature.length + near.length,0)} sites`, "repeatable + stabilising where possible")}${kpi("In benchmark", number(results.filter(r => portfolioIsModelInBenchmark(r)).length,0), "inside ±15%")}${kpi("Curator active", number(results.filter(r => r.curator?.active).length,0), "reviewed site modifiers")}</div></section>
     <section class="panel portfolio-method-note compact"><h3>How to read this page</h3><p class="muted">AADT shows passing traffic opportunity. MIC shows available grid capacity. Annual kWh and variance compare the live actual period against the matched model year/basis. Variance is always the mathematical model-vs-actual result where actual exists. Click a variance badge to see the accuracy label, model basis and curator audit. Reviewed modifiers are visible and auditable.</p></section>
     ${portfolioLiveCalibrationCard(mappedPortfolioSiteList)}
     <section class="panel portfolio-selector-panel"><div class="field"><label for="portfolioSiteSelect">Select operating hub</label><select id="portfolioSiteSelect">${siteOptions}</select><small>Mapped hubs can load directly into the model. Uploaded-only live sites show actuals but require MIC, AADT and charger setup before model loading.</small></div>${!portfolioCanLoadSite(selected) ? `<button type="button" class="secondary" id="applyPortfolioSite">Cannot load site</button>` : `<button type="button" class="primary" id="applyPortfolioSite">Load site into model + map</button>`}</section>
-    <section class="panel selected-backtest-card"><div class="selected-backtest-head"><div><span class="eyebrow">Selected hub</span><h3>${h(selected.name)}</h3><p>${h(selected.address || "Address unavailable")}</p></div>${portfolioMaturityBadge(selected.maturity?.tier)}</div><div class="portfolio-summary-grid selected-hub-overview">${kpi("Actual / annualised kWh/yr", kwh(selectedResult.actualAnnualKwh,0), selectedResult.actualAnnualBasis)}${kpi("Matched model kWh/yr", kwh(selectedResult.modelledAnnualKwh,0), selectedResult.modelComparisonBasis)}${kpi("Variance", portfolioVarianceBadge(selectedResult.annualKwhVariance, portfolioVarianceDisplayOptions(selectedResult)), "matched model vs actual; click for accuracy detail")}${kpi("kWh/plug/day", number(selectedResult.metrics.kwhPerPlugDay,1), "actual productivity")}${kpi("AADT", number(selected.aadt,0), "vehicles/day")}${kpi("MIC", kva(selected.realMicKva,0), "actual connection")}${kpi("Calibration flag", `<span class='badge ${h(portfolioCalibrationFlag(selectedResult).cls)}'>${h(portfolioCalibrationFlag(selectedResult).label)}</span>`, h(portfolioCalibrationFlag(selectedResult).note))}${selectedCapexCards}</div>${!portfolioCanLoadSite(selected) ? `<div class="notice warn"><strong>Site cannot be loaded into the model.</strong> ${h(portfolioLoadBlockReason(selected))}</div>` : ""}${selectedCapex.note ? `<div class="notice"><strong>CAPEX note:</strong> ${h(selectedCapex.note)}</div>` : ""}<div class="notice"><strong>Calibration flag:</strong> ${h(portfolioCalibrationFlag(selectedResult).note)}</div><div class="portfolio-accordion-stack"><details class="portfolio-diagnostic-details"><summary>Traffic and benchmark detail</summary><div class="portfolio-benchmark-grid">${selectedMethodCards}</div><div class="portfolio-config-grid compact"><div><strong>Matched AADT</strong><span>${number(selected.aadt,0)} veh/day · ${h(selected.aadtCounter || "AADT counter")}</span></div><div><strong>AADT method</strong><span>${h(selected.aadtAggregationMethod || "curated / automatic counter selection")}</span></div><div><strong>AADT basis note</strong><span>${h(selected.aadtBasisNote || "AADT mapped from TII counter database")}</span></div><div><strong>Effective benchmark AADT</strong><span>${number(selectedProfile.effectiveAadt,0)} veh/day after site-type cap</span></div><div><strong>Matched model basis</strong><span>${h(selectedResult.modelComparisonBasis || "Model year")}</span></div><div><strong>Model factors applied</strong><span>${h(selectedResult.category.label)} · target ${number(selectedResult.targetSessionsPer1000Aadt,2)} sess/1k AADT · ramp ${pct(selectedResult.modelRampFactor,0)} · growth ${number(selectedResult.modelGrowthFactor,2)}x</span></div><div><strong>Curator framework</strong><span>${h(portfolioCuratorPopoverText(selectedResult.curator))}</span></div><div><strong>Actual sessions / 1k AADT</strong><span>${number(selectedResult.metrics.sessionsPer1000Aadt,2)}</span></div><div><strong>Peer kWh/plug/day median</strong><span>${number(peerMedianPlug,1)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>MIC / grid capacity detail</summary><div class="portfolio-config-grid compact"><div><strong>Current MIC</strong><span>${kva(selected.realMicKva,0)}</span></div><div><strong>Recommended MIC by Year 20</strong><span>${kva(selectedResult.doNothing.year20?.requiredMicKva,0)}</span></div><div><strong>Year 20 MIC gap</strong><span>${kva(Math.max(0, Number(selectedResult.doNothing.year20?.requiredMicKva || 0) - Number(selected.realMicKva || 0)),0)}</span></div><div><strong>First MIC trigger</strong><span>${selectedResult.doNothing.firstMicYear ? h(String(selectedResult.doNothing.firstMicYear)) : "No MIC trigger in 20yr"}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Configuration and 20-year do-nothing path</summary><div class="portfolio-config-grid compact"><div><strong>Model-equivalent configuration</strong><span>${h(selected.modelEquivalentSummary)}</span></div><div><strong>20-year do-nothing trigger</strong><span>${h(portfolioTriggerLabel(selectedResult.doNothing))}</span></div><div><strong>Trigger drivers</strong><span>${h(selectedResult.doNothing.triggerDrivers?.join(" + ") || "No near-term driver")}</span></div><div><strong>20-yr lost revenue risk</strong><span>${currency(selectedResult.doNothing.lostRevenue20yr,0)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Model QA diagnostics</summary><div class="portfolio-summary-grid">${kpi("Actual source", h(portfolioActualSourceLabel(selected)), selected.liveActuals?.sourceFile ? h(selected.liveActuals.sourceFile) : "portfolio baseline")}${kpi("Actual 30D kWh", kwh(selectedResult.actualKwh,0), "latest rolling operating data")}${kpi("Modelled 30D kWh", kwh(selectedResult.calibratedKwh,0), "site-type target")}${kpi("30D variance", portfolioVarianceBadge(selectedResult.calibratedKwhVariance), "QA comparison")}${kpi("Base annual variance", portfolioVarianceBadge(selectedResult.baseAnnualKwhVariance), "uncalibrated QA")}</div><p class="muted small">Technical diagnostics are retained for audit and investment review. The main comparison is matched to the relevant model year/basis before the ±15% benchmark status is applied.</p></details></div></section>
+    <section class="panel selected-backtest-card"><div class="selected-backtest-head"><div><span class="eyebrow">Selected hub</span><h3>${h(selected.name)}</h3><p>${h(selected.address || "Address unavailable")}</p></div>${portfolioMaturityBadge(selectedResult.predictionMaturity || selected.maturity?.tier)}</div><div class="portfolio-summary-grid selected-hub-overview">${kpi("Actual / annualised kWh/yr", kwh(selectedResult.actualAnnualKwh,0), selectedResult.actualAnnualBasis)}${kpi("Matched model kWh/yr", kwh(selectedResult.modelledAnnualKwh,0), selectedResult.modelComparisonBasis)}${kpi("Variance", portfolioVarianceBadge(selectedResult.annualKwhVariance, portfolioVarianceDisplayOptions(selectedResult)), "matched model vs actual; click for accuracy detail")}${kpi("kWh/plug/day", number(selectedResult.metrics.kwhPerPlugDay,1), "actual productivity")}${kpi("AADT", number(selected.aadt,0), "vehicles/day")}${kpi("MIC", kva(selected.realMicKva,0), "actual connection")}${kpi("Calibration flag", `<span class='badge ${h(portfolioCalibrationFlag(selectedResult).cls)}'>${h(portfolioCalibrationFlag(selectedResult).label)}</span>`, h(portfolioCalibrationFlag(selectedResult).note))}${selectedCapexCards}</div>${!portfolioCanLoadSite(selected) ? `<div class="notice warn"><strong>Site cannot be loaded into the model.</strong> ${h(portfolioLoadBlockReason(selected))}</div>` : ""}${selectedCapex.note ? `<div class="notice"><strong>CAPEX note:</strong> ${h(selectedCapex.note)}</div>` : ""}<div class="notice"><strong>Calibration flag:</strong> ${h(portfolioCalibrationFlag(selectedResult).note)}</div><div class="portfolio-accordion-stack"><details class="portfolio-diagnostic-details"><summary>Traffic and benchmark detail</summary><div class="portfolio-benchmark-grid">${selectedMethodCards}</div><div class="portfolio-config-grid compact"><div><strong>Matched AADT</strong><span>${number(selected.aadt,0)} veh/day · ${h(selected.aadtCounter || "AADT counter")}</span></div><div><strong>AADT method</strong><span>${h(selected.aadtAggregationMethod || "curated / automatic counter selection")}</span></div><div><strong>AADT basis note</strong><span>${h(selected.aadtBasisNote || "AADT mapped from TII counter database")}</span></div><div><strong>Effective benchmark AADT</strong><span>${number(selectedProfile.effectiveAadt,0)} veh/day after site-type cap</span></div><div><strong>Matched model basis</strong><span>${h(selectedResult.modelComparisonBasis || "Model year")}</span></div><div><strong>Model factors applied</strong><span>${h(selectedResult.category.label)} · target ${number(selectedResult.targetSessionsPer1000Aadt,2)} sess/1k AADT · ramp ${pct(selectedResult.modelRampFactor,0)} · growth ${number(selectedResult.modelGrowthFactor,2)}x</span></div><div><strong>Curator framework</strong><span>${h(portfolioCuratorPopoverText(selectedResult.curator))}</span></div><div><strong>Actual sessions / 1k AADT</strong><span>${number(selectedResult.metrics.sessionsPer1000Aadt,2)}</span></div><div><strong>Peer kWh/plug/day median</strong><span>${number(peerMedianPlug,1)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>MIC / grid capacity detail</summary><div class="portfolio-config-grid compact"><div><strong>Current MIC</strong><span>${kva(selected.realMicKva,0)}</span></div><div><strong>Recommended MIC by Year 20</strong><span>${kva(selectedResult.doNothing.year20?.requiredMicKva,0)}</span></div><div><strong>Year 20 MIC gap</strong><span>${kva(Math.max(0, Number(selectedResult.doNothing.year20?.requiredMicKva || 0) - Number(selected.realMicKva || 0)),0)}</span></div><div><strong>First MIC trigger</strong><span>${selectedResult.doNothing.firstMicYear ? h(String(selectedResult.doNothing.firstMicYear)) : "No MIC trigger in 20yr"}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Configuration and 20-year do-nothing path</summary><div class="portfolio-config-grid compact"><div><strong>Model-equivalent configuration</strong><span>${h(selected.modelEquivalentSummary)}</span></div><div><strong>20-year do-nothing trigger</strong><span>${h(portfolioTriggerLabel(selectedResult.doNothing))}</span></div><div><strong>Trigger drivers</strong><span>${h(selectedResult.doNothing.triggerDrivers?.join(" + ") || "No near-term driver")}</span></div><div><strong>20-yr lost revenue risk</strong><span>${currency(selectedResult.doNothing.lostRevenue20yr,0)}</span></div></div></details><details class="portfolio-diagnostic-details"><summary>Model QA diagnostics</summary><div class="portfolio-summary-grid">${kpi("Actual source", h(portfolioActualSourceLabel(selected)), selected.liveActuals?.sourceFile ? h(selected.liveActuals.sourceFile) : "portfolio baseline")}${kpi("Actual 30D kWh", kwh(selectedResult.actualKwh,0), "latest rolling operating data")}${kpi("Modelled 30D kWh", kwh(selectedResult.calibratedKwh,0), "site-type target")}${kpi("30D variance", portfolioVarianceBadge(selectedResult.calibratedKwhVariance), "QA comparison")}${kpi("Base annual variance", portfolioVarianceBadge(selectedResult.baseAnnualKwhVariance), "uncalibrated QA")}</div><p class="muted small">Technical diagnostics are retained for audit and investment review. The main comparison is matched to the relevant model year/basis before the ±15% benchmark status is applied.</p></details></div></section>
     <section class="panel portfolio-filter-panel"><h3>Filters and sorting</h3><div class="portfolio-filter-grid">${portfolioMultiFilter("portfolioMaturity", "maturity", maturityOptions, "Maturity", "All maturity")}${portfolioMultiFilter("portfolioCategory", "category", categoryOptions, "Site category", "All categories")}${portfolioMultiFilter("portfolioConfidence", "confidence", confidenceOptions, "AADT confidence", "All AADT confidence")}${portfolioMultiFilter("portfolioMicBand", "micBand", micBandOptions, "MIC band", "All MIC")}</div><p class="muted small">Open a filter and tick one or more options. Click a header to sort. Current sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}.</p></section>
     <section class="panel"><h3>Current filtered view</h3><div class="portfolio-summary-grid">${selectedFilterCard("Sites shown", number(filtered.length,0), `${number(results.length,0)} mapped sites`)}${selectedFilterCard("In benchmark", number(normalCount,0), "model accuracy ±15%")}${selectedFilterCard("Outside ±15%", number(filtered.filter(r => Number.isFinite(r.annualKwhVariance) && Math.abs(r.annualKwhVariance) > PORTFOLIO_IN_BENCHMARK_VARIANCE_TOLERANCE && r.site.maturity?.tier !== "early").length,0), "mature/near only")}${selectedFilterCard("Ramp-up", number(filtered.filter(r => r.site.maturity?.tier === "early").length,0), "early sites")}${selectedFilterCard("Earliest trigger", earliestTrigger ? String(earliestTrigger) : "No trigger", "do-nothing path only")}${selectedFilterCard("Median abs variance", Number.isFinite(medianAbsAnnualVariance) ? pct(medianAbsAnnualVariance,1) : "—", "annual model vs actual")}</div></section>
     <section class="panel"><h3>Portfolio comparison table</h3>${table(headers, sorted.map(row), "portfolio-table portfolio-comparison-table portfolio-annual-table")}</section>
@@ -4198,13 +4199,17 @@ let portfolioMaturityModelCache = { key: "", model: null };
 function portfolioFinancialMaturityModel(sites = portfolioSites({ includeAdditional: false })) {
   const historySignature = sites.map(site => {
     const history = Array.isArray(site?.actual?.monthlyHistory) ? site.actual.monthlyHistory : [];
+    const daily = Array.isArray(site?.actual?.dailyHistory) ? site.actual.dailyHistory : [];
     const totalKwh = history.reduce((acc, row) => acc + (Number(row?.kwh) || 0), 0);
     const latest = history.length ? history[history.length - 1] : null;
-    return `${site.id || site.name}:${Number(site?.maturity?.dataDays || 0)}:${history.length}:${Math.round(totalKwh)}:${latest?.month || latest?.monthStart || ""}:${Math.round(Number(latest?.kwh || 0))}`;
+    const latestDaily = daily.length ? daily[daily.length - 1] : null;
+    const sourceDays = daily.filter(row => row?.sourcePresent !== false).length;
+    return `${site.id || site.name}:${Number(site?.maturity?.dataDays || 0)}:${history.length}:${Math.round(totalKwh)}:${latest?.month || latest?.monthStart || ""}:${Math.round(Number(latest?.kwh || 0))}:${daily.length}:${sourceDays}:${latestDaily?.date || ""}`;
   }).join("|");
   const key = [portfolioLiveActualsSnapshot?.latestDate || "stored", historySignature, state.inputs.rampUpYear1, state.inputs.rampUpYear2].join("::");
   if (portfolioMaturityModelCache.key === key && portfolioMaturityModelCache.model) return portfolioMaturityModelCache.model;
-  const model = buildMaturityModel(sites, {
+  const predictionSites = sites.map(site => ({ ...site, categoryKey: portfolioCategoryKey(site) }));
+  const model = buildMaturityModel(predictionSites, {
     rampYear1: Number(state.inputs.rampUpYear1 ?? DEFAULT_INPUTS.rampUpYear1 ?? 0.60),
     rampYear2: Number(state.inputs.rampUpYear2 ?? DEFAULT_INPUTS.rampUpYear2 ?? 0.80),
     maxMonths: 24
@@ -4212,6 +4217,18 @@ function portfolioFinancialMaturityModel(sites = portfolioSites({ includeAdditio
   portfolioMaturityModelCache = { key, model };
   return model;
 }
+function portfolioPredictionMaturity(site, result, model = portfolioFinancialMaturityModel()) {
+  const capacity = result?.doNothing?.rows?.[0] || null;
+  return classifySiteRepeatability({
+    site: { ...site, categoryKey: portfolioCategoryKey(site) },
+    model,
+    dataDays: Number(site?.maturity?.dataDays || site?.actual?.dataDays || site?.actual?.operationalDays || 0),
+    technicalCapacityRatio: Number.isFinite(Number(capacity?.capacityRatio)) ? Number(capacity.capacityRatio) : null,
+    technicalCapacityAnnualKwh: Number(capacity?.technicalCapacityAnnualKwh || 0) || null,
+    capacityConstrained: Number(capacity?.capacityRatio || 1) < 0.98
+  });
+}
+
 function portfolioFinancialMatureModelAnnualKwh(result) {
   const annual = Number(result?.modelledAnnualKwh || result?.baseAnnualKwh || 0);
   const ramp = Number(result?.modelRampFactor || 1);
@@ -4230,9 +4247,11 @@ function portfolioFinancialRecentDaily(site, key, fallback = 0) {
   return direct > 0 ? direct : Number(fallback || 0);
 }
 function portfolioFinancialMaturityForecast(site, result, annualActual, revenueInfo, operationalDays, model) {
+  const predictionSite = { ...site, categoryKey: portfolioCategoryKey(site) };
   const latestDate = annualActual?.periodEnd ? portfolioDateLabel(annualActual.periodEnd) : (site?.actual?.asOfDate || site?.liveActuals?.asOfDate || "");
+  const technicalCapacityRow = result?.doNothing?.rows?.[0] || null;
   const commonParams = {
-    site,
+    site: predictionSite,
     model,
     dataDays: Number(operationalDays || annualActual?.dataDays || site?.maturity?.dataDays || 0),
     latestDate,
@@ -4245,7 +4264,10 @@ function portfolioFinancialMaturityForecast(site, result, annualActual, revenueI
     trafficGrowth: Number(state.inputs.annualTrafficGrowthRate ?? DEFAULT_INPUTS.annualTrafficGrowthRate ?? 0.01),
     tariffGrowth: Number(state.inputs.annualTariffEscalation ?? DEFAULT_INPUTS.annualTariffEscalation ?? 0),
     fallbackPrice: Number(result?.inputs?.netSellingPriceExVat ?? state.inputs.netSellingPriceExVat ?? DEFAULT_INPUTS.netSellingPriceExVat ?? 0),
-    averageSessionKwh: Number(result?.inputs?.averageSessionEnergy ?? DEFAULT_INPUTS.averageSessionEnergy ?? 30.4)
+    averageSessionKwh: Number(result?.inputs?.averageSessionEnergy ?? DEFAULT_INPUTS.averageSessionEnergy ?? 30.4),
+    technicalCapacityAnnualKwh: Number(technicalCapacityRow?.technicalCapacityAnnualKwh || 0) || null,
+    technicalCapacityRatio: Number.isFinite(Number(technicalCapacityRow?.capacityRatio)) ? Number(technicalCapacityRow.capacityRatio) : null,
+    capacityConstrained: Number(technicalCapacityRow?.capacityRatio || 1) < 0.98
   };
   const forward12m = forecastSiteForward12M(commonParams);
   const forecast = forecastSiteMaturity({ ...commonParams, forward12m, horizonMonths: 240 });
@@ -4296,8 +4318,6 @@ function portfolioFinancialMaturityForecast(site, result, annualActual, revenueI
     forward12m,
     monthly,
     next12mKwh: sum(next12, "kwh"),
-    next12mKwhLow: sum(next12, "lowerKwh"),
-    next12mKwhHigh: sum(next12, "upperKwh"),
     next12mSessions: sum(next12, "sessions"),
     next12mRevenue: sum(next12, "revenue"),
     next12mRevenueLow: sum(next12, "lowerRevenue"),
@@ -4306,9 +4326,7 @@ function portfolioFinancialMaturityForecast(site, result, annualActual, revenueI
     next12mNetworkStandingAndCapacity: sum(next12, "networkStandingAndCapacity"),
     next12mOtherOpexExElectricityAndNetwork: sum(next12, "otherOpexExElectricityAndNetwork"),
     next12mElectricityCost: sum(next12, "electricityCost"),
-    next12mOperatingCashflow: sum(next12, "operatingCashflow"),
-    next12mOperatingCashflowLow: sum(next12, "lowerOperatingCashflow"),
-    next12mOperatingCashflowHigh: sum(next12, "upperOperatingCashflow")
+    next12mOperatingCashflow: sum(next12, "operatingCashflow")
   };
 }
 function portfolioFinancialForecastPayback(actualCapex, forecast) {
@@ -4509,6 +4527,46 @@ function portfolioFundingClear(site) {
   localStorage.removeItem(portfolioFundingStorageKey(site));
 }
 
+const PORTFOLIO_MODEL_SNAPSHOT_PREFIX = "evHub.portfolio.modelSnapshot.v1";
+function portfolioModelSnapshotKey(site) {
+  return `${PORTFOLIO_MODEL_SNAPSHOT_PREFIX}.${portfolioCommercialTermsKey(site)}`;
+}
+function ensurePortfolioInvestmentSnapshot(site, result, maturityForecast) {
+  const key = portfolioModelSnapshotKey(site);
+  let existing = null;
+  try { existing = JSON.parse(localStorage.getItem(key) || "null"); } catch (_) { existing = null; }
+  if (existing?.capturedAt && existing?.modelBuildId) return existing;
+  const snapshot = {
+    snapshotType: "first-available-baseline",
+    note: "Created automatically from the first model evaluation available after snapshot governance was introduced. It is not asserted to be the original historic investment approval case unless captured at approval time.",
+    capturedAt: new Date().toISOString(),
+    modelRelease: APP_RELEASE_VERSION,
+    modelBuildId: APP_BUILD_ID,
+    siteId: site?.id || "",
+    siteName: site?.name || "Site",
+    modelledAnnualKwh: Number(result?.modelledAnnualKwh || 0),
+    modelComparisonBasis: result?.modelComparisonBasis || "",
+    next12mKwh: Number(maturityForecast?.next12mKwh || 0),
+    matureAnnualKwh: Number(maturityForecast?.matureAnnualKwh || 0),
+    commercialPotentialAnnualKwh: Number(maturityForecast?.commercialPotentialAnnualKwh || 0),
+    technicalCapacityAnnualKwh: Number(maturityForecast?.technicalCapacityAnnualKwh || 0),
+    predictionEngineVersion: maturityModelVersion(maturityForecast),
+    assumptions: {
+      trafficGrowth: Number(state.inputs.annualTrafficGrowthRate ?? DEFAULT_INPUTS.annualTrafficGrowthRate ?? 0),
+      tariffEscalation: Number(state.inputs.annualTariffEscalation ?? DEFAULT_INPUTS.annualTariffEscalation ?? 0),
+      electricityEscalation: Number(state.inputs.annualElectricityCostEscalation ?? DEFAULT_INPUTS.annualElectricityCostEscalation ?? 0),
+      averageSessionEnergy: Number(result?.inputs?.averageSessionEnergy ?? DEFAULT_INPUTS.averageSessionEnergy ?? 30.4),
+      netSellingPriceExVat: Number(result?.inputs?.netSellingPriceExVat ?? state.inputs.netSellingPriceExVat ?? DEFAULT_INPUTS.netSellingPriceExVat ?? 0),
+      selectedMicKva: Number(result?.config?.selectedMicKva || site?.realMicKva || 0)
+    }
+  };
+  try { localStorage.setItem(key, JSON.stringify(snapshot)); } catch (_) {}
+  return snapshot;
+}
+function maturityModelVersion(maturityForecast) {
+  return maturityForecast?.forward12m?.modelType || maturityForecast?.label || "prediction-engine";
+}
+
 function portfolioFinancialRow(site, benchmarks, maturityModel) {
   const result = portfolioSiteResults(site, benchmarks);
   const capex = portfolioCapexInfo(site, result.yearByYear?.derived?.initialInvestmentCapex || result.financialSummary?.grossInitialInvestmentBeforeGrant || result.financialSummary?.initialInvestment || 0);
@@ -4518,6 +4576,7 @@ function portfolioFinancialRow(site, benchmarks, maturityModel) {
   const revenueInfo = portfolioActualRevenueInfo(site, annualActual, result.metrics);
   const opex = portfolioFinancialOpexFromActuals(result, annualActual.annualKwh, revenueInfo.annualSessions, revenueInfo.annualRevenue, site);
   const maturityForecast = portfolioFinancialMaturityForecast(site, result, annualActual, revenueInfo, operationalDays, maturityModel);
+  const investmentCaseSnapshot = ensurePortfolioInvestmentSnapshot(site, result, maturityForecast);
   const matureSessions = Number(maturityForecast.matureAnnualKwh || 0) > 0
     ? Number(maturityForecast.matureAnnualKwh || 0) / Math.max(1, Number(maturityForecast.avgSessionKwh || 30.4))
     : 0;
@@ -4560,6 +4619,7 @@ function portfolioFinancialRow(site, benchmarks, maturityModel) {
   const fin = {
     result,
     site,
+    investmentCaseSnapshot,
     actualCapex: capex.actual,
     grossActualCapex: capex.actual,
     funding,
@@ -4583,8 +4643,6 @@ function portfolioFinancialRow(site, benchmarks, maturityModel) {
     maturityRevenueUplift: Math.max(0, Number(maturityForecast.matureAnnualRevenue || 0) - Number(revenueInfo.annualRevenue || 0)),
     maturityEbitdaUplift: Math.max(0, Number(matureOperatingCashflow || 0) - Number(opex.operatingCashflow || 0)),
     next12mKwh: maturityForecast.next12mKwh,
-    next12mKwhLow: maturityForecast.next12mKwhLow,
-    next12mKwhHigh: maturityForecast.next12mKwhHigh,
     actualComparableKwh,
     actualComparableBasis: annualActual.isTrailing365Actual ? "trailing 12m actual" : "annualised actual run-rate",
     forecastVsActualVariance,
@@ -4601,6 +4659,12 @@ function portfolioFinancialRow(site, benchmarks, maturityModel) {
     performanceVariance: performanceStatus.variance,
     performanceStatus,
     matureAnnualKwh: maturityForecast.matureAnnualKwh,
+    matureAnnualKwhP25: maturityForecast.matureAnnualKwhP25,
+    matureAnnualKwhP75: maturityForecast.matureAnnualKwhP75,
+    commercialPotentialAnnualKwh: maturityForecast.commercialPotentialAnnualKwh,
+    technicalCapacityAnnualKwh: maturityForecast.technicalCapacityAnnualKwh,
+    capacityConstrained: maturityForecast.capacityConstrained,
+    predictionMaturity: maturityForecast.classification,
     maturityForecast,
     revenueSource: revenueInfo.source,
     revenueEstimated: revenueInfo.estimated,
@@ -4627,8 +4691,6 @@ function portfolioFinancialRow(site, benchmarks, maturityModel) {
     grossProfit: opex.grossProfit,
     operatingCashflow,
     forecastOperatingCashflow: maturityForecast.next12mOperatingCashflow,
-    forecastOperatingCashflowLow: maturityForecast.next12mOperatingCashflowLow,
-    forecastOperatingCashflowHigh: maturityForecast.next12mOperatingCashflowHigh,
     forecastPaybackYears: longTermPaybackYears,
     longTermPaybackYears,
     grossLongTermPaybackYears,
@@ -4917,14 +4979,20 @@ function portfolioFinancialMaturitySummary(model, rows) {
   const currentRevenue = row => Math.max(0, Number(row.annualRevenue || 0));
   const matureRevenue = row => Math.max(0, Number(row.matureAnnualRevenue || 0));
   const empiricalMatureRows = usable.filter(row => {
+    const classification = row.maturityForecast?.classification?.key;
+    if (classification) return classification === "repeatable";
     const days = Number(row.operationalDays || 0);
     const months = historyMonths(row);
     const blockChange = Number(row.maturityForecast?.recentTrend?.blockChange);
     const stable = !Number.isFinite(blockChange) || Math.abs(blockChange) <= 0.15;
     return days >= 365 && months >= 10 && !row.maturityForecast?.lateRamp && stable;
   });
-  const insufficientHistoryRows = usable.filter(row => historyMonths(row) < 2);
-  const rampingRows = usable.filter(row => !empiricalMatureRows.includes(row) && !insufficientHistoryRows.includes(row));
+  const insufficientHistoryRows = usable.filter(row => row.maturityForecast?.classification?.key === "early_evidence" || historyMonths(row) < 2);
+  const rampingRows = usable.filter(row => {
+    const classification = row.maturityForecast?.classification?.key;
+    if (classification) return ["ramping", "stabilising", "late_ramping"].includes(classification) && !insufficientHistoryRows.includes(row);
+    return !empiricalMatureRows.includes(row) && !insufficientHistoryRows.includes(row);
+  });
   let weightedCurrent = 0;
   let weightedMature = 0;
   usable.forEach(row => {
@@ -5057,11 +5125,7 @@ function portfolioFinancialProjectionSummary(rows, horizon) {
   const horizonMonths = hYears * 12;
   const thisYearRevenue = revenueBase;
   const nextYearRevenue = usable.reduce((acc, row) => acc + (Number(row.maturityForecast?.next12mRevenue) || 0), 0);
-  const nextYearRevenueLow = usable.reduce((acc, row) => acc + (Number(row.maturityForecast?.next12mRevenueLow) || 0), 0);
-  const nextYearRevenueHigh = usable.reduce((acc, row) => acc + (Number(row.maturityForecast?.next12mRevenueHigh) || 0), 0);
   const nextYearEbitda = usable.reduce((acc, row) => acc + (Number(row.maturityForecast?.next12mOperatingCashflow) || 0), 0);
-  const nextYearEbitdaLow = usable.reduce((acc, row) => acc + (Number(row.maturityForecast?.next12mOperatingCashflowLow) || 0), 0);
-  const nextYearEbitdaHigh = usable.reduce((acc, row) => acc + (Number(row.maturityForecast?.next12mOperatingCashflowHigh) || 0), 0);
   let horizonRevenue = 0, horizonRevenueLow = 0, horizonRevenueHigh = 0;
   let horizonElectricity = 0, horizonOpex = 0;
   let horizonEbitda = 0, horizonEbitdaLow = 0, horizonEbitdaHigh = 0;
@@ -5107,7 +5171,7 @@ function portfolioFinancialProjectionSummary(rows, horizon) {
   }
   const netAfterCapex = horizonEbitda - capexBase;
   const profitabilityMargin = horizonRevenue > 0 ? horizonEbitda / horizonRevenue : null;
-  return { usableSites: usable.length, growth, thisYearRevenue, nextYearRevenue, nextYearRevenueLow, nextYearRevenueHigh, nextYearEbitda, nextYearEbitdaLow, nextYearEbitdaHigh, horizonRevenue, horizonRevenueLow, horizonRevenueHigh, horizonElectricity, horizonOpex, horizonEbitda, horizonEbitdaLow, horizonEbitdaHigh, netAfterCapex, cumulativeCashflow: netAfterCapex, profitabilityMargin, projectedPaybackYears, capexBase, grossCapexBase, fundingAppliedBase, horizon: hYears };
+  return { usableSites: usable.length, growth, thisYearRevenue, nextYearRevenue, nextYearEbitda, horizonRevenue, horizonRevenueLow, horizonRevenueHigh, horizonElectricity, horizonOpex, horizonEbitda, horizonEbitdaLow, horizonEbitdaHigh, netAfterCapex, cumulativeCashflow: netAfterCapex, profitabilityMargin, projectedPaybackYears, capexBase, grossCapexBase, fundingAppliedBase, horizon: hYears };
 }
 function portfolioFinancialHorizonSelector(horizon) {
   const year = Math.max(1, Math.min(20, Math.round(Number(horizon) || 5)));
@@ -5137,18 +5201,12 @@ function portfolioFinancialSummary(rows) {
   const electricityCost = sumField(rowsWithActuals, "electricityCost");
   const operatingCashflow = sumField(rowsWithActuals, "operatingCashflow");
   const next12mKwh = sumField(rowsWithActuals, "next12mKwh");
-  const next12mKwhLow = sumField(rowsWithActuals, "next12mKwhLow");
-  const next12mKwhHigh = sumField(rowsWithActuals, "next12mKwhHigh");
   const next12mRevenue = sumField(rowsWithActuals, "next12mRevenue");
-  const next12mRevenueLow = sumField(rowsWithActuals, "next12mRevenueLow");
-  const next12mRevenueHigh = sumField(rowsWithActuals, "next12mRevenueHigh");
   const next12mOpexExElectricity = sumField(rowsWithActuals, "forecastOpexExElectricity");
   const next12mNetworkStandingAndCapacity = sumField(rowsWithActuals, "forecastNetworkStandingAndCapacity");
   const next12mOtherOpexExElectricityAndNetwork = sumField(rowsWithActuals, "forecastOtherOpexExElectricityAndNetwork");
   const next12mElectricityCost = sumField(rowsWithActuals, "forecastElectricityCost");
   const next12mEbitda = sumField(rowsWithActuals, "forecastOperatingCashflow");
-  const next12mEbitdaLow = sumField(rowsWithActuals, "forecastOperatingCashflowLow");
-  const next12mEbitdaHigh = sumField(rowsWithActuals, "forecastOperatingCashflowHigh");
   const eligibleCapex = sumField(paybackEligible, "actualCapex");
   const eligibleCashflow = sumField(paybackEligible, "forecastOperatingCashflow");
   const paybackYears = portfolioFinancialPortfolioPayback(rows);
@@ -5182,18 +5240,12 @@ function portfolioFinancialSummary(rows) {
     electricityCost,
     operatingCashflow,
     next12mKwh,
-    next12mKwhLow,
-    next12mKwhHigh,
     next12mRevenue,
-    next12mRevenueLow,
-    next12mRevenueHigh,
     next12mOpexExElectricity,
     next12mNetworkStandingAndCapacity,
     next12mOtherOpexExElectricityAndNetwork,
     next12mElectricityCost,
     next12mEbitda,
-    next12mEbitdaLow,
-    next12mEbitdaHigh,
     forecastOperatingCashflow: eligibleCashflow,
     paybackYears,
     underperforming: performanceCounts.underperforming,
@@ -5242,10 +5294,10 @@ function portfolioFinancialExportDisplayRow(fin) {
     days: Number.isFinite(Number(fin.operationalDays)) ? Number(fin.operationalDays) : null, daysLabel: Number.isFinite(Number(fin.operationalDays)) ? `${number(fin.operationalDays,0)} days` : "Not confirmed", daysBasis: fin.daysBasisLabel || "",
     actualCapex: Number.isFinite(actualCapex) ? actualCapex : null, modelDayOneCapex: Number.isFinite(modelCapex) ? modelCapex : null, capexDelta: Number.isFinite(capexDelta) ? capexDelta : null, capexDeltaPct, capexBand: fin.capexDeltaBand?.label || "", capexNote: fin.hasActualCapex ? `${modelCapex > 0 ? `model day-one ${currency(modelCapex, 0)} · ` : ""}${currency(capexDelta,0)} delta` : "CAPEX missing · run-rate payback unavailable",
     fundingAvailable: Number(fin.fundingAvailable || 0), fundingApplied: Boolean(fin.fundingApplied), fundingAppliedAmount: Number(fin.fundingAppliedAmount || 0), fundingScheme: fin.funding?.scheme || fin.funding?.source || "", fundingConfidence: fin.funding?.confidence || "", netInvestedCapex: Number(fin.netInvestedCapex || actualCapex || 0),
-    next12mKwh: Number(fin.next12mKwh || 0), next12mKwhLow: Number(fin.next12mKwhLow || 0), next12mKwhHigh: Number(fin.next12mKwhHigh || 0), actualComparableKwh: Number(fin.actualComparableKwh || 0), actualComparableBasis: fin.actualComparableBasis || "", forecastVsActualVariance: Number.isFinite(Number(fin.forecastVsActualVariance)) ? Number(fin.forecastVsActualVariance) : null,
+    next12mKwh: Number(fin.next12mKwh || 0), actualComparableKwh: Number(fin.actualComparableKwh || 0), actualComparableBasis: fin.actualComparableBasis || "", forecastVsActualVariance: Number.isFinite(Number(fin.forecastVsActualVariance)) ? Number(fin.forecastVsActualVariance) : null,
     historicalActualKwh: Number(fin.historicalActualKwh || 0), historicalModelKwh: Number(fin.historicalModelKwh || 0), historicalPeriodDays: Number(fin.historicalPeriodDays || 0), historicalPeriodLabel: fin.historicalPeriodLabel || "", historicalModelBasis: fin.historicalModelBasis || "", performanceVariance: Number.isFinite(Number(fin.performanceVariance)) ? Number(fin.performanceVariance) : null, performanceClassification: fin.performanceStatus?.label || "Review",
     modelForward12mKwh: Number(fin.modelForward12mKwh || 0), modelForward12mBasis: fin.modelForward12mBasis || "", forwardPerformanceVariance: Number.isFinite(Number(fin.forwardPerformanceVariance)) ? Number(fin.forwardPerformanceVariance) : null,
-    next12mRevenue: Number(fin.next12mRevenue || 0), next12mRevenueLow: Number(fin.next12mRevenueLow || 0), next12mRevenueHigh: Number(fin.next12mRevenueHigh || 0), electricityUnitCost: Number(fin.electricityUnitCost || 0), electricityCost: Number(fin.forecastElectricityCost || 0), duosStandingCharge: Number(fin.duosStandingCharge || 0), duosCapacityCharge: Number(fin.duosCapacityCharge || 0), networkStandingAndCapacity: Number(fin.forecastNetworkStandingAndCapacity || 0), otherOpexExElectricityAndNetwork: Number(fin.forecastOtherOpexExElectricityAndNetwork || 0), opexExElectricity: Number(fin.forecastOpexExElectricity || 0), ebitda: Number(fin.forecastOperatingCashflow || 0), ebitdaLow: Number(fin.forecastOperatingCashflowLow || 0), ebitdaHigh: Number(fin.forecastOperatingCashflowHigh || 0),
+    next12mRevenue: Number(fin.next12mRevenue || 0), electricityUnitCost: Number(fin.electricityUnitCost || 0), electricityCost: Number(fin.forecastElectricityCost || 0), duosStandingCharge: Number(fin.duosStandingCharge || 0), duosCapacityCharge: Number(fin.duosCapacityCharge || 0), networkStandingAndCapacity: Number(fin.forecastNetworkStandingAndCapacity || 0), otherOpexExElectricityAndNetwork: Number(fin.forecastOtherOpexExElectricityAndNetwork || 0), opexExElectricity: Number(fin.forecastOpexExElectricity || 0), ebitda: Number(fin.forecastOperatingCashflow || 0),
     forecastConfidence: confidence.label || "Low", forecastBasis: forward.methodology || "Forward 12-month actual-trajectory forecast; no maturity uplift.",
     grossRunRatePaybackYears: Number.isFinite(Number(fin.grossRunRatePaybackYears)) ? Number(fin.grossRunRatePaybackYears) : null, netRunRatePaybackYears: Number.isFinite(Number(fin.runRatePaybackYears)) ? Number(fin.runRatePaybackYears) : null, paybackYears: Number.isFinite(Number(fin.paybackYears)) ? Number(fin.paybackYears) : null, paybackLabel, paybackNote, longTermPaybackYears: Number.isFinite(Number(fin.longTermPaybackYears)) ? Number(fin.longTermPaybackYears) : null
   };
@@ -5256,15 +5308,15 @@ function portfolioFinancialExportMatrixRows(rows) {
     "Site", "Site detail", "Commercial terms", "Operating days", "Days basis",
     "Actual gross day-one CAPEX EUR", "Model day-one CAPEX EUR", "Day-one CAPEX delta EUR", "Day-one CAPEX delta %", "CAPEX accuracy band",
     "Funding available EUR", "Funding applied", "Funding applied EUR", "Funding scheme", "Funding confidence", "Net invested CAPEX EUR",
-    "Next 12m forecast kWh", "Next 12m P25 kWh", "Next 12m P75 kWh", "Comparable actual annual kWh", "Comparable actual basis", "Next 12m vs comparable actual %", "Historical actual delivered kWh", "Historical age-matched model kWh", "Historical period days", "Historical period", "Historical model basis", "Historical actual vs model %", "Historical model classification", "Model forward 12m benchmark kWh", "Forward forecast vs benchmark %", "Data-quality note",
-    "Next 12m net revenue EUR", "Next 12m revenue P25 EUR", "Next 12m revenue P75 EUR", "Electricity unit cost EUR/kWh", "Next 12m electricity energy EUR", "DUoS standing EUR", "DUoS capacity EUR", "Next 12m standing and capacity EUR", "Next 12m other OPEX EUR", "Next 12m total OPEX excl electricity EUR", "Next 12m site EBITDA EUR", "Next 12m EBITDA P25 EUR", "Next 12m EBITDA P75 EUR",
+    "Next 12m forecast kWh", "Comparable actual annual kWh", "Comparable actual basis", "Next 12m vs comparable actual %", "Historical actual delivered kWh", "Historical age-matched model kWh", "Historical period days", "Historical period", "Historical model basis", "Historical actual vs model %", "Historical model classification", "Model forward 12m benchmark kWh", "Forward forecast vs benchmark %", "Data-quality note",
+    "Next 12m net revenue EUR", "Electricity unit cost EUR/kWh", "Next 12m electricity energy EUR", "DUoS standing EUR", "DUoS capacity EUR", "Next 12m standing and capacity EUR", "Next 12m other OPEX EUR", "Next 12m total OPEX excl electricity EUR", "Next 12m site EBITDA EUR",
     "Gross run-rate payback years", "Net run-rate payback years", "Effective run-rate payback years", "Run-rate payback note", "Forward forecast basis", "Long-term forecast payback years"
   ], ...display.map(r => [
     r.site, r.configuration, r.commercialTerms, portfolioFinancialExportNumber(r.days), r.daysBasis,
     portfolioFinancialExportNumber(r.actualCapex), portfolioFinancialExportNumber(r.modelDayOneCapex), portfolioFinancialExportNumber(r.capexDelta), portfolioFinancialExportNumber(r.capexDeltaPct), r.capexBand,
     portfolioFinancialExportNumber(r.fundingAvailable), r.fundingApplied ? "Yes" : "No", portfolioFinancialExportNumber(r.fundingAppliedAmount), r.fundingScheme, r.fundingConfidence, portfolioFinancialExportNumber(r.netInvestedCapex),
-    portfolioFinancialExportNumber(r.next12mKwh), portfolioFinancialExportNumber(r.next12mKwhLow), portfolioFinancialExportNumber(r.next12mKwhHigh), portfolioFinancialExportNumber(r.actualComparableKwh), r.actualComparableBasis, portfolioFinancialExportNumber(r.forecastVsActualVariance), portfolioFinancialExportNumber(r.historicalActualKwh), portfolioFinancialExportNumber(r.historicalModelKwh), portfolioFinancialExportNumber(r.historicalPeriodDays), r.historicalPeriodLabel, r.historicalModelBasis, portfolioFinancialExportNumber(r.performanceVariance), r.performanceClassification, portfolioFinancialExportNumber(r.modelForward12mKwh), portfolioFinancialExportNumber(r.forwardPerformanceVariance), r.dataQualityNote,
-    portfolioFinancialExportNumber(r.next12mRevenue), portfolioFinancialExportNumber(r.next12mRevenueLow), portfolioFinancialExportNumber(r.next12mRevenueHigh), portfolioFinancialExportNumber(r.electricityUnitCost), portfolioFinancialExportNumber(r.electricityCost), portfolioFinancialExportNumber(r.duosStandingCharge), portfolioFinancialExportNumber(r.duosCapacityCharge), portfolioFinancialExportNumber(r.networkStandingAndCapacity), portfolioFinancialExportNumber(r.otherOpexExElectricityAndNetwork), portfolioFinancialExportNumber(r.opexExElectricity), portfolioFinancialExportNumber(r.ebitda), portfolioFinancialExportNumber(r.ebitdaLow), portfolioFinancialExportNumber(r.ebitdaHigh),
+    portfolioFinancialExportNumber(r.next12mKwh), portfolioFinancialExportNumber(r.actualComparableKwh), r.actualComparableBasis, portfolioFinancialExportNumber(r.forecastVsActualVariance), portfolioFinancialExportNumber(r.historicalActualKwh), portfolioFinancialExportNumber(r.historicalModelKwh), portfolioFinancialExportNumber(r.historicalPeriodDays), r.historicalPeriodLabel, r.historicalModelBasis, portfolioFinancialExportNumber(r.performanceVariance), r.performanceClassification, portfolioFinancialExportNumber(r.modelForward12mKwh), portfolioFinancialExportNumber(r.forwardPerformanceVariance), r.dataQualityNote,
+    portfolioFinancialExportNumber(r.next12mRevenue), portfolioFinancialExportNumber(r.electricityUnitCost), portfolioFinancialExportNumber(r.electricityCost), portfolioFinancialExportNumber(r.duosStandingCharge), portfolioFinancialExportNumber(r.duosCapacityCharge), portfolioFinancialExportNumber(r.networkStandingAndCapacity), portfolioFinancialExportNumber(r.otherOpexExElectricityAndNetwork), portfolioFinancialExportNumber(r.opexExElectricity), portfolioFinancialExportNumber(r.ebitda),
     portfolioFinancialExportNumber(r.grossRunRatePaybackYears), portfolioFinancialExportNumber(r.netRunRatePaybackYears), portfolioFinancialExportNumber(r.paybackYears), r.paybackNote, r.forecastBasis, portfolioFinancialExportNumber(r.longTermPaybackYears)
   ])];
 }
@@ -5357,7 +5409,7 @@ function portfolioFinancialExportPayload() {
     ["Next 12m DUoS standing and capacity EUR", summaryObject.nextYearNetwork, "Standing charge plus MIC-linked capacity charge"],
     ["Next 12m other OPEX EUR", summaryObject.nextYearOtherOpex, "Support, services, warranties, transaction costs and landlord terms only when provided"],
     ["Next 12m total OPEX excl electricity EUR", summaryObject.nextYearOpex, "Network standing/capacity plus other OPEX"],
-    ["Next 12m site EBITDA EUR", "Next 12m EBITDA P25 EUR", "Next 12m EBITDA P75 EUR", summaryObject.nextYearEbitda, "Revenue minus electricity energy minus network minus other OPEX"],
+    ["Next 12m site EBITDA EUR", summaryObject.nextYearEbitda, "Revenue minus electricity energy minus network minus other OPEX"],
     ["Portfolio run-rate payback years", summaryObject.paybackYears ?? "", "Net invested CAPEX when funding is applied; otherwise gross actual CAPEX, divided by next-12-month site EBITDA"],
     [`${horizon} year revenue EUR`, summaryObject.horizonRevenue, "Base cumulative projection"],
     [`${horizon} year electricity EUR`, summaryObject.horizonElectricity, "Cumulative electricity purchase cost"],
@@ -5687,19 +5739,16 @@ function portfolioFinancialTableRow(fin) {
   const actualEvidenceSub = matureActualBasis
     ? `<span class="forecast-view-link">View graph</span>`
     : `Annualised basis ${kwh(fin.actualComparableKwh,0)}<br><span class="forecast-view-link">View graph</span>`;
-  const kwhRange = Number(fin.next12mKwhLow) > 0 && Number(fin.next12mKwhHigh) > 0 ? `${kwh(fin.next12mKwhLow,0)}–${kwh(fin.next12mKwhHigh,0)}` : "range unavailable";
-  const kwhCell = fin.hasActualKwh ? `<button type="button" class="portfolio-metric-button forecast-audit-button" data-forecast-modal-open="${h(portfolioCommercialTermsKey(fin.site))}" title="Open full historical graph and forecast calculation audit"><div class="portfolio-two-card-stack kwh-card-stack"><div class="portfolio-two-card primary"><span>Next 12m forecast</span><strong>${kwh(fin.next12mKwh,0)} ${portfolioForecastChangeBadge(fin.forecastVsActualVariance)}</strong><small>P25–P75 ${h(kwhRange)} · ${h(forecastComparisonLabel)}</small></div><div class="portfolio-two-card secondary"><span>${h(actualEvidenceLabel)}</span><strong>${h(actualEvidenceValue)}</strong><small>${actualEvidenceSub}</small></div></div></button>` : "—";
+  const kwhCell = fin.hasActualKwh ? `<button type="button" class="portfolio-metric-button forecast-audit-button" data-forecast-modal-open="${h(portfolioCommercialTermsKey(fin.site))}" title="Open full historical graph and forecast calculation audit"><div class="portfolio-two-card-stack kwh-card-stack"><div class="portfolio-two-card primary"><span>Next 12m forecast</span><strong>${kwh(fin.next12mKwh,0)} ${portfolioForecastChangeBadge(fin.forecastVsActualVariance)}</strong><small>${h(forecastComparisonLabel)}</small></div><div class="portfolio-two-card secondary"><span>${h(actualEvidenceLabel)}</span><strong>${h(actualEvidenceValue)}</strong><small>${actualEvidenceSub}</small></div></div></button>` : "—";
   const varianceLabel = portfolioFinancialVarianceLabel(fin.performanceVariance);
   const performanceCell = `<div class="portfolio-two-card-stack performance-card-stack" title="${h(fin.performanceStatus?.note || "Historical model comparison unavailable")}"><div class="portfolio-two-card primary model-performance-card ${h(fin.performanceStatus?.cls || "neutral")}"><span>Model performance</span><strong>${h(varianceLabel)}</strong><small>${h(fin.performanceStatus?.label || "Review")}</small></div><div class="portfolio-two-card secondary model-evidence-card"><span>Same operating period</span><strong>Actual ${kwh(fin.historicalActualKwh,0)}</strong><small>Model ${kwh(fin.historicalModelKwh,0)}</small></div></div>`;
-  const revenueRange = Number(fin.next12mRevenueLow) > 0 && Number(fin.next12mRevenueHigh) > 0 ? `P25–P75 ${currency(fin.next12mRevenueLow,0)}–${currency(fin.next12mRevenueHigh,0)}` : "Base forecast used in EBITDA";
-  const revenueCell = fin.next12mRevenue > 0 ? portfolioFinancialMetric(currency(fin.next12mRevenue, 0), revenueRange, "", "Forward 12-month net revenue used in the financial calculations. The displayed P25–P75 range uses the existing maturity-engine confidence band and is not substituted into the base-case EBITDA. It is derived from actual trajectory, bounded trend, seasonality, market growth and net tariff.") : "—";
+  const revenueCell = fin.next12mRevenue > 0 ? portfolioFinancialMetric(currency(fin.next12mRevenue, 0), "base forecast used in EBITDA", "", "Forward 12-month net revenue used in the financial calculations. It is derived from actual trajectory, bounded trend, seasonality, market growth and net tariff. Maturity is not used.") : "—";
   const mic = Number(fin.micKva || fin.site?.realMicKva || 0);
   const capacityRate = mic > 0 ? Number(fin.duosCapacityCharge || 0) / mic : 0;
   const electricityCell = fin.hasActualKwh ? `<div class="portfolio-cost-breakdown" title="Energy purchase ${currency(fin.forecastElectricityCost,0)} at ${currency(fin.electricityUnitCost || 0,3)}/kWh. Network cost ${currency(fin.forecastNetworkStandingAndCapacity,0)} includes standing ${currency(fin.duosStandingCharge,0)} and capacity ${currency(fin.duosCapacityCharge,0)} at MIC ${number(mic,0)} kVA."><div><span>Energy</span><strong>${currency(fin.forecastElectricityCost,0)}</strong><small>${currency(fin.electricityUnitCost || 0,3)}/kWh</small></div><div><span>Standing + capacity</span><strong>${currency(fin.forecastNetworkStandingAndCapacity,0)}</strong><small>MIC ${number(mic,0)} kVA</small></div></div>` : "—";
   const landlordShort = fin.landlordApplied ? "landlord included" : "landlord €0 — no terms";
   const opexCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOtherOpexExElectricityAndNetwork, 0), landlordShort, "", `Other forward 12-month OPEX excludes electricity purchase and DUoS standing/capacity, which are shown separately. ${fin.landlordNote || "No actual landlord terms provided."}`) : "—";
-  const ebitdaRange = Number.isFinite(Number(fin.forecastOperatingCashflowLow)) && Number.isFinite(Number(fin.forecastOperatingCashflowHigh)) ? `P25–P75 ${currency(fin.forecastOperatingCashflowLow,0)}–${currency(fin.forecastOperatingCashflowHigh,0)}` : "revenue − energy − network − other OPEX";
-  const ebitdaCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOperatingCashflow, 0), ebitdaRange, fin.forecastOperatingCashflow < 0 ? "cashflow-negative" : "", `Revenue ${currency(fin.next12mRevenue,0)} − energy ${currency(fin.forecastElectricityCost,0)} − network ${currency(fin.forecastNetworkStandingAndCapacity,0)} − other OPEX ${currency(fin.forecastOtherOpexExElectricityAndNetwork,0)} = site EBITDA ${currency(fin.forecastOperatingCashflow,0)}. The P25–P75 range re-runs the variable operating costs at the lower and upper energy/revenue forecasts. CAPEX, depreciation, interest, tax and unallocated corporate overhead are excluded.`) : "—";
+  const ebitdaCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOperatingCashflow, 0), "revenue − energy − network − other OPEX", fin.forecastOperatingCashflow < 0 ? "cashflow-negative" : "", `Revenue ${currency(fin.next12mRevenue,0)} − energy ${currency(fin.forecastElectricityCost,0)} − network ${currency(fin.forecastNetworkStandingAndCapacity,0)} − other OPEX ${currency(fin.forecastOtherOpexExElectricityAndNetwork,0)} = site EBITDA ${currency(fin.forecastOperatingCashflow,0)}. CAPEX, depreciation, interest, tax and unallocated corporate overhead are excluded.`) : "—";
   const paybackReason = fin.paybackState?.reason || portfolioPaybackSubtext(fin.paybackYears, fin.paybackState);
   const paybackCell = fin.paybackState?.state === "positive"
     ? `<span class="badge ${h(fin.paybackState?.cls || "good")}" title="${h(paybackReason)}">${h(portfolioPaybackLabel(fin.paybackYears, fin.paybackState))}</span><small class="portfolio-financial-cell-note" title="${h(paybackReason)}">${fin.fundingApplied ? `Net CAPEX / EBITDA · gross ${portfolioPaybackLabel(fin.grossRunRatePaybackYears)}` : "Gross CAPEX / 12m EBITDA"}</small>`
@@ -5845,7 +5894,7 @@ const DEVELOPER_NOTES = {
   batteryReplacementThresholdSoh: "SOH threshold that triggers replacement. This is state of health, not state of charge.",
   batteryBaseDegradationRate: "Base annual battery SOH degradation used in year-by-year battery logic.",
   batteryCyclingDegradationFactor: "Additional battery degradation factor from cycling duty.",
-  batteryAugmentationTriggerDeficitKw: "Reference only. Staged battery deployment currently responds to the audited power and usable-energy deficits rather than this standalone threshold.",
+  batteryAugmentationTriggerDeficitKw: "Deficit threshold used by the model augmentation logic.",
   overnightRechargeWindowStart: "Start hour of overnight recharge window.",
   overnightRechargeWindowEnd: "End hour of overnight recharge window.",
   overnightRechargeWindowDuration: "Recharge duration used in overnight recharge checks.",
@@ -5863,7 +5912,7 @@ const DEVELOPER_NOTES = {
   kempowerChargerWarrantyAnnualRate: "Annual charger warranty rate for Kempower hardware.",
   autelBatteryWarrantyAnnualRate: "Annual battery warranty rate for Autel batteries.",
   polariumBatteryWarrantyAnnualRate: "Annual battery warranty rate for Polarium batteries.",
-  operatingHoursPerDay: "Reference only. It is not applied until the model has an audited intraday operating profile rather than an annual-demand approximation.",
+  operatingHoursPerDay: "Operating hours assumption retained from the base model.",
   codYear: "Model start year used internally to label the model years.",
   modelHorizon: "Full base model horizon. User-facing investment horizon is selected separately in Investment Case.",
   chargerEquipmentReplacementCycleYears: "Controls the year-by-year charger replacement trigger.",
@@ -5886,19 +5935,17 @@ function developerField(key) {
   const unit = UNIT_MAP[key] || dict?.[2] || "";
   const isNumber = typeof DEFAULT_INPUTS[key] === "number";
   const displayValue = isNumber ? significantValue(state.inputs[key], unit) : h(state.inputs[key]);
-  return `<div class="field advanced-field"><label for="${key}">${h(label)}${unit ? ` <span class="unit-pill">${h(unit)}</span>` : ""} ${assumptionTagHtml(key)}</label><div class="advanced-input-wrap"><input id="${key}" data-advanced-input="${key}" data-advanced-unit="${h(unit)}" type="${isNumber ? "number" : "text"}" step="${advancedStep(unit)}" value="${displayValue}" /></div><small>${h(note.replace(/Inputs!\w+\d+|Summary!\w+\d+|Demand_Model/gi, "base model"))}</small></div>`;
+  return `<div class="field advanced-field"><label for="${key}">${h(label)}${unit ? ` <span class="unit-pill">${h(unit)}</span>` : ""}</label><div class="advanced-input-wrap"><input id="${key}" data-advanced-input="${key}" data-advanced-unit="${h(unit)}" type="${isNumber ? "number" : "text"}" step="${advancedStep(unit)}" value="${displayValue}" /></div><small>${h(note.replace(/Inputs!\w+\d+|Summary!\w+\d+|Demand_Model/gi, "base model"))}</small></div>`;
 }
-function renderAdvancedSettings(r) {
-  const snapshotCount = forecastSnapshotCount();
+function renderAdvancedSettings() {
   return `
-    ${sectionTitle("Advanced Model Settings", "Advanced controls, audit provenance and forecast tracking for analyst review.")}
-    <section class="panel forecast-snapshot-panel"><h3>Forecast snapshot ledger</h3><p>Save dated forecasts with the site, model version, assumption hash, configuration hash, 12-month kWh/revenue prediction and investment outputs. This creates the evidence base for future forecast-versus-actual accuracy reporting.</p><div class="grid-4">${kpi("Saved snapshots", number(snapshotCount,0))}${kpi("Current model", APP_RELEASE_VERSION)}${kpi("Current site", h(state.siteContext?.site?.name || state.inputs.siteAddress || "Unnamed site"))}${kpi("Current forecast", kwh(r?.financialSummary?.year1DeliveredEnergy || 0,0), "next model year")}</div><div class="actions"><button type="button" class="primary" id="saveForecastSnapshot">Save current forecast</button><button type="button" class="secondary" id="exportForecastSnapshots" ${snapshotCount ? "" : "disabled"}>Export snapshot ledger</button><button type="button" class="secondary" id="clearForecastSnapshots" ${snapshotCount ? "" : "disabled"}>Clear ledger</button></div></section>
-    <div class="reset-card" style="border-color:#efd38e;background:linear-gradient(135deg,#fff3d6,#fbfaf7)"><div><strong>Reset all advanced settings to default values</strong><p>Restores the visible advanced assumptions to the base default values. Inputs are tagged by provenance and calculation status. Active inputs affect their stated downstream calculations; Reference-only inputs are retained for audit context and do not currently change results.</p></div><button class="reset" data-reset="advanced">Reset all</button></div>
+    ${sectionTitle("Advanced Model Settings", "Advanced controls for hidden model inputs that affect the calculations but are not shown in the main investor workflow.")}
+    <div class="reset-card" style="border-color:#efd38e;background:linear-gradient(135deg,#fff3d6,#fbfaf7)"><div><strong>Reset all advanced settings to default values</strong><p>Restores the visible advanced assumptions to the base default values. Changes here affect demand, feasibility, capex, opex, ROI, cash flow and scenario ranking where the relevant factor is used.</p></div><button class="reset" data-reset="advanced">Reset all</button></div>
     <div class="advanced-groups">
       ${DEVELOPER_GROUPS.map(group => {
         const keys = group.keys.filter(k => advancedInputKeys().includes(k));
         if (!keys.length) return "";
-        return `<section class="panel"><h3>${h(group.title)}</h3><p class="advanced-section-note">Only advanced assumptions not already editable in the main workflow are shown here. Each input is tagged as active, derived, diagnostic or reference only.</p><div class="input-grid three">${keys.map(developerField).join("")}</div></section>`;
+        return `<section class="panel"><h3>${h(group.title)}</h3><p class="advanced-section-note">Only advanced assumptions not already editable in the main workflow are shown here.</p><div class="input-grid three">${keys.map(developerField).join("")}</div></section>`;
       }).join("")}
     </div>`;
 }
@@ -5975,7 +6022,7 @@ function renderInvestorReport(r) {
 function updateResponsiveTabNavigation() {
   const tabs = document.getElementById("tabs");
   if (!tabs) return;
-  const buttons = Array.from(tabs.querySelectorAll(".nav-tab-list button"));
+  const buttons = Array.from(tabs.querySelectorAll("button"));
   if (!buttons.length) return;
   const applyLabels = (mode = "long") => {
     buttons.forEach(btn => {
@@ -6021,13 +6068,12 @@ function render() {
     document.body.classList.toggle("portfolio-financial-active", activeTab === "portfolioFinancials");
     el("app")?.classList.toggle("portfolio-financial-wide", activeTab === "portfolioFinancials");
     updateResponsiveTabNavigation();
-    document.querySelectorAll(".tabs button[data-tab]").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
-    applyNavigationMode();
+    document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
+    updateWorkflowStepper();
     if (activeTab !== "site" && map) {
       resetMapState("leaving site tab");
     }
     r = results();
-    updateWorkflowStepper(r);
     el("app").innerHTML = `${firstUseBanner()}${pages[activeTab]()}${guidePanelHtml()}`;
     wirePage(r);
     if (activeTab === "site") setTimeout(() => {
@@ -6463,11 +6509,7 @@ function wirePage(r) {
         return;
       }
       const parseMs = Number(payload?.parserTimingsMs?.parserTotal || payload?.requestTimingsMs?.serverBeforeResponse || 0);
-      const portfolioSnapshotResult = savePortfolioForecastSnapshots(portfolioFinancialRows(), { reason: "actual-data-upload", actualDataCutoff: payload?.latestDate || null });
-      const snapshotNote = portfolioSnapshotResult.persisted
-        ? ` Saved ${portfolioSnapshotResult.saved} dated forecast snapshots.`
-        : ` Forecasts were activated, but browser storage could not save the optional snapshot ledger${portfolioSnapshotResult.error ? ` (${portfolioSnapshotResult.error})` : ""}.`;
-      portfolioUploadStatusText(`Step 5 of 5 — Complete${parseMs ? ` in ${(parseMs / 1000).toFixed(1)} seconds` : ""} using the ${sourceLabel}.${snapshotNote}`);
+      portfolioUploadStatusText(`Step 5 of 5 — Complete${parseMs ? ` in ${(parseMs / 1000).toFixed(1)} seconds` : ""} using the ${sourceLabel}. Activating forecasts…`);
       render();
     } catch (err) {
       portfolioLiveUploadError = portfolioNormaliseUploadError(err);
@@ -6771,25 +6813,8 @@ function wirePage(r) {
   if (exportAssumptions) exportAssumptions.addEventListener("click", () => exportAssumptionsJson(state));
   const exportAudit = el("exportAudit");
   if (exportAudit) exportAudit.addEventListener("click", () => exportAuditJson(state, r));
-  const saveSnapshotButton = el("saveForecastSnapshot");
-  if (saveSnapshotButton) saveSnapshotButton.addEventListener("click", () => {
-    const snapshot = saveForecastSnapshot(state, r, "manual-save");
-    alert(snapshot.storagePersisted
-      ? `Forecast snapshot saved for ${snapshot.siteName}.`
-      : `The forecast remains active, but the snapshot could not be saved in browser storage${snapshot.storageError ? `: ${snapshot.storageError}` : "."}`);
-    render();
-  });
-  const exportSnapshotsButton = el("exportForecastSnapshots");
-  if (exportSnapshotsButton) exportSnapshotsButton.addEventListener("click", () => exportForecastSnapshotLedger());
-  const clearSnapshotsButton = el("clearForecastSnapshots");
-  if (clearSnapshotsButton) clearSnapshotsButton.addEventListener("click", () => {
-    if (confirm("Clear all saved forecast snapshots from this browser?")) { clearForecastSnapshots(); render(); }
-  });
   const exportInvestorPdfButton = el("exportInvestorPdf");
-  if (exportInvestorPdfButton) exportInvestorPdfButton.addEventListener("click", () => {
-    saveForecastSnapshot(state, r, "investor-report-export");
-    exportInvestorPdf(state, r);
-  });
+  if (exportInvestorPdfButton) exportInvestorPdfButton.addEventListener("click", () => exportInvestorPdf(state, r));
   const exportAnnualExcelButton = el("exportAnnualExcel");
   if (exportAnnualExcelButton) exportAnnualExcelButton.addEventListener("click", () => exportAnnualFinancialsExcel(state, r));
   const exportPortfolioFinancialsExcelButton = el("exportPortfolioFinancialsExcel");
@@ -7081,7 +7106,6 @@ function updateMap() {
 function goTab(tab) {
   tab = TAB_ALIASES[tab] || tab;
   if (!VALID_TABS.includes(tab)) tab = "site";
-  if (!INVESTOR_TABS.has(tab)) navigationMode = "analyst";
   activeTab = tab;
   if (window.location.hash !== `#${tab}`) window.location.hash = tab;
   else render();
@@ -7089,15 +7113,13 @@ function goTab(tab) {
 
 window.__evHubGoTab = goTab;
 
+const stepper = document.getElementById("workflowStepper");
+if (stepper) stepper.addEventListener("click", e => {
+  const button = e.target.closest("button[data-step-tab]");
+  if (button) goTab(button.dataset.stepTab);
+});
+
 document.getElementById("tabs").addEventListener("click", e => {
-  const modeButton = e.target.closest("button[data-nav-mode]");
-  if (modeButton) {
-    navigationMode = modeButton.dataset.navMode === "analyst" ? "analyst" : "investor";
-    if (navigationMode === "investor" && !INVESTOR_TABS.has(activeTab)) activeTab = "investment";
-    if (window.location.hash !== `#${activeTab}`) window.location.hash = activeTab;
-    else render();
-    return;
-  }
   const button = e.target.closest("button[data-tab]");
   if (button) goTab(button.dataset.tab);
 });

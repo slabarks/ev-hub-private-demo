@@ -1,61 +1,75 @@
-# EV Charging Hub Investment Tool — V21.6
+# EV Charging Hub Investment Tool — V21.6 Prediction Enhanced
 
-V21.6 is the investor-model integrity and auditability release built from the production V21.5 baseline.
+V21.6 is built directly from the approved **V21.5 Baseline Frozen Release**. The familiar interface, navigation, cards, tables and Portfolio Financial Performance layout are preserved.
+
+The release concentrates on improving prediction quality, maturity assessment and auditability using the operating data already available. The only intentional visible extension is in **Portfolio Calibration**, where each site can display a compact maturity/repeatability label and the existing detail window explains the evidence behind that classification.
 
 ## Build
 
 - Application: `V21.6`
-- Build: `EVHUB-V21.6-20260719-R1`
-- History schema: `v21-live-history-v7`
+- Build: `EVHUB-V21.6-20260721-R1`
+- Live-history schema: `v21-live-history-v7`
 - Parser: `EVHUB-LIVE-PARSER-21.6`
-- Cashflow convention: construction at period 0; operating cashflow at each year end
+- Package version: `21.6.0`
 
-## Principal improvements
+## Prediction-engine improvements
 
-### Financial integrity
+### Explainable ensemble forecast
 
-- Correct period-zero CAPEX and year-end operating cashflow timing for NPV.
-- Robust IRR calculation that returns no result when a valid project IRR does not exist.
-- Fractional-year payback rather than a whole-year marker only.
-- Gross CAPEX, grant applied, unapplied grant and operator-funded CAPEX shown separately.
-- Grant support capped at gross initial CAPEX so it cannot create negative investment.
-- Secured-lease NPV/IRR and post-lease cashflow shown separately from full-horizon returns.
-- Gross and net ROI retained as distinct metrics; scenario ranking policy itself is unchanged.
+The forward forecast evaluates multiple transparent candidate methods rather than relying on one fixed formula:
 
-### Battery and technical consistency
+- annual actual basis;
+- recent 30-day run-rate;
+- recent 90-day run-rate;
+- seasonal-naive persistence;
+- bounded and decaying trend;
+- empirical maturity-ramp challenger.
 
-- Usable battery energy now consistently applies SOH, reserve and dispatchable fraction.
-- Overnight recharge uses the configured start/end window, with duration as fallback.
-- Reliability assumptions reduce delivered energy through an explicit availability factor.
-- The technical-engine battery service calculation is the single financial OPEX source.
-- Known/actual installed projects initialise selected batteries at COD and do not buy the same assets again as staged augmentation.
-- ESB application fees now propagate into model-calculated initial CAPEX.
+Weights and any conservative bias correction are selected from the closest available historical evidence by forecast horizon, site age and site category. The chosen method weights remain available to the calculation audit; no opaque machine-learning model is used.
 
-### Investor auditability
+### No-lookahead validation
 
-- Every default input and configuration control has structured provenance and status metadata.
-- Inputs are tagged as measured, portfolio calibrated, engineering, commercial, diagnostic or reference-only.
-- Reference-only controls are identified rather than presented as active model drivers.
-- Operating-site P25/P50/P75 kWh, revenue and operating-cashflow bands are surfaced in Portfolio Financials and exports.
-- A browser-local forecast snapshot ledger records model version, data cutoff, assumptions, configuration and forward predictions.
-- Snapshot storage failure is isolated from the live-data upload: a valid upload remains active even when browser storage is unavailable.
+Historical validation is performed with rolling forecast origins. At every origin, only information available by that date is used. Method performance and confidence are evaluated leave-one-site-out so a site is not used both to tune and independently assess its own forecast.
 
-### Navigation
+### Empirical confidence and maturity
 
-- Duplicate tab/stepper navigation is replaced by one navigation system.
-- Investor and Analyst modes separate decision outputs from calibration and builder controls.
-- The readiness strip reflects site, AADT, technical, financial and report readiness rather than merely visited tabs.
+- Forecast ranges use observed validation errors where enough independent evidence exists, while retaining conservative minimum uncertainty floors.
+- Maturity curves converge naturally rather than being forced to jump to 100% at month 24.
+- Mature commercial potential is represented as P25, P50 and P75 run-rates.
+- Commercial demand potential is kept separate from the technical delivery ceiling.
 
-### Live calibration upload
+### Repeatability classification
 
-- Complete ZIP or `Daily_Charger_kWh.xlsx` files are parsed in-browser first.
-- Canonical daily/monthly site histories are validated before activation.
-- Python upload routes remain available as resilient fallback paths.
-- The previous valid dataset is preserved after a failed upload attempt.
+Portfolio Calibration can classify a site as:
 
-## Commercial policies deliberately not retuned
+- Early evidence
+- Ramping
+- Stabilising
+- Repeatable / mature
+- Late-ramping
+- Declining / disrupted
+- Capacity-constrained
 
-V21.6 does not silently alter the segment demand coefficients, default discount/hurdle rate, scenario-ranking objective or new-site downside/upside assumptions. These require commercial approval and are documented in `V21.6_COMMERCIAL_DECISIONS_PENDING.md`.
+The classification considers operating age, complete months, daily coverage, recent seasonally adjusted stability, robust volatility, repeated stability checks, possible disruptions and technical headroom.
+
+### Data-quality and disruption checks
+
+The daily parser now retains reporting and active charger counts. The engine can identify evidence such as missing source dates, extended zero-output periods, session-energy anomalies and persistent charger-count changes. Suspected disruptions reduce confidence rather than automatically being treated as genuine demand loss.
+
+### Model governance
+
+The application can preserve the first available model/assumption snapshot for future comparison. A snapshot created after a site was approved is explicitly labelled as a first-available baseline and is not misrepresented as the original historical approval case.
+
+## UI preservation
+
+- `assets/styles.css` is byte-for-byte identical to the approved V21.5 frozen baseline.
+- No V22 workspace, Board/Analyst mode or broad navigation redesign is included.
+- No additional permanent cards or columns were added to Portfolio Financial Performance.
+- Only the approved Portfolio Calibration maturity labels and explanation in the existing detail window were added.
+
+## Calibration upload
+
+The complete dashboard ZIP or `Daily_Charger_kWh.xlsx` can be parsed locally in the browser. The parser builds continuous daily histories, rolling-30-day energy, monthly observations and charger-reporting diagnostics. The Python upload endpoint remains available as a fallback and for the complete server workflow.
 
 ## Local start
 
@@ -71,19 +85,16 @@ macOS/Linux:
 ./run_local_server.sh
 ```
 
-The complete app should be opened through `python server.py` so location, AADT and upload fallback services remain available.
+The production entry point is:
 
-## Tests
+```bash
+python server.py
+```
+
+## Test
 
 ```bash
 npm test
 ```
 
-The eight-stage suite covers syntax/static guards, local ZIP/XLSX parsing, AADT regression, Python live-history parsing, maturity forecasting, financial-integrity and randomized invariants, API routes, upload fallback and static delivery.
-
-See:
-
-- `RELEASE_NOTES_V21.6.md`
-- `V21.6_PRODUCTION_VALIDATION.md`
-- `V21.6_CHANGE_IMPACT.md`
-- `V21.6_COMMERCIAL_DECISIONS_PENDING.md`
+See `V21.6_PRODUCTION_VALIDATION.md` for the supplied-data results, rolling-origin validation metrics and known limitations.

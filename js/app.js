@@ -300,9 +300,9 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const APP_RELEASE_VERSION = "V21.6";
-const APP_BUILD_ID = "EVHUB-V21.6-20260721-R1";
-const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.6";
+const APP_RELEASE_VERSION = "V21.7";
+const APP_BUILD_ID = "EVHUB-V21.7-20260722-R1";
+const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.7";
 const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21_3";
 const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7";
 const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
@@ -637,7 +637,7 @@ function portfolioMergeLiveActual(site, liveItem) {
       appliedPositiveCount += 1;
     }
   });
-  ["asOfDate", "sourceFile", "source", "siteName", "firstActiveDate", "firstCommercialSessionDate", "firstCommercialKwhDate", "commercialDaysBasis", "annualisationBasis", "annualisationMethod"].forEach(key => {
+  ["asOfDate", "sourceFile", "source", "siteName", "firstActiveDate", "commercialOperationDate", "commercialOperationSource", "firstRecordedActivityDate", "firstRecordedSessionDate", "firstRecordedKwhDate", "firstCommercialSessionDate", "firstCommercialKwhDate", "commercialDaysBasis", "annualisationBasis", "annualisationMethod", "commissioningPrefixExcluded"].forEach(key => {
     if (liveActual[key]) mergedActual[key] = liveActual[key];
   });
   if (Array.isArray(liveActual.monthlyHistory) && liveActual.monthlyHistory.length) {
@@ -1233,7 +1233,18 @@ function renderOrderedSections(tab, sections) {
 function updateWorkflowStepper() {
   const idx = VALID_TABS.indexOf(activeTab);
   const pct = VALID_TABS.length <= 1 ? 0 : (idx / (VALID_TABS.length - 1)) * 100;
-  const stepper = document.getElementById("workflowStepper");
+  const brandLogoReset = document.getElementById("brandLogoReset");
+if (brandLogoReset) {
+  brandLogoReset.addEventListener("click", resetApplicationFromLogo);
+  brandLogoReset.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      resetApplicationFromLogo();
+    }
+  });
+}
+
+const stepper = document.getElementById("workflowStepper");
   if (stepper) stepper.style.setProperty("--progress", `${Math.max(0, Math.min(100, pct))}%`);
   const statusText = document.getElementById("workflowStatusText");
   if (statusText) statusText.textContent = `Step ${idx + 1} of ${VALID_TABS.length}: ${TAB_LABELS[activeTab]}`;
@@ -2898,11 +2909,17 @@ function portfolioDateLabel(date) {
 function portfolioActualDateInfo(site) {
   const diagnostics = site?.liveActuals?.diagnostics || {};
   const actual = site?.actual || {};
+  const commercialOperationDate = portfolioParseDate(diagnostics.commercialOperationDate || actual.commercialOperationDate);
+  const commercialOperationSource = String(diagnostics.commercialOperationSource || actual.commercialOperationSource || diagnostics.commercialDaysBasis || actual.commercialDaysBasis || "");
+  const firstRecordedActivityDate = portfolioParseDate(diagnostics.firstRecordedActivityDate || actual.firstRecordedActivityDate);
+  const firstRecordedSessionDate = portfolioParseDate(diagnostics.firstRecordedSessionDate || actual.firstRecordedSessionDate);
+  const firstRecordedKwhDate = portfolioParseDate(diagnostics.firstRecordedKwhDate || actual.firstRecordedKwhDate);
   const firstSessionDate = portfolioParseDate(diagnostics.firstCommercialSessionDate || diagnostics.firstSessionDate || actual.firstCommercialSessionDate || actual.firstSessionDate);
   const firstKwhDate = portfolioParseDate(diagnostics.firstCommercialKwhDate || diagnostics.firstKwhDate || actual.firstCommercialKwhDate || actual.firstKwhDate);
   const firstActiveDate = portfolioParseDate(diagnostics.firstActiveDate || actual.firstActiveDate);
   const latestDate = portfolioParseDate(diagnostics.latestDate || actual.asOfDate || site?.liveActuals?.asOfDate);
-  return { firstSessionDate, firstKwhDate, firstActiveDate, latestDate };
+  const commissioningPrefixExcluded = diagnostics.commissioningPrefixExcluded || actual.commissioningPrefixExcluded || null;
+  return { commercialOperationDate, commercialOperationSource, firstRecordedActivityDate, firstRecordedSessionDate, firstRecordedKwhDate, firstSessionDate, firstKwhDate, firstActiveDate, latestDate, commissioningPrefixExcluded };
 }
 function portfolioActualDataDays(site) {
   const actual = site?.actual || {};
@@ -2950,7 +2967,7 @@ function portfolioAnnualOperatingValues(site, metrics = portfolioOperatingMetric
   const periodStart = isTrailing365Actual && periodEnd
     ? portfolioDateAddDays(periodEnd, -364)
     : hasExplicitAnnual
-      ? (dateInfo.firstSessionDate || dateInfo.firstKwhDate || dateInfo.firstActiveDate || (periodEnd ? portfolioDateAddDays(periodEnd, -Math.max(0, dataDays - 1)) : null))
+      ? (dateInfo.commercialOperationDate || dateInfo.firstSessionDate || dateInfo.firstKwhDate || dateInfo.firstActiveDate || (periodEnd ? portfolioDateAddDays(periodEnd, -Math.max(0, dataDays - 1)) : null))
       : (periodEnd ? portfolioDateAddDays(periodEnd, -Math.max(0, Math.min(30, dataDays || 30) - 1)) : null);
   const periodDays = isTrailing365Actual ? 365 : (hasExplicitAnnual ? (dataDays > 0 ? dataDays : 30) : Math.min(30, dataDays || 30));
   const periodLabel = periodStart && periodEnd ? `${portfolioDateLabel(periodStart)} → ${portfolioDateLabel(periodEnd)}` : (isTrailing365Actual ? "trailing 365-day window" : `${number(periodDays,0)}-day operating history`);
@@ -2959,7 +2976,7 @@ function portfolioAnnualOperatingValues(site, metrics = portfolioOperatingMetric
   else if (hasExplicitAnnual && ["daily_cumulative", "partial_cumulative"].includes(method)) basis = `Cumulative actual annualised (${periodLabel})${uploadedSuffix}`;
   else if (hasExplicitAnnual) basis = `Annualised actual basis (${periodLabel})${uploadedSuffix}`;
   else basis = `Rolling 30-day run-rate annualised (${periodLabel})${uploadedSuffix}`;
-  return { annualKwh, annualSessions, annualRevenue, hasExplicitAnnual, isTrailing365Actual, annualisationMethod: method, dataDays, basis, periodDays, periodStart, periodEnd, periodLabel, firstActiveDate: dateInfo.firstActiveDate };
+  return { annualKwh, annualSessions, annualRevenue, hasExplicitAnnual, isTrailing365Actual, annualisationMethod: method, dataDays, basis, periodDays, periodStart, periodEnd, periodLabel, firstActiveDate: dateInfo.commercialOperationDate || dateInfo.firstActiveDate };
 }
 function portfolioFallbackComparisonYearIndex(site, annualActual) {
   const explicit = Number(site?.maturity?.comparisonYearIndex || 0);
@@ -3951,9 +3968,28 @@ function portfolioOperationalDaysInfo(site, annualActual = null) {
     }
     return null;
   };
-  const firstSession = fromDate(dateInfo.firstSessionDate, "first-session", "from first session", "First real session", "high");
+  if (dateInfo.commercialOperationDate) {
+    const source = String(dateInfo.commercialOperationSource || "");
+    const sourceLabel = source === "inferred_sustained_activity"
+      ? "Inferred sustained commercial activity"
+      : source === "verified_commercial_operation"
+        ? "Verified commercial-operation date"
+        : source === "first_kwh_fallback"
+          ? "First-kWh fallback"
+          : "First-session fallback";
+    const confidence = source === "inferred_sustained_activity" || source === "verified_commercial_operation" ? "high" : "medium";
+    const commercial = fromDate(dateInfo.commercialOperationDate, "commercial-operation", "from commercial operation", sourceLabel, confidence);
+    if (commercial) {
+      const prefix = dateInfo.commissioningPrefixExcluded;
+      if (prefix && Number(prefix.dormantGapDays || 0) >= 30) {
+        commercial.note += ` · commissioning prefix excluded (${number(prefix.kwh || 0,1)} kWh / ${number(prefix.sessions || 0,0)} session${Number(prefix.sessions || 0) === 1 ? "" : "s"}; ${number(prefix.dormantGapDays || 0,0)}-day gap)`;
+      }
+      return commercial;
+    }
+  }
+  const firstSession = fromDate(dateInfo.firstSessionDate, "first-session-fallback", "from commercial operation", "First-session fallback", "medium");
   if (firstSession) return firstSession;
-  const firstKwh = fromDate(dateInfo.firstKwhDate, "first-kwh", "from first kWh", "First KWh movement", "high");
+  const firstKwh = fromDate(dateInfo.firstKwhDate, "first-kwh-fallback", "from commercial operation", "First-kWh fallback", "medium");
   if (firstKwh) return firstKwh;
   const energyDays = portfolioEnergyDeliveryDaysInfo(site);
   if (energyDays) return energyDays;
@@ -4361,7 +4397,14 @@ function portfolioFinancialPaybackState(fin) {
   if (!fin.hasActualKwh) return { label: "No actual kWh", cls: "neutral", sortValue: null, state: "notCalculated", reason: "No actual kWh is available for the site." };
   if (!fin.hasOperationalDays) return { label: "Days missing", cls: "neutral", sortValue: null, state: "notCalculated", reason: "Operational days are not confirmed, so the forward forecast is not reliable enough for payback." };
   if (!fin.hasActualCapex) return { label: "CAPEX missing", cls: "neutral", sortValue: null, state: "capexMissing", reason: "Actual day-one CAPEX is missing, so run-rate payback cannot be calculated." };
-  if (Number.isFinite(Number(fin.runRatePaybackYears)) && Number(fin.runRatePaybackYears) > 0) return { label: "Payback available", cls: "good", sortValue: Number(fin.runRatePaybackYears), state: "positive", reason: fin.fundingApplied ? "Run-rate payback equals net invested CAPEX after applied funding divided by next-12-month site EBITDA." : "Run-rate payback equals gross actual day-one CAPEX divided by next-12-month site EBITDA." };
+  const years = Number(fin.runRatePaybackYears);
+  if (Number.isFinite(years) && years === 0 && Number(fin.effectivePaybackCapex || 0) === 0 && Number(fin.forecastOperatingCashflow || 0) > 0) {
+    return { label: "Immediate / 0.0 yrs", cls: "good", sortValue: 0, state: "immediate", reason: "Applied funding reduces net invested CAPEX to €0 while next-12-month site EBITDA is positive." };
+  }
+  if (Number.isFinite(years) && years > 0) {
+    const basis = fin.fundingApplied ? "net invested CAPEX after applied funding" : "gross actual day-one CAPEX";
+    return { label: "Payback available", cls: "good", sortValue: years, state: "positive", reason: `Calculated run-rate payback: ${number(years,1)} years. Run-rate payback equals ${basis} divided by next-12-month site EBITDA.` };
+  }
   return { label: "No payback", cls: "bad", sortValue: null, state: "negativeCashflow", reason: "Next-12-month site EBITDA is not positive." };
 }
 function portfolioForward12mModelBenchmark(site, result, operationalDays) {
@@ -4424,7 +4467,7 @@ function portfolioHistoricalModelBacktest(site, result, annualActual, operationa
   } else {
     periodDays = Math.max(0, Math.round(Number(operationalDays || annualActual?.dataDays || cumulative.days || diagnostics.daysLive || 0)));
     periodEnd = annualActual?.periodEnd || dateInfo.latestDate;
-    periodStart = dateInfo.firstSessionDate || dateInfo.firstKwhDate || dateInfo.firstActiveDate || (periodEnd && periodDays > 0 ? portfolioDateAddDays(periodEnd, -(periodDays - 1)) : null);
+    periodStart = dateInfo.commercialOperationDate || dateInfo.firstSessionDate || dateInfo.firstKwhDate || dateInfo.firstActiveDate || (periodEnd && periodDays > 0 ? portfolioDateAddDays(periodEnd, -(periodDays - 1)) : null);
     actualKwh = Math.max(0, Number(diagnostics.cumulativeKwh || cumulative.kwhTotal || 0));
     if (!(actualKwh > 0) && annualActual?.isTrailing365Actual) {
       actualKwh = Math.max(0, Number(annualActual.annualKwh || 0));
@@ -4440,7 +4483,7 @@ function portfolioHistoricalModelBacktest(site, result, annualActual, operationa
   }
   if (!(periodDays > 0) && periodStart && periodEnd) periodDays = Math.max(1, portfolioDateDiffDays(periodStart, periodEnd) + 1);
   const inputs = result?.calibratedInputs || result?.inputs;
-  const firstCommercial = dateInfo.firstSessionDate || dateInfo.firstKwhDate || dateInfo.firstActiveDate || periodStart;
+  const firstCommercial = dateInfo.commercialOperationDate || dateInfo.firstSessionDate || dateInfo.firstKwhDate || dateInfo.firstActiveDate || periodStart;
   let startAgeDays = 0;
   if (firstCommercial && periodStart) startAgeDays = Math.max(0, portfolioDateDiffDays(firstCommercial, periodStart) || 0);
   else if (Number(operationalDays || 0) > periodDays) startAgeDays = Math.max(0, Math.round(Number(operationalDays || 0) - periodDays));
@@ -4709,7 +4752,7 @@ function portfolioFinancialRow(site, benchmarks, maturityModel) {
   fin.historyQuality = portfolioFinancialHistoryQuality(fin);
   fin.performanceBucket = portfolioFinancialPerformanceBucket(fin);
   fin.status = fin.performanceStatus;
-  fin.enoughForPayback = hasActualKwh && hasActualCapex && hasOperationalDays && Number.isFinite(Number(runRatePaybackYears)) && runRatePaybackYears > 0;
+  fin.enoughForPayback = hasActualKwh && hasActualCapex && hasOperationalDays && Number.isFinite(Number(runRatePaybackYears)) && runRatePaybackYears >= 0;
   fin.paybackState = portfolioFinancialPaybackState(fin);
   fin.muted = !hasActualKwh || !hasOperationalDays || Number(operationalDays || 0) < 30;
   fin.partial = !fin.muted && (!hasActualCapex || fin.revenueEstimated || maturityForecast.next12mOperatingCashflow <= 0);
@@ -4783,7 +4826,7 @@ function portfolioFinancialRevenueKey(fin) {
 }
 function portfolioFinancialPaybackKey(fin) {
   const state = fin?.paybackState?.state || "notCalculated";
-  if (state === "positive") return "positive";
+  if (state === "positive" || state === "immediate") return "positive";
   if (state === "negativeCashflow") return "no-payback";
   if (state === "capexMissing") return "capex-missing";
   if (state === "lowHistory") return "low-history";
@@ -5440,17 +5483,21 @@ function portfolioFinancialExportPayload() {
 }
 
 function portfolioPaybackLabel(years, state = null) {
+  if (state?.state === "immediate") return "Immediate / 0.0 yrs";
   if (state?.label && state.label !== "Payback available") return state.label;
   const n = Number(years);
-  if (!Number.isFinite(n) || n <= 0) return "Not calculated";
+  if (!Number.isFinite(n) || n < 0) return "Not calculated";
+  if (n === 0) return "Immediate / 0.0 yrs";
   if (n > 50) return ">50 yrs";
   return `${number(n, 1)} yrs`;
 }
 function portfolioPaybackSubtext(years, state = null) {
+  if (state?.state === "immediate") return state.reason || "zero net invested CAPEX";
   if (state?.label && state.label !== "Payback available") return state.reason || "Not calculated";
   const n = Number(years);
-  if (Number.isFinite(n) && n > 50) return "marginal cashflow";
-  if (Number.isFinite(n) && n > 0) return state?.reason?.includes("pre-landlord") ? "actual CAPEX / pre-landlord EBITDA" : "actual CAPEX / EBITDA";
+  if (Number.isFinite(n) && n > 50) return `Calculated run-rate payback: ${number(n,1)} years`;
+  if (Number.isFinite(n) && n > 0) return state?.reason || "actual CAPEX / EBITDA";
+  if (n === 0) return "zero net invested CAPEX";
   return "not calculated";
 }
 function portfolioFinancialVarianceLabel(v) {
@@ -5482,9 +5529,12 @@ function portfolioFinancialSortHeader(key, label) {
   const dir = portfolioFinancialSortDir();
   const isActive = currentKey === key;
   const arrow = isActive ? (dir === "asc" ? "↑" : "↓") : "↕";
+  const directionLabel = key === "payback"
+    ? (dir === "asc" ? "best to worst" : "worst to best")
+    : (dir === "asc" ? "ascending" : "descending");
   const title = isActive
-    ? `Sorted by ${label} ${dir === "asc" ? "ascending" : "descending"}. Click to reverse.`
-    : `Sort by ${label}`;
+    ? `Sorted by ${label} ${directionLabel}. Click to reverse.`
+    : `Sort by ${label}${key === "payback" ? " from best to worst" : ""}`;
   return `<button type="button" class="sort-header portfolio-financial-sort-header${isActive ? " active" : ""}" data-portfolio-financial-sort="${h(key)}" aria-label="${h(title)}" title="${h(title)}"><span>${h(label)}</span><span class="sort-arrow" aria-hidden="true">${arrow}</span></button>`;
 }
 function portfolioFinancialSortValue(fin, key) {
@@ -5510,7 +5560,7 @@ function portfolioFinancialSortValue(fin, key) {
     case "electricity": return { type: "number", value: Number(fin.forecastElectricityCost), missing: !fin.hasActualKwh };
     case "opex": return { type: "number", value: Number(fin.forecastOpexExElectricity), missing: !fin.hasActualKwh };
     case "ebitda": return { type: "number", value: Number(fin.forecastOperatingCashflow), missing: !fin.hasActualKwh };
-    case "payback": return { type: "number", value: Number.isFinite(Number(fin.paybackYears)) ? Number(fin.paybackYears) : Number.POSITIVE_INFINITY, missing: false };
+    case "payback": return { type: "payback", value: Number(fin.paybackYears), missing: !["positive", "immediate", "negativeCashflow"].includes(fin?.paybackState?.state), state: fin?.paybackState?.state || "notCalculated" };
     case "performance": return { type: "number", value: Number(fin.performanceVariance), missing: !Number.isFinite(Number(fin.performanceVariance)) };
     case "status": return { type: "number", value: statusRank[fin.status?.label] || 8, missing: false };
     case "quality": return { type: "number", value: qualityRank[portfolioFinancialDataQualityShort(fin.dataQuality)] || 5, missing: false };
@@ -5519,10 +5569,35 @@ function portfolioFinancialSortValue(fin, key) {
 }
 function portfolioFinancialSortRows(rows) {
   const key = portfolioFinancialSortKey();
-  const dir = portfolioFinancialSortDir() === "desc" ? -1 : 1;
+  const direction = portfolioFinancialSortDir();
+  const dir = direction === "desc" ? -1 : 1;
   return [...rows].sort((a, b) => {
     const av = portfolioFinancialSortValue(a, key);
     const bv = portfolioFinancialSortValue(b, key);
+    if (key === "payback") {
+      const rank = value => {
+        if (value.missing) return 99; // unknown stays at the bottom in both directions
+        if (direction === "asc") {
+          if (value.state === "immediate") return 0;
+          if (value.state === "positive") return 1;
+          if (value.state === "negativeCashflow") return 2;
+        } else {
+          if (value.state === "negativeCashflow") return 0;
+          if (value.state === "positive") return 1;
+          if (value.state === "immediate") return 2;
+        }
+        return 99;
+      };
+      const ar = rank(av);
+      const br = rank(bv);
+      if (ar !== br) return ar - br;
+      if (av.state === "positive" && bv.state === "positive") {
+        const an = Number(av.value);
+        const bn = Number(bv.value);
+        if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return direction === "asc" ? an - bn : bn - an;
+      }
+      return String(a.site?.name || "").localeCompare(String(b.site?.name || ""));
+    }
     if (av.missing !== bv.missing) return av.missing ? 1 : -1;
     if (av.type === "text" || bv.type === "text") {
       const textCompare = String(av.value || "").localeCompare(String(bv.value || ""));
@@ -5648,7 +5723,7 @@ function portfolioForecastChartSvg(fin, mode = portfolioForecastChartMode()) {
   const points = combined.map((row, index) => index % sampleStep === 0 || index === actual.length - 1 || index === combined.length - 1
     ? `<circle cx="${x(index).toFixed(2)}" cy="${y(row.value).toFixed(2)}" r="3.2" class="forecast-hover-point ${row.forecast ? "forecast" : "actual"}"><title>${h(row.date)} · ${h(number(row.value,1))} ${h(data.unit)}</title></circle>` : "").join("");
   const dividerX = x(Math.max(0, actual.length - 1));
-  return `<div class="forecast-chart-shell"><div class="forecast-chart-title"><strong>${h(data.title)}</strong><span>Hover points for exact values</span></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${h(data.title)}">${yTicks}<line x1="${pad.left}" x2="${width-pad.right}" y1="${y(historicalAverage)}" y2="${y(historicalAverage)}" class="forecast-average-line"/><path d="${actualPath}" class="forecast-actual-line"/><path d="${trendPath}" class="forecast-trend-line"/><line x1="${dividerX}" x2="${dividerX}" y1="${pad.top}" y2="${height-pad.bottom}" class="forecast-divider"/><path d="${forecastPath}" class="forecast-projection-line"/>${points}<text x="${dividerX + 8}" y="${pad.top + 15}" class="forecast-divider-label">Forecast starts</text><text x="${pad.left}" y="${pad.top - 8}" class="forecast-axis-label">${h(data.unit)}</text>${xTicks}<text x="${(pad.left + width - pad.right)/2}" y="${height - 5}" text-anchor="middle" class="forecast-axis-label">Date</text></svg><div class="forecast-chart-legend"><span class="actual">Actual</span><span class="trend">Smoothed actual trend</span><span class="forecast">Controlled forecast</span><span class="average">Historical average</span></div></div>`;
+  return `<div class="forecast-chart-shell"><div class="forecast-chart-title"><strong>${h(data.title)}</strong><span>Hover points for exact values</span></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${h(data.title)}">${yTicks}<line x1="${pad.left}" x2="${width-pad.right}" y1="${y(historicalAverage)}" y2="${y(historicalAverage)}" class="forecast-average-line"/><path d="${actualPath}" class="forecast-actual-line"/><path d="${trendPath}" class="forecast-trend-line"/><line x1="${dividerX}" x2="${dividerX}" y1="${pad.top}" y2="${height-pad.bottom}" class="forecast-divider"/><path d="${forecastPath}" class="forecast-projection-line"/>${points}<text x="${dividerX + 8}" y="${pad.top + 15}" class="forecast-divider-label">Forecast starts</text><text x="${pad.left}" y="${pad.top - 8}" class="forecast-axis-label">${h(data.unit)}</text>${xTicks}<text x="${(pad.left + width - pad.right)/2}" y="${height - 5}" text-anchor="middle" class="forecast-axis-label">Date</text></svg><div class="forecast-chart-legend"><span class="actual">Actual</span><span class="trend">Smoothed history — visual guide</span><span class="forecast">Controlled forecast</span><span class="average">Historical average</span></div></div>`;
 }
 function portfolioForecastAuditKpis(fin) {
   const forward = fin.maturityForecast?.forward12m || fin.maturityForecast || {};
@@ -5750,7 +5825,7 @@ function portfolioFinancialTableRow(fin) {
   const opexCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOtherOpexExElectricityAndNetwork, 0), landlordShort, "", `Other forward 12-month OPEX excludes electricity purchase and DUoS standing/capacity, which are shown separately. ${fin.landlordNote || "No actual landlord terms provided."}`) : "—";
   const ebitdaCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOperatingCashflow, 0), "revenue − energy − network − other OPEX", fin.forecastOperatingCashflow < 0 ? "cashflow-negative" : "", `Revenue ${currency(fin.next12mRevenue,0)} − energy ${currency(fin.forecastElectricityCost,0)} − network ${currency(fin.forecastNetworkStandingAndCapacity,0)} − other OPEX ${currency(fin.forecastOtherOpexExElectricityAndNetwork,0)} = site EBITDA ${currency(fin.forecastOperatingCashflow,0)}. CAPEX, depreciation, interest, tax and unallocated corporate overhead are excluded.`) : "—";
   const paybackReason = fin.paybackState?.reason || portfolioPaybackSubtext(fin.paybackYears, fin.paybackState);
-  const paybackCell = fin.paybackState?.state === "positive"
+  const paybackCell = ["positive", "immediate"].includes(fin.paybackState?.state)
     ? `<span class="badge ${h(fin.paybackState?.cls || "good")}" title="${h(paybackReason)}">${h(portfolioPaybackLabel(fin.paybackYears, fin.paybackState))}</span><small class="portfolio-financial-cell-note" title="${h(paybackReason)}">${fin.fundingApplied ? `Net CAPEX / EBITDA · gross ${portfolioPaybackLabel(fin.grossRunRatePaybackYears)}` : "Gross CAPEX / 12m EBITDA"}</small>`
     : `<span class="badge ${h(fin.paybackState?.cls || "neutral")}" title="${h(paybackReason)}">${h(portfolioPaybackLabel(fin.paybackYears, fin.paybackState))}</span>`;
   const termsLabel = portfolioCommercialTermsLabel(fin.site);
@@ -5771,7 +5846,9 @@ function renderPortfolioFinancialPerformance() {
   const sorted = portfolioFinancialSortRows(filteredRows);
   const sortNames = { site: "site", days: "commercial operational days", capex: "actual CAPEX", kwh: "next 12-month kWh", performance: "historical actual versus age-matched model", revenue: "next 12-month revenue", electricity: "next 12-month energy and network cost", opex: "next 12-month other OPEX", ebitda: "next 12-month site EBITDA", payback: "run-rate payback", status: "performance status", quality: "data quality" };
   const sortKey = portfolioFinancialSortKey();
-  const sortDir = portfolioFinancialSortDir() === "desc" ? "high to low / Z-A" : "low to high / A-Z";
+  const sortDir = sortKey === "payback"
+    ? (portfolioFinancialSortDir() === "desc" ? "worst to best" : "best to worst")
+    : (portfolioFinancialSortDir() === "desc" ? "high to low / Z-A" : "low to high / A-Z");
   const maturityModel = portfolioFinancialMaturityModel(rows.map(row => row.site));
   const projectionNote = `The next 12 months use each site’s observed run-rate, bounded short-term trend, calendar seasonality, ${(Number(state.inputs.annualTrafficGrowthRate || 0) * 100).toFixed(1)}% traffic growth and ${(Number(state.inputs.annualTariffEscalation || 0) * 100).toFixed(1)}% tariff escalation. The calibrated benchmark covers the same forward 12-month period and commercial age. Maturity is excluded from year 1 and begins only from month 13. Electricity cost escalation is ${(Number(state.inputs.annualElectricityCostEscalation || 0) * 100).toFixed(1)}%.`;
   return `
@@ -7101,6 +7178,29 @@ function updateMap() {
   const confidence = ctx?.site?.confidence ? ` Location confidence: ${ctx.site.confidence}.` : "";
   const aadtOverlayNote = aadtCandidatesForBounds.length ? ` AADT overlay: ${aadtCandidatesForBounds.filter(c => c.selected).length || 1} selected/recommended counter${aadtCandidatesForBounds.length === 1 ? "" : "s"} shown.` : "";
   showMapStatus(`Map centred on ${h(ctx?.site?.name || "selected site")} at ${number(lat, 5)}, ${number(lon, 5)}. Radius: ${state.filters.radiusKm < 1 ? "500 m" : state.filters.radiusKm + " km"}.${confidence}${aadtOverlayNote}`);
+}
+
+async function resetApplicationFromLogo() {
+  const confirmed = window.confirm("Reset application?\n\nThis will clear uploaded data and unsaved changes, then reload the application using the default stored dataset.");
+  if (!confirmed) return;
+  try { localStorage.clear(); } catch (_) {}
+  try { sessionStorage.clear(); } catch (_) {}
+  try {
+    if ("caches" in window) {
+      const names = await window.caches.keys();
+      await Promise.all(names.map(name => window.caches.delete(name)));
+    }
+  } catch (_) {}
+  try {
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map(registration => registration.unregister()));
+    }
+  } catch (_) {}
+  const url = new URL(window.location.href);
+  url.hash = "site";
+  url.searchParams.set("_evhub_reset", String(Date.now()));
+  window.location.replace(url.toString());
 }
 
 function goTab(tab) {

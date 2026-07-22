@@ -9,9 +9,9 @@
  */
 
 const LOCAL_SCHEMA_VERSION = "v21-live-history-v7";
-const LOCAL_APP_VERSION = "V21.6";
-const LOCAL_BUILD_ID = "EVHUB-V21.6-20260721-R1";
-const LOCAL_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.6";
+const LOCAL_APP_VERSION = "V21.7";
+const LOCAL_BUILD_ID = "EVHUB-V21.7-20260722-R1";
+const LOCAL_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.7";
 const DAY_MS = 86400000;
 const EXCEL_EPOCH_DAY = Math.floor(Date.UTC(1899, 11, 30) / DAY_MS);
 const MONTHS = {
@@ -408,6 +408,71 @@ function sumRange(daily, start, end) {
   return result;
 }
 
+function inferCommercialOperationStart(daily, days) {
+  const sessionDays = days.filter(day => Number(daily.get(day)?.sessions || 0) >= 1);
+  const kwhDays = days.filter(day => Number(daily.get(day)?.kwh || 0) >= 1);
+  const activeDays = [...new Set([...sessionDays, ...kwhDays])].sort((a, b) => a - b);
+  const firstRecordedSession = sessionDays.length ? sessionDays[0] : null;
+  const firstRecordedKwh = kwhDays.length ? kwhDays[0] : null;
+  const firstRecordedActivity = firstRecordedSession ?? firstRecordedKwh;
+  let commercialStart = firstRecordedActivity;
+  let source = firstRecordedSession != null ? "first_session_fallback" : firstRecordedKwh != null ? "first_kwh_fallback" : "no_commercial_activity";
+  let commissioningPrefix = null;
+
+  // A commissioning-only prefix is deliberately defined conservatively. It must
+  // contain very little activity, be followed by a long dormant gap, and then be
+  // followed by sustained commercial charging. This prevents normal low-frequency
+  // opening weeks from being removed from the commercial denominator.
+  for (let i = 0; i < activeDays.length - 1; i += 1) {
+    const prefixDays = activeDays.slice(0, i + 1);
+    const prefixStart = prefixDays[0];
+    const prefixEnd = prefixDays[prefixDays.length - 1];
+    const restart = activeDays[i + 1];
+    const dormantGapDays = restart - prefixEnd;
+    if (dormantGapDays < 30) continue;
+    const prefixSpanDays = prefixEnd - prefixStart + 1;
+    const prefixTotals = sumRange(daily, prefixStart, prefixEnd);
+    const prefixIsMinor = prefixDays.length <= 3
+      && prefixSpanDays <= 14
+      && Number(prefixTotals.sessions || 0) <= 10
+      && Number(prefixTotals.kwh || 0) <= 100
+      && Number(prefixTotals.net || 0) <= 50;
+    if (!prefixIsMinor) continue;
+    const validationEnd = restart + 29;
+    const sustainedDays = activeDays.filter(day => day >= restart && day <= validationEnd);
+    const sustainedTotals = sumRange(daily, restart, validationEnd);
+    const sustained = sustainedDays.length >= 3
+      && (Number(sustainedTotals.sessions || 0) >= 8 || Number(sustainedTotals.kwh || 0) >= 100);
+    if (!sustained) continue;
+    commercialStart = restart;
+    source = "inferred_sustained_activity";
+    commissioningPrefix = {
+      firstRecordedActivityDate: dayToIso(firstRecordedActivity),
+      prefixEndDate: dayToIso(prefixEnd),
+      commercialOperationDate: dayToIso(restart),
+      dormantGapDays,
+      activeDays: prefixDays.length,
+      sessions: round(prefixTotals.sessions, 3),
+      kwh: round(prefixTotals.kwh, 3),
+      netRevenue: round(prefixTotals.net, 2)
+    };
+    break;
+  }
+
+  const firstCommercialSession = commercialStart == null ? null : (sessionDays.find(day => day >= commercialStart) ?? null);
+  const firstCommercialKwh = commercialStart == null ? null : (kwhDays.find(day => day >= commercialStart) ?? null);
+  return {
+    commercialStart,
+    source,
+    firstRecordedSession,
+    firstRecordedKwh,
+    firstRecordedActivity,
+    firstCommercialSession,
+    firstCommercialKwh,
+    commissioningPrefix
+  };
+}
+
 function buildPayload(siteDays, sourceInfo, totalRows, startedAt) {
   const allDays = [];
   for (const site of siteDays.values()) for (const day of site.daily.keys()) allDays.push(day);
@@ -416,12 +481,11 @@ function buildPayload(siteDays, sourceInfo, totalRows, startedAt) {
   const actuals = [];
   for (const site of siteDays.values()) {
     const days = [...site.daily.keys()].sort((a, b) => a - b);
-    const sessionDays = days.filter(day => Number(site.daily.get(day)?.sessions || 0) >= 1);
-    const kwhDays = days.filter(day => Number(site.daily.get(day)?.kwh || 0) >= 1);
-    const firstSession = sessionDays.length ? sessionDays[0] : null;
-    const firstKwh = kwhDays.length ? kwhDays[0] : null;
-    const firstActive = firstSession ?? firstKwh;
-    const basis = firstSession != null ? "first_session" : firstKwh != null ? "first_kwh" : "no_commercial_activity";
+    const commercial = inferCommercialOperationStart(site.daily, days);
+    const firstSession = commercial.firstCommercialSession;
+    const firstKwh = commercial.firstCommercialKwh;
+    const firstActive = commercial.commercialStart;
+    const basis = commercial.source;
     const latestDay = days.length ? days[days.length - 1] : latestPortfolioDay;
     const dataDays = firstActive == null ? 0 : latestDay - firstActive + 1;
     const rolling = sumRange(site.daily, latestDay - 29, latestDay);
@@ -472,18 +536,29 @@ function buildPayload(siteDays, sourceInfo, totalRows, startedAt) {
         source: "Browser-local Daily_Charger_kWh parser",
         annualisationBasis,
         annualisationMethod,
+        commercialOperationDate: firstActive == null ? null : dayToIso(firstActive),
+        commercialOperationSource: basis,
+        firstRecordedSessionDate: commercial.firstRecordedSession == null ? null : dayToIso(commercial.firstRecordedSession),
+        firstRecordedKwhDate: commercial.firstRecordedKwh == null ? null : dayToIso(commercial.firstRecordedKwh),
         firstCommercialSessionDate: firstSession == null ? null : dayToIso(firstSession),
         firstCommercialKwhDate: firstKwh == null ? null : dayToIso(firstKwh),
         commercialDaysBasis: basis,
+        commissioningPrefixExcluded: commercial.commissioningPrefix,
         monthlyHistory,
         dailyHistory
       },
       maturity: { dataDays: Math.trunc(dataDays), tier },
       diagnostics: {
         firstActiveDate: firstActive == null ? null : dayToIso(firstActive),
+        commercialOperationDate: firstActive == null ? null : dayToIso(firstActive),
+        commercialOperationSource: basis,
+        firstRecordedActivityDate: commercial.firstRecordedActivity == null ? null : dayToIso(commercial.firstRecordedActivity),
+        firstRecordedSessionDate: commercial.firstRecordedSession == null ? null : dayToIso(commercial.firstRecordedSession),
+        firstRecordedKwhDate: commercial.firstRecordedKwh == null ? null : dayToIso(commercial.firstRecordedKwh),
         firstCommercialSessionDate: firstSession == null ? null : dayToIso(firstSession),
         firstCommercialKwhDate: firstKwh == null ? null : dayToIso(firstKwh),
         commercialDaysBasis: basis,
+        commissioningPrefixExcluded: commercial.commissioningPrefix,
         latestDate: dayToIso(latestDay),
         chargerCount: site.chargerNames.size,
         chargerNames: [...site.chargerNames].sort(),

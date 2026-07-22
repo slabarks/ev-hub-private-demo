@@ -70,8 +70,8 @@ const payload = await parsePortfolioCalibrationFilesLocally([upload], message =>
 assert.equal(payload.ok, true);
 assert.equal(payload.localParser, true);
 assert.equal(payload.schemaVersion, "v21-live-history-v7");
-assert.equal(payload.buildId, "EVHUB-V21.6-20260721-R1");
-assert.equal(payload.parserBuildId, "EVHUB-LIVE-PARSER-21.6");
+assert.equal(payload.buildId, "EVHUB-V21.7-20260722-R1");
+assert.equal(payload.parserBuildId, "EVHUB-LIVE-PARSER-21.7");
 assert.equal(payload.siteCount, 2);
 assert.equal(payload.rowCount, 92);
 assert.equal(payload.dailyHistorySiteCount, 2);
@@ -93,3 +93,37 @@ assert.equal(alpha.actual.dailyHistory[0].reportingChargerCount, 1);
 assert.equal(alpha.actual.dailyHistory[0].activeChargerCount, 1);
 assert.ok(alpha.actual.monthlyHistory.every(row => Number.isFinite(row.kwhPerCalendarDay)));
 console.log("PASS — browser-local ZIP/XLSX parser produced complete daily and monthly histories without a backend.");
+
+// Commissioning-prefix regression: one isolated low-energy test event followed by
+// a long dormant gap must not start the commercial operating denominator.
+const commissioningRows = [];
+commissioningRows.push(`<row r="1">${[
+  "Date of start_time", "charge_point_name", "Total charge_amount", "Total net", "Ave kW", "transaction_id Count", "Variance of charge_amount"
+].map((value, index) => inlineCell(`${String.fromCharCode(65 + index)}1`, value)).join("")}</row>`);
+let commissioningRow = 2;
+for (let day = 0; day < 80; day += 1) {
+  const date = excelDate(day);
+  const isolatedTest = day === 0;
+  const sustained = day >= 40;
+  const kwhValue = isolatedTest ? 2.492 : sustained ? 25 : 0;
+  const sessionValue = isolatedTest ? 1 : sustained ? 2 : 0;
+  const netValue = isolatedTest ? 0 : sustained ? 16 : 0;
+  commissioningRows.push(`<row r="${commissioningRow}">${inlineCell(`A${commissioningRow}`, date)}${inlineCell(`B${commissioningRow}`, "Commissioning Audit Site eP3001")}${numberCell(`C${commissioningRow}`, kwhValue)}${numberCell(`D${commissioningRow}`, netValue)}${numberCell(`E${commissioningRow}`, 0)}${numberCell(`F${commissioningRow}`, sessionValue)}${inlineCell(`G${commissioningRow}`, "")}</row>`);
+  commissioningRow += 1;
+}
+const commissioningSheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${commissioningRows.join("")}</sheetData></worksheet>`;
+const commissioningWorkbook = new globalThis.JSZip();
+commissioningWorkbook.file("xl/workbook.xml", workbookXml);
+commissioningWorkbook.file("xl/_rels/workbook.xml.rels", relsXml);
+commissioningWorkbook.file("xl/worksheets/sheet1.xml", commissioningSheet);
+const commissioningBytes = await commissioningWorkbook.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+const commissioningUpload = new File([commissioningBytes], "Daily_Charger_kWh.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+const commissioningPayload = await parsePortfolioCalibrationFilesLocally([commissioningUpload]);
+const commissioningSite = commissioningPayload.siteActuals[0];
+assert.equal(commissioningSite.actual.firstRecordedSessionDate, "2026-01-01");
+assert.equal(commissioningSite.actual.commercialOperationDate, "2026-02-10");
+assert.equal(commissioningSite.actual.commercialOperationSource, "inferred_sustained_activity");
+assert.equal(commissioningSite.actual.dailyHistory[0].date, "2026-02-10");
+assert.equal(commissioningSite.diagnostics.daysLive, 40);
+assert.equal(commissioningSite.actual.commissioningPrefixExcluded.sessions, 1);
+assert.equal(commissioningSite.actual.commissioningPrefixExcluded.kwh, 2.492);

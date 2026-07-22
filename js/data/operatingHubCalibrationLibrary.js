@@ -1543,8 +1543,23 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "aadtConfidence": "High",
     "aadtCounter": "TII 2026 · 000000001053/000000001058",
     "actual": {
-      "annualisationMethod": "daily_cumulative (354 days live, 12565.8 kWh total)",
-      "firstActiveDate": "2026-02-01",
+      "annualisationMethod": "daily_cumulative (146 days live, 12563.3 kWh total)",
+      "commercialOperationDate": "2026-02-18",
+      "commercialOperationSource": "inferred_sustained_activity",
+      "firstRecordedActivityDate": "2025-07-10",
+      "firstRecordedSessionDate": "2025-07-10",
+      "firstRecordedKwhDate": "2025-07-10",
+      "firstActiveDate": "2026-02-18",
+      "commissioningPrefixExcluded": {
+        "firstRecordedActivityDate": "2025-07-10",
+        "prefixEndDate": "2025-07-10",
+        "commercialOperationDate": "2026-02-18",
+        "dormantGapDays": 223,
+        "activeDays": 1,
+        "sessions": 1,
+        "kwh": 2.492,
+        "netRevenue": 0
+      },
       "rolling30NetRevenue": 2284.81,
       "rolling30Kwh": 4583.156,
       "rolling30Sessions": 114.02142391432795,
@@ -1555,7 +1570,7 @@ export const PORTFOLIO_CALIBRATION_SITES = [
     "maturity": {
       "label": "Early ramp-up validation",
       "tier": "early",
-      "dataDays": 180,
+      "dataDays": 146,
       "comparisonYearIndex": 1
     },
     "modelConfig": {

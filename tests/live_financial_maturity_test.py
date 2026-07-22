@@ -39,8 +39,8 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         ])
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["schemaVersion"], "v21-live-history-v7")
-        self.assertEqual(payload["buildId"], "EVHUB-V21.6-20260721-R1")
-        self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-21.6")
+        self.assertEqual(payload["buildId"], "EVHUB-V21.7-20260722-R1")
+        self.assertEqual(payload["parserBuildId"], "EVHUB-LIVE-PARSER-21.7")
         self.assertTrue(payload["monthlyHistorySupported"])
         self.assertTrue(payload["dailyHistorySupported"])
         self.assertEqual(payload["siteCount"], 2)
@@ -72,7 +72,7 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         self.assertEqual(early["maturity"]["tier"], "early")
         self.assertEqual(early["actual"]["annualisationMethod"], "daily_cumulative")
         self.assertGreaterEqual(len(early["actual"]["monthlyHistory"]), 4)
-        self.assertEqual(early["diagnostics"]["commercialDaysBasis"], "first_session")
+        self.assertEqual(early["diagnostics"]["commercialDaysBasis"], "first_session_fallback")
         self.assertEqual(early["diagnostics"]["monthlyHistoryMonths"], len(early["actual"]["monthlyHistory"]))
 
     def test_complete_dashboard_zip_pack_is_supported(self):
@@ -163,6 +163,33 @@ class LiveFinancialMaturityTests(unittest.TestCase):
         self.assertEqual(history[0]["sourceDays"], 2)
         self.assertEqual(history[0]["activeDays"], 2)
         self.assertAlmostEqual(history[0]["kwhPerCalendarDay"], 60 / 31, places=4)
+
+    def test_commissioning_prefix_is_excluded_from_commercial_operation(self):
+        start = dt.date(2026, 1, 1)
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(["Date of start_time", "charge_point_name", "Total charge_amount", "Total net", "transaction_id Count"])
+        for day in range(80):
+            date = start + dt.timedelta(days=day)
+            isolated_test = day == 0
+            sustained = day >= 40
+            writer.writerow([
+                date.isoformat(),
+                "Commissioning Audit Site - Charger 1",
+                2.492 if isolated_test else 25 if sustained else 0,
+                0 if isolated_test else 16 if sustained else 0,
+                1 if isolated_test else 2 if sustained else 0,
+            ])
+        payload = server.parse_live_calibration_uploads([("Daily_Charger_kWh.csv", stream.getvalue().encode("utf-8"))])
+        site = payload["siteActuals"][0]
+        self.assertEqual(site["actual"]["firstRecordedSessionDate"], "2026-01-01")
+        self.assertEqual(site["actual"]["commercialOperationDate"], "2026-02-10")
+        self.assertEqual(site["actual"]["commercialOperationSource"], "inferred_sustained_activity")
+        self.assertEqual(site["diagnostics"]["daysLive"], 40)
+        self.assertEqual(site["actual"]["dailyHistory"][0]["date"], "2026-02-10")
+        self.assertEqual(site["actual"]["commissioningPrefixExcluded"]["sessions"], 1.0)
+        self.assertAlmostEqual(site["actual"]["commissioningPrefixExcluded"]["kwh"], 2.492, places=3)
+
 
 
 if __name__ == "__main__":

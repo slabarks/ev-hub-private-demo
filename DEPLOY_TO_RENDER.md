@@ -1,6 +1,6 @@
-# Hosted deployment — V21.6
+# Hosted deployment — V21.7
 
-Deploy the complete extracted V21.6 package as one application. Do not merge selected frontend files into an older release.
+Deploy the complete extracted V21.7 package as one application. Do not merge selected frontend files into an older release.
 
 ## Start command
 
@@ -8,26 +8,24 @@ Deploy the complete extracted V21.6 package as one application. Do not merge sel
 python server.py
 ```
 
-The package includes the browser-local calibration parser, so the standard dashboard ZIP and `Daily_Charger_kWh.xlsx` upload remain available even if a hosting proxy cannot reach the upload API. The Python backend is still required for the complete location and AADT workflow.
+## Required root files
 
-## Required root layout
+```text
+server.py
+index.html
+DEPLOYMENT_MANIFEST.json
+js/
+assets/
+data/
+```
 
-Keep these at the same deployment root:
+## Verification
 
-- `server.py`
-- `index.html`
-- `DEPLOYMENT_MANIFEST.json`
-- `assets/`
-- `data/`
-- `js/`
+Open `/api/version` on the deployed application domain. It should report:
 
-## Deployment verification
-
-Open `/api/version` on the deployed domain. It should report:
-
-- `appVersion`: `V21.6`
-- `buildId`: `EVHUB-V21.6-20260721-R1`
-- `parserBuildId`: `EVHUB-LIVE-PARSER-21.6`
+- `appVersion`: `V21.7`
+- `buildId`: `EVHUB-V21.7-20260722-R1`
+- `parserBuildId`: `EVHUB-LIVE-PARSER-21.7`
 - `deploymentRootOk`: `true`
 
-After deployment, hard-refresh the browser once to replace cached assets from the previous release.
+After deployment, perform one hard refresh or use the ePower-logo reset action.

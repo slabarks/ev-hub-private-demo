@@ -1,8 +1,8 @@
 {
-  "appVersion": "V21.6",
-  "buildId": "EVHUB-V21.6-20260721-R1",
+  "appVersion": "V21.7",
+  "buildId": "EVHUB-V21.7-20260722-R1",
   "uploadSchemaVersion": "v21-live-history-v7",
-  "parserBuildId": "EVHUB-LIVE-PARSER-21.6",
+  "parserBuildId": "EVHUB-LIVE-PARSER-21.7",
   "packageLayoutVersion": "flat-root-v1",
   "entrypoint": "python server.py",
   "requiredRootFiles": [
@@ -14,7 +14,7 @@
     "js/liveHistoryLocalParser.js",
     "DEPLOYMENT_MANIFEST.json"
   ],
-  "cacheBuster": "21-6-prediction-engine-20260721-r1",
-  "releaseDate": "2026-07-21",
+  "cacheBuster": "21-7-commercial-start-payback-20260722-r1",
+  "releaseDate": "2026-07-22",
   "localHistoryParser": true
 }

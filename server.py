@@ -42,11 +42,11 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-APP_VERSION = "V21.6"
-APP_BUILD_ID = "EVHUB-V21.6-20260721-R1"
+APP_VERSION = "V21.7"
+APP_BUILD_ID = "EVHUB-V21.7-20260722-R1"
 LIVE_UPLOAD_SCHEMA_VERSION = "v21-live-history-v7"
-LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.6"
-AADT_ENGINE_VERSION = "V21.6 AADT audited resolver + browser-local live-history upload"
+LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.7"
+AADT_ENGINE_VERSION = "V21.7 AADT audited resolver + browser-local live-history upload"
 DEPLOYMENT_REQUIRED_FILES = (
     "index.html", "js/app.js", "js/liveHistoryLocalParser.js", "js/engines/maturityEngine.js",
     "assets/styles.css", "assets/vendor/jszip.min.js", "DEPLOYMENT_MANIFEST.json"
@@ -86,8 +86,8 @@ def _deployment_integrity() -> dict:
     if index_path.exists():
         try:
             index_text = index_path.read_text(encoding="utf-8")
-            if "21-6-prediction-engine-20260721-r1" not in index_text:
-                problems.append("index.html cache-buster is not the V21.6 deployment build")
+            if "21-7-commercial-start-payback-20260722-r1" not in index_text:
+                problems.append("index.html cache-buster is not the V21.7 deployment build")
         except Exception as exc:
             problems.append(f"index.html could not be verified: {exc}")
     return {
@@ -4030,6 +4030,75 @@ def _next_month(value: dt.date) -> dt.date:
     return dt.date(value.year, value.month + 1, 1)
 
 
+def _infer_commercial_operation_start(daily: dict) -> dict:
+    days = sorted(daily.keys())
+    session_days = [day for day in days if float(daily.get(day, {}).get("sessions", 0) or 0) >= 1]
+    kwh_days = [day for day in days if float(daily.get(day, {}).get("kwh", 0) or 0) >= 1]
+    active_days = sorted(set(session_days + kwh_days))
+    first_recorded_session = session_days[0] if session_days else None
+    first_recorded_kwh = kwh_days[0] if kwh_days else None
+    first_recorded_activity = first_recorded_session or first_recorded_kwh
+    commercial_start = first_recorded_activity
+    source = "first_session_fallback" if first_recorded_session else "first_kwh_fallback" if first_recorded_kwh else "no_commercial_activity"
+    commissioning_prefix = None
+
+    for index in range(max(0, len(active_days) - 1)):
+        prefix_days = active_days[: index + 1]
+        prefix_start = prefix_days[0]
+        prefix_end = prefix_days[-1]
+        restart = active_days[index + 1]
+        dormant_gap_days = (restart - prefix_end).days
+        if dormant_gap_days < 30:
+            continue
+        prefix_span_days = (prefix_end - prefix_start).days + 1
+        prefix_values = [values for day, values in daily.items() if prefix_start <= day <= prefix_end]
+        prefix_sessions = sum(float(values.get("sessions", 0) or 0) for values in prefix_values)
+        prefix_kwh = sum(float(values.get("kwh", 0) or 0) for values in prefix_values)
+        prefix_net = sum(float(values.get("net", 0) or 0) for values in prefix_values)
+        prefix_is_minor = (
+            len(prefix_days) <= 3
+            and prefix_span_days <= 14
+            and prefix_sessions <= 10
+            and prefix_kwh <= 100
+            and prefix_net <= 50
+        )
+        if not prefix_is_minor:
+            continue
+        validation_end = restart + dt.timedelta(days=29)
+        sustained_days = [day for day in active_days if restart <= day <= validation_end]
+        sustained_values = [values for day, values in daily.items() if restart <= day <= validation_end]
+        sustained_sessions = sum(float(values.get("sessions", 0) or 0) for values in sustained_values)
+        sustained_kwh = sum(float(values.get("kwh", 0) or 0) for values in sustained_values)
+        if len(sustained_days) < 3 or not (sustained_sessions >= 8 or sustained_kwh >= 100):
+            continue
+        commercial_start = restart
+        source = "inferred_sustained_activity"
+        commissioning_prefix = {
+            "firstRecordedActivityDate": first_recorded_activity.isoformat() if first_recorded_activity else None,
+            "prefixEndDate": prefix_end.isoformat(),
+            "commercialOperationDate": restart.isoformat(),
+            "dormantGapDays": dormant_gap_days,
+            "activeDays": len(prefix_days),
+            "sessions": round(prefix_sessions, 3),
+            "kwh": round(prefix_kwh, 3),
+            "netRevenue": round(prefix_net, 2),
+        }
+        break
+
+    first_commercial_session = next((day for day in session_days if commercial_start and day >= commercial_start), None)
+    first_commercial_kwh = next((day for day in kwh_days if commercial_start and day >= commercial_start), None)
+    return {
+        "commercial_start": commercial_start,
+        "source": source,
+        "first_recorded_session": first_recorded_session,
+        "first_recorded_kwh": first_recorded_kwh,
+        "first_recorded_activity": first_recorded_activity,
+        "first_commercial_session": first_commercial_session,
+        "first_commercial_kwh": first_commercial_kwh,
+        "commissioning_prefix": commissioning_prefix,
+    }
+
+
 def _build_monthly_live_history(daily: dict, first_active: dt.date | None, latest_date: dt.date) -> list[dict]:
     """Return compact month-since-launch history for maturity-curve learning.
 
@@ -4249,16 +4318,14 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
     actuals: list[dict] = []
     for site in site_days.values():
         daily = site["daily"]
-        # Commercial operational start: use the first real field session where
-        # available, then first meaningful kWh movement. Do not use a charger
-        # commissioning/telemetry day, and do not move the start date forward if
-        # the site later has zero-usage downtime.
-        session_active_dates = [d for d, vals in daily.items() if vals.get("sessions", 0) >= 1]
-        kwh_active_dates = [d for d, vals in daily.items() if vals.get("kwh", 0) >= 1.0]
-        first_session = min(session_active_dates) if session_active_dates else None
-        first_kwh = min(kwh_active_dates) if kwh_active_dates else None
-        first_active = first_session or first_kwh
-        days_basis = "first_session" if first_session else "first_kwh" if first_kwh else "no_commercial_activity"
+        # Commercial operation is inferred conservatively. A minor commissioning
+        # prefix is excluded only when it is followed by a long dormant gap and a
+        # sustained commercial restart. All zero-use days after that restart remain.
+        commercial = _infer_commercial_operation_start(daily)
+        first_session = commercial["first_commercial_session"]
+        first_kwh = commercial["first_commercial_kwh"]
+        first_active = commercial["commercial_start"]
+        days_basis = commercial["source"]
         site_latest_date = max(daily.keys()) if daily else latest_date
         site_rolling_start = site_latest_date - dt.timedelta(days=29)
         site_trailing_start = site_latest_date - dt.timedelta(days=364)
@@ -4336,18 +4403,29 @@ def parse_live_calibration_uploads(files: list[tuple[str, bytes]]) -> dict:
                 "source": "Uploaded live calibration files",
                 "annualisationBasis": annualisation_basis,
                 "annualisationMethod": annualisation_method,
+                "commercialOperationDate": first_active.isoformat() if first_active else None,
+                "commercialOperationSource": days_basis,
+                "firstRecordedSessionDate": commercial["first_recorded_session"].isoformat() if commercial["first_recorded_session"] else None,
+                "firstRecordedKwhDate": commercial["first_recorded_kwh"].isoformat() if commercial["first_recorded_kwh"] else None,
                 "firstCommercialSessionDate": first_session.isoformat() if first_session else None,
                 "firstCommercialKwhDate": first_kwh.isoformat() if first_kwh else None,
                 "commercialDaysBasis": days_basis,
+                "commissioningPrefixExcluded": commercial["commissioning_prefix"],
                 "monthlyHistory": monthly_history,
                 "dailyHistory": daily_history,
             },
             "maturity": {"dataDays": int(data_days), "tier": tier},
             "diagnostics": {
                 "firstActiveDate": first_active.isoformat() if first_active else None,
+                "commercialOperationDate": first_active.isoformat() if first_active else None,
+                "commercialOperationSource": days_basis,
+                "firstRecordedActivityDate": commercial["first_recorded_activity"].isoformat() if commercial["first_recorded_activity"] else None,
+                "firstRecordedSessionDate": commercial["first_recorded_session"].isoformat() if commercial["first_recorded_session"] else None,
+                "firstRecordedKwhDate": commercial["first_recorded_kwh"].isoformat() if commercial["first_recorded_kwh"] else None,
                 "firstCommercialSessionDate": first_session.isoformat() if first_session else None,
                 "firstCommercialKwhDate": first_kwh.isoformat() if first_kwh else None,
                 "commercialDaysBasis": days_basis,
+                "commissioningPrefixExcluded": commercial["commissioning_prefix"],
                 "latestDate": site_latest_date.isoformat(),
                 "chargerCount": len(site["chargerNames"]),
                 "chargerNames": sorted(site["chargerNames"]),
@@ -4930,7 +5008,7 @@ def main():
 
     url = f"http://localhost:{selected_port}/"
     if selected_port != requested_port:
-        print(f"Port {requested_port} was already in use. V21.6 selected {selected_port} to avoid opening a stale application instance.")
+        print(f"Port {requested_port} was already in use. V21.7 selected {selected_port} to avoid opening a stale application instance.")
     print(f"EV Hub Investment Tool {APP_VERSION} running at {url}")
     print(f"Build: {APP_BUILD_ID} | Parser: {LIVE_UPLOAD_PARSER_BUILD_ID} | Layout: {PACKAGE_LAYOUT_VERSION}")
     print("Opening your default browser after the correct backend has started...")

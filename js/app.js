@@ -300,9 +300,9 @@ function aadtHelpText() {
   return "AADT means Annual Average Daily Traffic — the estimated average number of vehicles passing a location per day over a year. The model uses it as the starting point for demand forecasting.";
 }
 
-const APP_RELEASE_VERSION = "V21.7";
-const APP_BUILD_ID = "EVHUB-V21.7-20260722-R1";
-const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.7";
+const APP_RELEASE_VERSION = "V21.8";
+const APP_BUILD_ID = "EVHUB-V21.8-20260722-R1";
+const LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.8";
 const PORTFOLIO_LIVE_ACTUALS_STORAGE_KEY = "evHub.portfolio.liveActuals.v21_3";
 const PORTFOLIO_LIVE_ACTUALS_SCHEMA_VERSION = "v21-live-history-v7";
 const PORTFOLIO_LIVE_ACTUALS_LEGACY_KEYS = [
@@ -4088,6 +4088,101 @@ function portfolioCommercialTermsKey(siteOrName) {
 function portfolioCommercialTermsStorageKey(siteOrName) {
   return `${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialTerms.${portfolioCommercialTermsKey(siteOrName)}`;
 }
+function portfolioElectricityGlobalStorageKey() {
+  return `${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricity.global`;
+}
+function portfolioElectricitySiteStorageKey(siteOrName) {
+  return `${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricity.site.${portfolioCommercialTermsKey(siteOrName)}`;
+}
+function portfolioElectricityModelDefault() {
+  return Math.max(0, Number(state.inputs.electricityCost ?? DEFAULT_INPUTS.electricityCost ?? 0));
+}
+function portfolioElectricityPriceSanitise(value, fallback = portfolioElectricityModelDefault()) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 5 ? Math.round(n * 10000) / 10000 : Math.max(0, Number(fallback || 0));
+}
+function portfolioElectricityGlobalLoad() {
+  try {
+    const raw = localStorage.getItem(portfolioElectricityGlobalStorageKey());
+    if (!raw) return portfolioElectricityModelDefault();
+    const parsed = JSON.parse(raw);
+    return portfolioElectricityPriceSanitise(parsed?.price ?? parsed, portfolioElectricityModelDefault());
+  } catch (_) {
+    return portfolioElectricityModelDefault();
+  }
+}
+function portfolioElectricityGlobalSave(price) {
+  const value = portfolioElectricityPriceSanitise(price);
+  try { localStorage.setItem(portfolioElectricityGlobalStorageKey(), JSON.stringify({ price: value, updatedAt: new Date().toISOString() })); } catch (_) {}
+  return value;
+}
+function portfolioElectricityGlobalReset() {
+  try { localStorage.removeItem(portfolioElectricityGlobalStorageKey()); } catch (_) {}
+}
+function portfolioElectricitySiteLoad(siteOrName) {
+  try {
+    const raw = localStorage.getItem(portfolioElectricitySiteStorageKey(siteOrName));
+    if (!raw) return { enabled: false, price: null, note: '', updatedAt: null };
+    const parsed = JSON.parse(raw) || {};
+    const enabled = Boolean(parsed.enabled);
+    const price = enabled ? portfolioElectricityPriceSanitise(parsed.price, portfolioElectricityGlobalLoad()) : null;
+    return { enabled, price, note: String(parsed.note || '').slice(0, 300), updatedAt: parsed.updatedAt || null };
+  } catch (_) {
+    return { enabled: false, price: null, note: '', updatedAt: null };
+  }
+}
+function portfolioElectricitySiteSave(siteOrName, override = {}) {
+  const enabled = Boolean(override.enabled);
+  const payload = {
+    enabled,
+    price: enabled ? portfolioElectricityPriceSanitise(override.price, portfolioElectricityGlobalLoad()) : null,
+    note: String(override.note || '').slice(0, 300),
+    updatedAt: new Date().toISOString()
+  };
+  try { localStorage.setItem(portfolioElectricitySiteStorageKey(siteOrName), JSON.stringify(payload)); } catch (_) {}
+  return payload;
+}
+function portfolioElectricitySiteClear(siteOrName) {
+  try { localStorage.removeItem(portfolioElectricitySiteStorageKey(siteOrName)); } catch (_) {}
+}
+function portfolioElectricityClearAllSiteOverrides() {
+  try {
+    const prefix = `${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricity.site.`;
+    const keys = [];
+    for (let i = 0; i < Number(localStorage.length || 0); i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefix)) keys.push(key);
+    }
+    Object.keys(localStorage).filter(key => key.startsWith(prefix)).forEach(key => { if (!keys.includes(key)) keys.push(key); });
+    keys.forEach(key => localStorage.removeItem(key));
+  } catch (_) {}
+}
+function portfolioElectricityEffective(siteOrName, fallback = portfolioElectricityModelDefault()) {
+  const globalPrice = portfolioElectricityGlobalLoad();
+  const override = siteOrName ? portfolioElectricitySiteLoad(siteOrName) : { enabled: false, price: null, note: '' };
+  const isOverride = Boolean(override.enabled) && Number.isFinite(Number(override.price));
+  return {
+    price: portfolioElectricityPriceSanitise(isOverride ? override.price : globalPrice, fallback),
+    globalPrice,
+    isOverride,
+    source: isOverride ? 'site override' : 'portfolio price',
+    note: override.note || '',
+    updatedAt: override.updatedAt || null
+  };
+}
+function portfolioElectricitySummary(rows = []) {
+  const globalPrice = portfolioElectricityGlobalLoad();
+  const overrides = rows.filter(row => portfolioElectricitySiteLoad(row.site).enabled);
+  const globalSites = Math.max(0, rows.length - overrides.length);
+  const totalKwh = rows.reduce((sum, row) => sum + Math.max(0, Number(row.next12mKwh || 0)), 0);
+  const weighted = totalKwh > 0
+    ? rows.reduce((sum, row) => sum + Math.max(0, Number(row.next12mKwh || 0)) * Math.max(0, Number(row.electricityUnitCost || globalPrice)), 0) / totalKwh
+    : globalPrice;
+  return { globalPrice, overrides: overrides.length, globalSites, weightedAverage: weighted };
+}
+function portfolioElectricityModalKey() {
+  return localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricityModal`) || '';
+}
 function portfolioCommercialTermsDefault() {
   return { termType: "none", fixedRent: 0, gpSharePct: 0, salesSharePct: 0, confidence: "unknown", notes: "" };
 }
@@ -4209,7 +4304,8 @@ function portfolioFinancialOpexFromActuals(result, annualKwh, annualSessions, an
     row.extendedBatteryWarranty
   ].map(Number).filter(Number.isFinite).reduce((a, b) => a + b, 0);
   const fixedOpex = fixedOtherOpex + networkStandingAndCapacity;
-  const electricityUnitCost = Math.max(0, Number(inputs.electricityCost || 0));
+  const electricityPrice = portfolioElectricityEffective(site, inputs.electricityCost);
+  const electricityUnitCost = electricityPrice.price;
   const electricityCost = Number(annualKwh || 0) * electricityUnitCost;
   const grossProfit = Number(annualRevenue || 0) - electricityCost;
   const transactionProcessingFee = Math.max(0, Number(annualRevenue || 0)) * Number(inputs.transactionProcessingFeePctRevenue || 0);
@@ -4224,7 +4320,7 @@ function portfolioFinancialOpexFromActuals(result, annualKwh, annualSessions, an
   const operatingCashflow = grossProfit - opexExElectricity;
   return {
     fixedOpex, fixedOtherOpex, variableOpex, opexExElectricity, otherOpexExElectricityAndNetwork,
-    electricityUnitCost, electricityCost, duosStandingCharge, duosCapacityCharge, networkStandingAndCapacity,
+    electricityUnitCost, electricityCost, electricityPriceSource: electricityPrice.source, electricitySiteOverride: electricityPrice.isOverride, electricityGlobalPrice: electricityPrice.globalPrice, electricityPriceNote: electricityPrice.note, duosStandingCharge, duosCapacityCharge, networkStandingAndCapacity,
     grossProfit, operatingCashflow, transactionProcessingFee, flatTransactionFee, landlordGpShare,
     landlordGrossSalesShare, groundRent, modelGroundRentExcluded: modelGroundRent, landlordNote: landlord.note,
     landlordBasis: landlord.basis, landlordApplied: landlord.applied, landlordConflict: landlord.conflict
@@ -4725,6 +4821,10 @@ function portfolioFinancialRow(site, benchmarks, maturityModel) {
     forecastOtherOpexExElectricityAndNetwork: maturityForecast.next12mOtherOpexExElectricityAndNetwork,
     electricityCost: opex.electricityCost,
     electricityUnitCost: opex.electricityUnitCost,
+    electricityPriceSource: opex.electricityPriceSource,
+    electricitySiteOverride: opex.electricitySiteOverride,
+    electricityGlobalPrice: opex.electricityGlobalPrice,
+    electricityPriceNote: opex.electricityPriceNote,
     duosStandingCharge: opex.duosStandingCharge,
     duosCapacityCharge: opex.duosCapacityCharge,
     micKva: Number(result?.config?.selectedMicKva || site?.realMicKva || 0),
@@ -4968,13 +5068,34 @@ function portfolioFundingBulkSummary(rows) {
     appliedTotal: applied.reduce((sum, row) => sum + Number(row.fundingAppliedAmount || 0), 0)
   };
 }
+function portfolioElectricitySiteModal(row) {
+  const site = row?.site;
+  if (!site) return '';
+  const current = portfolioElectricityEffective(site);
+  const override = portfolioElectricitySiteLoad(site);
+  const forecastKwh = Math.max(0, Number(row.next12mKwh || 0));
+  const effectiveCost = forecastKwh * current.price;
+  const globalCost = forecastKwh * current.globalPrice;
+  return `<div class="commercial-modal-backdrop" data-electricity-modal-backdrop="1"><section class="commercial-modal electricity-price-modal" role="dialog" aria-modal="true" aria-label="Electricity price for ${h(site.name)}">
+    <div class="commercial-modal-head"><div><span class="eyebrow">Electricity purchase price</span><h3>${h(site.name)}</h3><p>Use the portfolio price or set an exact site-specific override. This changes electricity cost, EBITDA, payback and projections; it does not change kWh or revenue.</p></div><button type="button" class="commercial-modal-close" data-electricity-modal-close="1" aria-label="Close">×</button></div>
+    <div class="portfolio-terms-summary-grid electricity-price-summary"><div><span>Portfolio price</span><strong>${currency(current.globalPrice,4)}/kWh</strong><small>Used when no override exists</small></div><div><span>Effective site price</span><strong data-electricity-preview-price>${currency(current.price,4)}/kWh</strong><small>${current.isOverride ? 'Site override' : 'Portfolio price'}</small></div><div><span>Next 12m kWh</span><strong>${number(forecastKwh,0)}</strong><small>Forecast unchanged by price</small></div><div><span>Next 12m energy cost</span><strong data-electricity-preview-cost>${currency(effectiveCost,0)}</strong><small data-electricity-preview-delta>${current.isOverride ? `${currency(effectiveCost-globalCost,0)} vs portfolio price` : 'At portfolio price'}</small></div></div>
+    <form data-electricity-site-form="${h(portfolioCommercialTermsKey(site))}"><label class="funding-toggle"><input type="checkbox" data-electricity-override-enabled ${override.enabled ? 'checked' : ''}><span>Use a site-specific electricity price</span></label><div class="commercial-form-grid electricity-site-form-grid"><label class="field"><span>Site electricity price €/kWh ex VAT</span><input type="number" min="0" max="5" step="0.0001" value="${h(override.enabled ? override.price : current.globalPrice)}" data-electricity-override-price ${override.enabled ? '' : 'disabled'}></label><label class="field commercial-notes"><span>Source / note (optional)</span><textarea rows="3" data-electricity-override-note>${h(override.note || '')}</textarea></label></div><div class="commercial-modal-actions"><button type="button" class="secondary" data-electricity-site-reset="${h(portfolioCommercialTermsKey(site))}">Use portfolio price</button><button type="button" class="secondary" data-electricity-modal-close="1">Cancel</button><button type="submit" class="primary commercial-save-button">Save electricity price</button></div></form>
+  </section></div>`;
+}
+function portfolioElectricityModal(rows) {
+  const key = portfolioElectricityModalKey();
+  if (!key) return '';
+  const row = rows.find(r => portfolioCommercialTermsKey(r.site) === key);
+  return row ? portfolioElectricitySiteModal(row) : '';
+}
 function portfolioCommercialBulkModal(rows) {
   const allSites = rows.map(r => r.site).filter(Boolean);
   const checkboxes = allSites.map(site => `<label><input type="checkbox" data-commercial-bulk-site value="${h(portfolioCommercialTermsKey(site))}"><span>${h(site.name)}</span></label>`).join("");
   const fundingSummary = portfolioFundingBulkSummary(rows);
   const anomalyNames = fundingSummary.exceedsCapex.map(row => row.site?.name).filter(Boolean);
   return `<div class="commercial-modal-backdrop" data-commercial-modal-backdrop="1"><section class="commercial-modal commercial-bulk-modal portfolio-terms-modal" role="dialog" aria-modal="true" aria-label="Portfolio terms manager">
-    <div class="commercial-modal-head"><div><span class="eyebrow">Portfolio controls</span><h3>Manage portfolio terms</h3><p>Control landlord terms and known site funding from one place. Gross CAPEX variance always remains gross and unchanged.</p></div><button type="button" class="commercial-modal-close" data-commercial-terms-close="1" aria-label="Close">×</button></div>
+    <div class="commercial-modal-head"><div><span class="eyebrow">Portfolio controls</span><h3>Manage portfolio terms</h3><p>Control portfolio electricity price, landlord terms and known site funding from one place. Gross CAPEX variance always remains gross and unchanged.</p></div><button type="button" class="commercial-modal-close" data-commercial-terms-close="1" aria-label="Close">×</button></div>
+    ${(() => { const es = portfolioElectricitySummary(rows); return `<section class="portfolio-terms-section electricity-bulk-section"><div class="portfolio-terms-section-head"><div><h4>Electricity purchase price</h4><p>Set the exact portfolio-wide electricity price. Existing site overrides remain unchanged until removed.</p></div></div><div class="portfolio-terms-summary-grid"><div><span>Portfolio price</span><strong>${currency(es.globalPrice,4)}/kWh</strong><small>${number(es.globalSites,0)} sites use it</small></div><div><span>Site overrides</span><strong>${number(es.overrides,0)}</strong><small>Retained on global change</small></div><div><span>Weighted average</span><strong>${currency(es.weightedAverage,4)}/kWh</strong><small>Weighted by next-12m kWh</small></div><div><span>Model default</span><strong>${currency(portfolioElectricityModelDefault(),4)}/kWh</strong><small>Reset reference</small></div></div><form data-electricity-global-form="1"><div class="electricity-global-form"><label class="field"><span>Portfolio electricity price €/kWh ex VAT</span><input type="number" min="0" max="5" step="0.0001" value="${h(es.globalPrice)}" data-electricity-global-price></label></div><div class="commercial-modal-actions"><button type="button" class="secondary" data-electricity-global-action="reset-default">Reset portfolio price to model default</button><button type="button" class="secondary" data-electricity-global-action="remove-overrides">Remove all site overrides</button><button type="submit" class="primary commercial-save-button">Apply portfolio price</button></div></form></section>`; })()}
     <section class="portfolio-terms-section"><div class="portfolio-terms-section-head"><div><h4>Landlord terms</h4><p>Apply the same rent/share terms to selected sites or clear selected terms.</p></div></div><form data-commercial-bulk-form="1"><div class="commercial-bulk-layout"><div><div class="commercial-bulk-tools"><button type="button" class="secondary mini" data-commercial-bulk-select="all">Select all</button><button type="button" class="secondary mini" data-commercial-bulk-select="none">Select none</button></div><div class="commercial-bulk-sites">${checkboxes}</div></div><div>${portfolioCommercialFormFields(portfolioCommercialTermsDefault(), "bulk")}</div></div><div class="commercial-modal-actions"><button type="button" class="secondary" data-commercial-bulk-clear="1">Clear selected terms</button><button type="submit" class="primary commercial-save-button">Apply landlord terms</button></div></form></section>
     <section class="portfolio-terms-section funding-bulk-section"><div class="portfolio-terms-section-head"><div><h4>Funding</h4><p>Apply exact database or saved funding amounts across the active portfolio in one action.</p></div></div><div class="portfolio-terms-summary-grid"><div><span>Funding records</span><strong>${number(fundingSummary.funded.length,0)}</strong><small>${currency(fundingSummary.availableTotal,0)} available</small></div><div><span>Confirmed & eligible</span><strong>${number(fundingSummary.applicableConfirmed.length,0)}</strong><small>${currency(fundingSummary.applicableTotal,0)} can be bulk applied</small></div><div><span>Currently applied</span><strong>${number(fundingSummary.applied.length,0)}</strong><small>${currency(fundingSummary.appliedTotal,0)} applied</small></div><div><span>Review / anomaly</span><strong>${number(fundingSummary.review.length + fundingSummary.exceedsCapex.length,0)}</strong><small>excluded unless individually reviewed</small></div></div>
     <label class="funding-toggle funding-bulk-review-toggle"><input type="checkbox" data-funding-bulk-include-review><span>Include review-required matches when bulk applying. Funding records exceeding recorded gross CAPEX remain excluded.</span></label>
@@ -4993,7 +5114,8 @@ function portfolioCommercialTermsModal(rows) {
 function portfolioCommercialTermsManagerButton(rows) {
   const configuredLandlord = rows.filter(row => portfolioCommercialTermsLoad(row.site).termType !== "none").length;
   const fundingSummary = portfolioFundingBulkSummary(rows);
-  return `<div class="portfolio-terms-manager"><button type="button" class="secondary portfolio-terms-manager-button" data-commercial-terms-open="bulk">Manage portfolio terms</button><small>${number(configuredLandlord,0)} landlord term${configuredLandlord === 1 ? "" : "s"} configured · ${currency(fundingSummary.appliedTotal,0)} funding applied</small></div>`;
+  const electricitySummary = portfolioElectricitySummary(rows);
+  return `<div class="portfolio-terms-manager"><button type="button" class="secondary portfolio-terms-manager-button" data-commercial-terms-open="bulk">Manage portfolio terms</button><small>${currency(electricitySummary.globalPrice,4)}/kWh portfolio price · ${number(electricitySummary.overrides,0)} site override${electricitySummary.overrides === 1 ? "" : "s"} · ${number(configuredLandlord,0)} landlord term${configuredLandlord === 1 ? "" : "s"} · ${currency(fundingSummary.appliedTotal,0)} funding applied</small></div>`;
 }
 function portfolioCommercialReadForm(form) {
   const get = key => form?.querySelector(`[data-commercial-term="${key}"]`)?.value ?? "";
@@ -5340,7 +5462,7 @@ function portfolioFinancialExportDisplayRow(fin) {
     next12mKwh: Number(fin.next12mKwh || 0), actualComparableKwh: Number(fin.actualComparableKwh || 0), actualComparableBasis: fin.actualComparableBasis || "", forecastVsActualVariance: Number.isFinite(Number(fin.forecastVsActualVariance)) ? Number(fin.forecastVsActualVariance) : null,
     historicalActualKwh: Number(fin.historicalActualKwh || 0), historicalModelKwh: Number(fin.historicalModelKwh || 0), historicalPeriodDays: Number(fin.historicalPeriodDays || 0), historicalPeriodLabel: fin.historicalPeriodLabel || "", historicalModelBasis: fin.historicalModelBasis || "", performanceVariance: Number.isFinite(Number(fin.performanceVariance)) ? Number(fin.performanceVariance) : null, performanceClassification: fin.performanceStatus?.label || "Review",
     modelForward12mKwh: Number(fin.modelForward12mKwh || 0), modelForward12mBasis: fin.modelForward12mBasis || "", forwardPerformanceVariance: Number.isFinite(Number(fin.forwardPerformanceVariance)) ? Number(fin.forwardPerformanceVariance) : null,
-    next12mRevenue: Number(fin.next12mRevenue || 0), electricityUnitCost: Number(fin.electricityUnitCost || 0), electricityCost: Number(fin.forecastElectricityCost || 0), duosStandingCharge: Number(fin.duosStandingCharge || 0), duosCapacityCharge: Number(fin.duosCapacityCharge || 0), networkStandingAndCapacity: Number(fin.forecastNetworkStandingAndCapacity || 0), otherOpexExElectricityAndNetwork: Number(fin.forecastOtherOpexExElectricityAndNetwork || 0), opexExElectricity: Number(fin.forecastOpexExElectricity || 0), ebitda: Number(fin.forecastOperatingCashflow || 0),
+    next12mRevenue: Number(fin.next12mRevenue || 0), electricityUnitCost: Number(fin.electricityUnitCost || 0), electricityPriceSource: fin.electricityPriceSource || "portfolio price", portfolioElectricityPrice: Number(fin.electricityGlobalPrice || portfolioElectricityGlobalLoad()), electricityCost: Number(fin.forecastElectricityCost || 0), duosStandingCharge: Number(fin.duosStandingCharge || 0), duosCapacityCharge: Number(fin.duosCapacityCharge || 0), networkStandingAndCapacity: Number(fin.forecastNetworkStandingAndCapacity || 0), otherOpexExElectricityAndNetwork: Number(fin.forecastOtherOpexExElectricityAndNetwork || 0), opexExElectricity: Number(fin.forecastOpexExElectricity || 0), ebitda: Number(fin.forecastOperatingCashflow || 0),
     forecastConfidence: confidence.label || "Low", forecastBasis: forward.methodology || "Forward 12-month actual-trajectory forecast; no maturity uplift.",
     grossRunRatePaybackYears: Number.isFinite(Number(fin.grossRunRatePaybackYears)) ? Number(fin.grossRunRatePaybackYears) : null, netRunRatePaybackYears: Number.isFinite(Number(fin.runRatePaybackYears)) ? Number(fin.runRatePaybackYears) : null, paybackYears: Number.isFinite(Number(fin.paybackYears)) ? Number(fin.paybackYears) : null, paybackLabel, paybackNote, longTermPaybackYears: Number.isFinite(Number(fin.longTermPaybackYears)) ? Number(fin.longTermPaybackYears) : null
   };
@@ -5352,14 +5474,14 @@ function portfolioFinancialExportMatrixRows(rows) {
     "Actual gross day-one CAPEX EUR", "Model day-one CAPEX EUR", "Day-one CAPEX delta EUR", "Day-one CAPEX delta %", "CAPEX accuracy band",
     "Funding available EUR", "Funding applied", "Funding applied EUR", "Funding scheme", "Funding confidence", "Net invested CAPEX EUR",
     "Next 12m forecast kWh", "Comparable actual annual kWh", "Comparable actual basis", "Next 12m vs comparable actual %", "Historical actual delivered kWh", "Historical age-matched model kWh", "Historical period days", "Historical period", "Historical model basis", "Historical actual vs model %", "Historical model classification", "Model forward 12m benchmark kWh", "Forward forecast vs benchmark %", "Data-quality note",
-    "Next 12m net revenue EUR", "Electricity unit cost EUR/kWh", "Next 12m electricity energy EUR", "DUoS standing EUR", "DUoS capacity EUR", "Next 12m standing and capacity EUR", "Next 12m other OPEX EUR", "Next 12m total OPEX excl electricity EUR", "Next 12m site EBITDA EUR",
+    "Next 12m net revenue EUR", "Portfolio electricity price EUR/kWh", "Effective electricity unit cost EUR/kWh", "Electricity price basis", "Next 12m electricity energy EUR", "DUoS standing EUR", "DUoS capacity EUR", "Next 12m standing and capacity EUR", "Next 12m other OPEX EUR", "Next 12m total OPEX excl electricity EUR", "Next 12m site EBITDA EUR",
     "Gross run-rate payback years", "Net run-rate payback years", "Effective run-rate payback years", "Run-rate payback note", "Forward forecast basis", "Long-term forecast payback years"
   ], ...display.map(r => [
     r.site, r.configuration, r.commercialTerms, portfolioFinancialExportNumber(r.days), r.daysBasis,
     portfolioFinancialExportNumber(r.actualCapex), portfolioFinancialExportNumber(r.modelDayOneCapex), portfolioFinancialExportNumber(r.capexDelta), portfolioFinancialExportNumber(r.capexDeltaPct), r.capexBand,
     portfolioFinancialExportNumber(r.fundingAvailable), r.fundingApplied ? "Yes" : "No", portfolioFinancialExportNumber(r.fundingAppliedAmount), r.fundingScheme, r.fundingConfidence, portfolioFinancialExportNumber(r.netInvestedCapex),
     portfolioFinancialExportNumber(r.next12mKwh), portfolioFinancialExportNumber(r.actualComparableKwh), r.actualComparableBasis, portfolioFinancialExportNumber(r.forecastVsActualVariance), portfolioFinancialExportNumber(r.historicalActualKwh), portfolioFinancialExportNumber(r.historicalModelKwh), portfolioFinancialExportNumber(r.historicalPeriodDays), r.historicalPeriodLabel, r.historicalModelBasis, portfolioFinancialExportNumber(r.performanceVariance), r.performanceClassification, portfolioFinancialExportNumber(r.modelForward12mKwh), portfolioFinancialExportNumber(r.forwardPerformanceVariance), r.dataQualityNote,
-    portfolioFinancialExportNumber(r.next12mRevenue), portfolioFinancialExportNumber(r.electricityUnitCost), portfolioFinancialExportNumber(r.electricityCost), portfolioFinancialExportNumber(r.duosStandingCharge), portfolioFinancialExportNumber(r.duosCapacityCharge), portfolioFinancialExportNumber(r.networkStandingAndCapacity), portfolioFinancialExportNumber(r.otherOpexExElectricityAndNetwork), portfolioFinancialExportNumber(r.opexExElectricity), portfolioFinancialExportNumber(r.ebitda),
+    portfolioFinancialExportNumber(r.next12mRevenue), portfolioFinancialExportNumber(r.portfolioElectricityPrice), portfolioFinancialExportNumber(r.electricityUnitCost), r.electricityPriceSource, portfolioFinancialExportNumber(r.electricityCost), portfolioFinancialExportNumber(r.duosStandingCharge), portfolioFinancialExportNumber(r.duosCapacityCharge), portfolioFinancialExportNumber(r.networkStandingAndCapacity), portfolioFinancialExportNumber(r.otherOpexExElectricityAndNetwork), portfolioFinancialExportNumber(r.opexExElectricity), portfolioFinancialExportNumber(r.ebitda),
     portfolioFinancialExportNumber(r.grossRunRatePaybackYears), portfolioFinancialExportNumber(r.netRunRatePaybackYears), portfolioFinancialExportNumber(r.paybackYears), r.paybackNote, r.forecastBasis, portfolioFinancialExportNumber(r.longTermPaybackYears)
   ])];
 }
@@ -5391,8 +5513,12 @@ function portfolioFinancialExportPayload() {
       }))
     };
   });
+  const electricitySummary = portfolioElectricitySummary(filteredRows);
   const summaryObject = {
     selectedSites: filteredRows.length,
+    portfolioElectricityPrice: electricitySummary.globalPrice,
+    electricitySiteOverrides: electricitySummary.overrides,
+    weightedAverageElectricityPrice: electricitySummary.weightedAverage,
     totalSites: rows.length,
     rowsWithCapex: summary.rowsWithCapex,
     rowsWithActuals: summary.rowsWithActuals,
@@ -5447,6 +5573,8 @@ function portfolioFinancialExportPayload() {
     ["CAPEX delta EUR", summaryObject.capexDelta, "Modelled day-one CAPEX minus actual day-one CAPEX"],
     ["CAPEX delta %", summaryObject.capexDeltaPct ?? "", "(Actual day-one CAPEX minus model day-one CAPEX) / model day-one CAPEX"],
     ["Next 12m kWh", summaryObject.next12mKwh, "Forward actual-trajectory forecast; maturity excluded"],
+    ["Portfolio electricity price EUR/kWh", summaryObject.portfolioElectricityPrice, `${summaryObject.electricitySiteOverrides} selected site override${summaryObject.electricitySiteOverrides === 1 ? "" : "s"}`],
+    ["Weighted average electricity price EUR/kWh", summaryObject.weightedAverageElectricityPrice, "Effective site prices weighted by next-12-month kWh"],
     ["Next 12m net revenue EUR", summaryObject.nextYearRevenue, "Forward actual trajectory, bounded trend, seasonality, traffic growth and tariff"],
     ["Next 12m electricity energy EUR", summaryObject.nextYearElectricity, "Forecast kWh × electricity unit cost"],
     ["Next 12m DUoS standing and capacity EUR", summaryObject.nextYearNetwork, "Standing charge plus MIC-linked capacity charge"],
@@ -5820,7 +5948,7 @@ function portfolioFinancialTableRow(fin) {
   const revenueCell = fin.next12mRevenue > 0 ? portfolioFinancialMetric(currency(fin.next12mRevenue, 0), "base forecast used in EBITDA", "", "Forward 12-month net revenue used in the financial calculations. It is derived from actual trajectory, bounded trend, seasonality, market growth and net tariff. Maturity is not used.") : "—";
   const mic = Number(fin.micKva || fin.site?.realMicKva || 0);
   const capacityRate = mic > 0 ? Number(fin.duosCapacityCharge || 0) / mic : 0;
-  const electricityCell = fin.hasActualKwh ? `<div class="portfolio-cost-breakdown" title="Energy purchase ${currency(fin.forecastElectricityCost,0)} at ${currency(fin.electricityUnitCost || 0,3)}/kWh. Network cost ${currency(fin.forecastNetworkStandingAndCapacity,0)} includes standing ${currency(fin.duosStandingCharge,0)} and capacity ${currency(fin.duosCapacityCharge,0)} at MIC ${number(mic,0)} kVA."><div><span>Energy</span><strong>${currency(fin.forecastElectricityCost,0)}</strong><small>${currency(fin.electricityUnitCost || 0,3)}/kWh</small></div><div><span>Standing + capacity</span><strong>${currency(fin.forecastNetworkStandingAndCapacity,0)}</strong><small>MIC ${number(mic,0)} kVA</small></div></div>` : "—";
+  const electricityCell = fin.hasActualKwh ? `<div class="portfolio-cost-breakdown" title="Energy purchase ${currency(fin.forecastElectricityCost,0)} at ${currency(fin.electricityUnitCost || 0,4)}/kWh (${h(fin.electricityPriceSource || 'portfolio price')}). Network cost ${currency(fin.forecastNetworkStandingAndCapacity,0)} includes standing ${currency(fin.duosStandingCharge,0)} and capacity ${currency(fin.duosCapacityCharge,0)} at MIC ${number(mic,0)} kVA."><button type="button" class="portfolio-energy-card" data-electricity-modal-open="${h(portfolioCommercialTermsKey(fin.site))}" title="Edit electricity price for ${h(fin.site.name)}"><span>Energy</span><strong>${currency(fin.forecastElectricityCost,0)}</strong><small>${currency(fin.electricityUnitCost || 0,4)}/kWh${fin.electricitySiteOverride ? ' · Site override' : ''}</small></button><div><span>Standing + capacity</span><strong>${currency(fin.forecastNetworkStandingAndCapacity,0)}</strong><small>MIC ${number(mic,0)} kVA</small></div></div>` : "—";
   const landlordShort = fin.landlordApplied ? "landlord included" : "landlord €0 — no terms";
   const opexCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOtherOpexExElectricityAndNetwork, 0), landlordShort, "", `Other forward 12-month OPEX excludes electricity purchase and DUoS standing/capacity, which are shown separately. ${fin.landlordNote || "No actual landlord terms provided."}`) : "—";
   const ebitdaCell = fin.hasActualKwh ? portfolioFinancialMetric(currency(fin.forecastOperatingCashflow, 0), "revenue − energy − network − other OPEX", fin.forecastOperatingCashflow < 0 ? "cashflow-negative" : "", `Revenue ${currency(fin.next12mRevenue,0)} − energy ${currency(fin.forecastElectricityCost,0)} − network ${currency(fin.forecastNetworkStandingAndCapacity,0)} − other OPEX ${currency(fin.forecastOtherOpexExElectricityAndNetwork,0)} = site EBITDA ${currency(fin.forecastOperatingCashflow,0)}. CAPEX, depreciation, interest, tax and unallocated corporate overhead are excluded.`) : "—";
@@ -5860,6 +5988,7 @@ function renderPortfolioFinancialPerformance() {
     <section class="panel portfolio-financial-table-panel"><div class="panel-title-row portfolio-financial-table-heading"><div><h3>Site financial performance</h3><p class="portfolio-financial-section-subtitle">Site-level actual performance, forward outlook, CAPEX accuracy, operating costs and investment returns.</p><p class="muted small">Active sort: ${h(sortNames[sortKey] || "site")} · ${h(sortDir)}. Showing ${number(filteredRows.length,0)} of ${number(rows.length,0)} sites. Day-one CAPEX excludes replacements, later plugs and progressive CAPEX.</p></div>${portfolioCommercialTermsManagerButton(rows)}</div><details class="portfolio-financial-methodology"><summary>Calculation definitions</summary><div><p><strong>Actual & Next 12m kWh:</strong> forecast is compared with trailing-12-month actuals or the annualised actual run-rate. Click any value to inspect full daily history, rolling-30 trend, monthly factors and the controlled forecast.</p><p><strong>Actual vs age-matched model:</strong> realised delivered kWh compared with the current calibrated age-matched model over the exact same historical period. ±15% is in line with model; sites with less than 30 days remain early evidence.</p><p><strong>Forward model:</strong> the current calibrated forward benchmark covers the same next 12 months and remains available inside the forecast audit as a secondary planning comparison.</p><p><strong>CAPEX variance:</strong> actual gross day-one CAPEX minus model day-one CAPEX. Positive overspend is red; negative underspend is green. Funding affects net investment returns only.</p><p><strong>Site EBITDA:</strong> revenue − energy − standing/capacity − other OPEX. <strong>Run-rate payback:</strong> gross or user-selected net CAPEX ÷ next-12-month site EBITDA.</p></div></details>${filteredRows.length ? portfolioFinancialTableMarkup(headers, sorted.map(portfolioFinancialTableRow)) : `<p class="notice">No sites match the selected filters. Reset filters to show all active sites.</p>`}</section>
     ${portfolioFinancialAdvancedMethodologyPanel(maturityModel, filteredRows)}
     ${portfolioCommercialTermsModal(rows)}
+    ${portfolioElectricityModal(rows)}
     ${portfolioForecastModal(rows)}
     ${portfolioFundingModal(rows)}
   `;
@@ -6346,6 +6475,7 @@ function wirePage(r) {
       if (!key) return;
       localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`);
       localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.fundingModal`);
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricityModal`);
       localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.forecastModal`, key);
       preserveScrollRender();
     });
@@ -6365,6 +6495,100 @@ function wirePage(r) {
       preserveScrollRender();
     });
   });
+  document.querySelectorAll("[data-electricity-modal-open]").forEach(node => {
+    node.addEventListener("click", e => {
+      e.preventDefault();
+      const key = e.currentTarget.dataset.electricityModalOpen;
+      if (!key) return;
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`);
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.fundingModal`);
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.forecastModal`);
+      localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricityModal`, key);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-electricity-modal-close], [data-electricity-modal-backdrop]").forEach(node => {
+    node.addEventListener("click", e => {
+      if (e.currentTarget.dataset.electricityModalBackdrop && e.currentTarget !== e.target) return;
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricityModal`);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-electricity-site-form]").forEach(form => {
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const key = form.dataset.electricitySiteForm;
+      const row = portfolioFinancialRows().find(r => portfolioCommercialTermsKey(r.site) === key);
+      if (!row) return;
+      const enabled = Boolean(form.querySelector("[data-electricity-override-enabled]")?.checked);
+      const price = portfolioElectricityPriceSanitise(form.querySelector("[data-electricity-override-price]")?.value, portfolioElectricityGlobalLoad());
+      const note = form.querySelector("[data-electricity-override-note]")?.value || '';
+      if (enabled) portfolioElectricitySiteSave(row.site, { enabled: true, price, note });
+      else portfolioElectricitySiteClear(row.site);
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricityModal`);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-electricity-site-reset]").forEach(node => {
+    node.addEventListener("click", e => {
+      const key = e.currentTarget.dataset.electricitySiteReset;
+      const row = portfolioFinancialRows().find(r => portfolioCommercialTermsKey(r.site) === key);
+      if (row) portfolioElectricitySiteClear(row.site);
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricityModal`);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-electricity-override-enabled]").forEach(toggle => {
+    const form = toggle.closest("[data-electricity-site-form]");
+    const priceInput = form?.querySelector("[data-electricity-override-price]");
+    const sync = () => { if (priceInput) priceInput.disabled = !toggle.checked; };
+    toggle.addEventListener("change", sync);
+    sync();
+  });
+  document.querySelectorAll("[data-electricity-override-enabled], [data-electricity-override-price]").forEach(node => {
+    const update = () => {
+      const form = node.closest("[data-electricity-site-form]");
+      if (!form) return;
+      const key = form.dataset.electricitySiteForm;
+      const row = portfolioFinancialRows().find(r => portfolioCommercialTermsKey(r.site) === key);
+      if (!row) return;
+      const enabled = Boolean(form.querySelector("[data-electricity-override-enabled]")?.checked);
+      const globalPrice = portfolioElectricityGlobalLoad();
+      const price = enabled ? portfolioElectricityPriceSanitise(form.querySelector("[data-electricity-override-price]")?.value, globalPrice) : globalPrice;
+      const cost = Math.max(0, Number(row.next12mKwh || 0)) * price;
+      const globalCost = Math.max(0, Number(row.next12mKwh || 0)) * globalPrice;
+      const priceNode = form.closest('.electricity-price-modal')?.querySelector('[data-electricity-preview-price]');
+      const costNode = form.closest('.electricity-price-modal')?.querySelector('[data-electricity-preview-cost]');
+      const deltaNode = form.closest('.electricity-price-modal')?.querySelector('[data-electricity-preview-delta]');
+      if (priceNode) priceNode.textContent = `${currency(price,4)}/kWh`;
+      if (costNode) costNode.textContent = currency(cost,0);
+      if (deltaNode) deltaNode.textContent = enabled ? `${currency(cost-globalCost,0)} vs portfolio price` : 'At portfolio price';
+    };
+    node.addEventListener('input', update);
+    node.addEventListener('change', update);
+  });
+  document.querySelectorAll("[data-electricity-global-form]").forEach(form => {
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const price = portfolioElectricityPriceSanitise(form.querySelector("[data-electricity-global-price]")?.value, portfolioElectricityModelDefault());
+      portfolioElectricityGlobalSave(price);
+      preserveScrollRender();
+    });
+  });
+  document.querySelectorAll("[data-electricity-global-action]").forEach(node => {
+    node.addEventListener("click", e => {
+      const action = e.currentTarget.dataset.electricityGlobalAction;
+      if (action === 'remove-overrides') {
+        const count = portfolioFinancialRows().filter(row => portfolioElectricitySiteLoad(row.site).enabled).length;
+        if (count && !window.confirm(`Remove ${count} site electricity-price override${count === 1 ? '' : 's'} and return those sites to the portfolio price?`)) return;
+        portfolioElectricityClearAllSiteOverrides();
+      } else if (action === 'reset-default') {
+        if (!window.confirm(`Reset the portfolio electricity price to the model default of ${currency(portfolioElectricityModelDefault(),4)}/kWh? Site overrides will remain unchanged.`)) return;
+        portfolioElectricityGlobalReset();
+      }
+      preserveScrollRender();
+    });
+  });
   document.querySelectorAll("[data-funding-modal-open]").forEach(node => {
     node.addEventListener("click", e => {
       e.preventDefault();
@@ -6372,6 +6596,7 @@ function wirePage(r) {
       if (!key) return;
       localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`);
       localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.forecastModal`);
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricityModal`);
       localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.fundingModal`, key);
       preserveScrollRender();
     });
@@ -6450,6 +6675,9 @@ function wirePage(r) {
       e.preventDefault();
       const key = e.currentTarget.dataset.commercialTermsOpen;
       if (!key) return;
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.forecastModal`);
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.fundingModal`);
+      localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.electricityModal`);
       localStorage.setItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.commercialModal`, key);
       preserveScrollRender();
     });
@@ -7240,6 +7468,12 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     closePortfolioStatusPopover();
     closePortfolioFilterMenus();
+    const modalKeys = ["commercialModal", "forecastModal", "fundingModal", "electricityModal"];
+    const hadModal = modalKeys.some(key => localStorage.getItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.${key}`));
+    if (hadModal) {
+      modalKeys.forEach(key => localStorage.removeItem(`${PORTFOLIO_FINANCIAL_STORAGE_PREFIX}.${key}`));
+      preserveScrollRender();
+    }
   }
 });
 

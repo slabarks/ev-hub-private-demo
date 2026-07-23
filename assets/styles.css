@@ -4557,3 +4557,36 @@ body.portfolio-financial-active { overflow-x: hidden; }
 .model-performance-card.neutral strong { color:#425c53; }
 .kwh-card-stack .forecast-change-badge { margin-left: 3px; }
 .portfolio-financial-table th:nth-child(5) .portfolio-financial-sort-button { white-space: normal; line-height: 1.12; }
+
+
+/* V21.8 — portfolio and site-specific electricity price controls */
+.portfolio-cost-breakdown > button.portfolio-energy-card {
+  width: 100%;
+  display: block;
+  padding: 6px 7px;
+  border: 1px solid rgba(0,112,74,.12);
+  border-radius: 9px;
+  background: rgba(247,251,249,.95);
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+.portfolio-cost-breakdown > button.portfolio-energy-card:hover,
+.portfolio-cost-breakdown > button.portfolio-energy-card:focus-visible {
+  border-color: rgba(0,112,74,.34);
+  background: #edf8f2;
+  outline: 2px solid rgba(0,112,74,.18);
+  outline-offset: 1px;
+}
+.portfolio-energy-card span, .portfolio-energy-card small { display:block; color:#60716b; font-size:9.8px; line-height:1.2; }
+.portfolio-energy-card strong { display:block; margin:2px 0; color:#18362c; font-size:12.4px; white-space:nowrap; }
+.electricity-global-form { max-width: 420px; margin-top: 12px; }
+.electricity-global-form .field, .electricity-site-form-grid .field { display:flex; flex-direction:column; gap:6px; }
+.electricity-global-form .field span, .electricity-site-form-grid .field span { color:var(--muted); font-size:11px; font-weight:850; }
+.electricity-global-form input { width:100%; border:1px solid rgba(0,112,74,.18); border-radius:12px; background:#fff; padding:10px 11px; color:#0f2d25; font-weight:800; }
+.electricity-price-modal { width:min(900px, calc(100vw - 34px)); }
+.electricity-price-summary { margin-bottom: 14px; }
+.electricity-site-form-grid { margin-top: 12px; grid-template-columns: minmax(230px, .8fr) minmax(300px, 1.2fr); }
+.electricity-site-form-grid .commercial-notes { grid-column:auto; }
+@media (max-width: 760px) { .electricity-site-form-grid { grid-template-columns:1fr; } }

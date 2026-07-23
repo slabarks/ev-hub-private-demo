@@ -1,8 +1,8 @@
 {
-  "appVersion": "V21.7",
-  "buildId": "EVHUB-V21.7-20260722-R1",
+  "appVersion": "V21.8",
+  "buildId": "EVHUB-V21.8-20260722-R1",
   "uploadSchemaVersion": "v21-live-history-v7",
-  "parserBuildId": "EVHUB-LIVE-PARSER-21.7",
+  "parserBuildId": "EVHUB-LIVE-PARSER-21.8",
   "packageLayoutVersion": "flat-root-v1",
   "entrypoint": "python server.py",
   "requiredRootFiles": [
@@ -14,7 +14,7 @@
     "js/liveHistoryLocalParser.js",
     "DEPLOYMENT_MANIFEST.json"
   ],
-  "cacheBuster": "21-7-commercial-start-payback-20260722-r1",
+  "cacheBuster": "21-8-electricity-pricing-20260722-r1",
   "releaseDate": "2026-07-22",
   "localHistoryParser": true
 }

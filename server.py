@@ -42,11 +42,11 @@ DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip()
 DEMO_SESSION_SECRET = os.environ.get("SESSION_SECRET", os.environ.get("DEMO_SESSION_SECRET", DEMO_PASSWORD or "local-dev-secret"))
 DEMO_AUTH_COOKIE = "evhub_demo_auth"
 DEMO_AUTH_MAX_AGE = 60 * 60 * 12
-APP_VERSION = "V21.7"
-APP_BUILD_ID = "EVHUB-V21.7-20260722-R1"
+APP_VERSION = "V21.8"
+APP_BUILD_ID = "EVHUB-V21.8-20260722-R1"
 LIVE_UPLOAD_SCHEMA_VERSION = "v21-live-history-v7"
-LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.7"
-AADT_ENGINE_VERSION = "V21.7 AADT audited resolver + browser-local live-history upload"
+LIVE_UPLOAD_PARSER_BUILD_ID = "EVHUB-LIVE-PARSER-21.8"
+AADT_ENGINE_VERSION = "V21.8 AADT audited resolver + browser-local live-history upload"
 DEPLOYMENT_REQUIRED_FILES = (
     "index.html", "js/app.js", "js/liveHistoryLocalParser.js", "js/engines/maturityEngine.js",
     "assets/styles.css", "assets/vendor/jszip.min.js", "DEPLOYMENT_MANIFEST.json"
@@ -86,8 +86,8 @@ def _deployment_integrity() -> dict:
     if index_path.exists():
         try:
             index_text = index_path.read_text(encoding="utf-8")
-            if "21-7-commercial-start-payback-20260722-r1" not in index_text:
-                problems.append("index.html cache-buster is not the V21.7 deployment build")
+            if "21-8-electricity-pricing-20260722-r1" not in index_text:
+                problems.append("index.html cache-buster is not the V21.8 deployment build")
         except Exception as exc:
             problems.append(f"index.html could not be verified: {exc}")
     return {
@@ -5008,7 +5008,7 @@ def main():
 
     url = f"http://localhost:{selected_port}/"
     if selected_port != requested_port:
-        print(f"Port {requested_port} was already in use. V21.7 selected {selected_port} to avoid opening a stale application instance.")
+        print(f"Port {requested_port} was already in use. V21.8 selected {selected_port} to avoid opening a stale application instance.")
     print(f"EV Hub Investment Tool {APP_VERSION} running at {url}")
     print(f"Build: {APP_BUILD_ID} | Parser: {LIVE_UPLOAD_PARSER_BUILD_ID} | Layout: {PACKAGE_LAYOUT_VERSION}")
     print("Opening your default browser after the correct backend has started...")

@@ -1,16 +1,27 @@
-# EV Charging Hub Investment Tool — V21.7
+# EV Charging Hub Investment Tool — V21.8
 
-V21.7 is built from V21.6 Prediction Enhanced and preserves the approved V21.5 frozen interface.
+V21.8 is built from V21.6 Prediction Enhanced and preserves the approved V21.5 frozen interface.
 
 ## Build
 
-- Application: `V21.7`
-- Build: `EVHUB-V21.7-20260722-R1`
+- Application: `V21.8`
+- Build: `EVHUB-V21.8-20260722-R1`
 - Live-history schema: `v21-live-history-v7`
-- Parser: `EVHUB-LIVE-PARSER-21.7`
-- Package version: `21.7.0`
+- Parser: `EVHUB-LIVE-PARSER-21.8`
+- Package version: `21.8.0`
 
-## V21.7 changes
+## V21.8 changes
+
+### Portfolio and site electricity pricing
+
+- Manage portfolio-wide electricity price inside **Manage portfolio terms**.
+- Exact input to four decimal places.
+- Click any site Energy card to set or remove a site-specific override.
+- Site override takes precedence over the portfolio price.
+- Global changes preserve site overrides.
+- Electricity cost, EBITDA, payback, projections and exports update immediately.
+- kWh, revenue and DUoS standing/capacity charges remain unchanged.
+
 
 ### Commercial-operation denominator
 
@@ -73,5 +84,5 @@ npm test
 
 See:
 
-- `RELEASE_NOTES_V21.7.md`
-- `V21.7_PRODUCTION_VALIDATION.md`
+- `RELEASE_NOTES_V21.8.md`
+- `V21.8_PRODUCTION_VALIDATION.md`

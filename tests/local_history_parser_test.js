@@ -70,8 +70,8 @@ const payload = await parsePortfolioCalibrationFilesLocally([upload], message =>
 assert.equal(payload.ok, true);
 assert.equal(payload.localParser, true);
 assert.equal(payload.schemaVersion, "v21-live-history-v7");
-assert.equal(payload.buildId, "EVHUB-V21.7-20260722-R1");
-assert.equal(payload.parserBuildId, "EVHUB-LIVE-PARSER-21.7");
+assert.equal(payload.buildId, "EVHUB-V21.8-20260722-R1");
+assert.equal(payload.parserBuildId, "EVHUB-LIVE-PARSER-21.8");
 assert.equal(payload.siteCount, 2);
 assert.equal(payload.rowCount, 92);
 assert.equal(payload.dailyHistorySiteCount, 2);
